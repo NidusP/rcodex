@@ -38,6 +38,10 @@
 
 打 tag `v0.1.x` 触发 `.github/workflows/release.yml`。macOS runner 走 `pnpm run tauri --bundles app`（先编 sidecar）。`tauri-action` 建 draft Release，带 `.app.tar.gz`、`.sig` 和 updater 清单。人工确认附件后再发布。
 
+pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action-setup` 不要再写 `version`；`10` 和 `pnpm@10.13.1` 会被当成两个版本，作业在安装依赖前失败。
+
+2026-10-10：`v0.1.0` 第一次推送因此失败，未产生 Release。去掉 workflow 里的 pnpm `version` 后，标签指向修复提交并重新触发构建。
+
 ## 验收
 
 - `pnpm run check` 通过。
