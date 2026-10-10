@@ -74,7 +74,7 @@ impl ArchiveCapture {
         if !self.is_enabled()
             || self
                 .active_count
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                     (count < MAX_ACTIVE).then_some(count + 1)
                 })
                 .is_err()
@@ -228,7 +228,7 @@ impl RequestCapture {
             || self
                 .inner
                 .known_secrets
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                     (count < MAX_SECRETS).then_some(count + 1)
                 })
                 .is_err()
@@ -268,7 +268,7 @@ impl RequestCapture {
     fn enqueue(&self, event: Event, bytes: usize) -> bool {
         let queue = &self.inner.capture.queued_bytes;
         if queue
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                 count.checked_add(bytes).filter(|next| *next <= QUEUE_BYTES)
             })
             .is_err()
