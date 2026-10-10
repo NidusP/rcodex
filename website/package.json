@@ -1,0 +1,22 @@
+{
+  "name": "rcodex-website",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/solid-js": "^5.1.0",
+    "@astrojs/starlight": "^0.41.7",
+    "astro": "^7.2.2",
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.6",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,15 @@
+.control-dialog-overlay {
+--overlay-bg: rgba(19, 28, 24, .46);
+}
+
+.rcodex-Affix-root:has(> .rcodex-Dialog-root.control-dialog-shell) {
+top: calc(var(--titlebar-h, 40px) + (100dvh - var(--titlebar-h, 40px)) / 2); left: 50%; right: auto; bottom: auto;
+}
+
+.rcodex-Dialog-root.control-dialog-shell {
+border: 0; background: transparent; box-shadow: none; transform: translate(-50%, -50%);
+}
+
+.control-dialog-frame {
+width: 100%;
+}

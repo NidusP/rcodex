@@ -1,0 +1,43 @@
+[package]
+name = "r-codex"
+version = "0.1.0"
+description = "R Codex local-first Codex account and gateway control plane"
+authors = ["R Codex contributors"]
+edition = "2021"
+rust-version = "1.77"
+default-run = "r-codex"
+
+[lib]
+name = "r_codex_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+axum = "0.8"
+base64 = "0.22"
+chrono = "0.4"
+futures-util = "0.3"
+libc = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+sha2 = "0.10"
+subtle = "2"
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-opener = "2"
+toml = "1.1.3"
+tokio = { version = "1", features = ["net", "sync", "rt-multi-thread", "macros", "time"] }
+uuid = { version = "1", features = ["v4"] }
+url = "2"
+zeroize = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"

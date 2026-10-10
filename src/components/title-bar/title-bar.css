@@ -1,0 +1,143 @@
+.runtime-channel-chips .icon-button {
+display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex-basis: 18px; padding: 0; border: 0; border-radius: 50%; color: #789287; background: transparent; cursor: pointer;
+}
+
+.runtime-channel-chips .icon-button:hover:not(:disabled) {
+color: var(--mantine-color-red-6); background: #f8e9e7;
+}
+
+.runtime-channel-chips .icon-button:disabled {
+cursor: not-allowed; opacity: .45;
+}
+
+@media (max-width: 680px) {
+.model-route-row .icon-button {
+justify-self: end;
+}
+}
+
+.archive-actions .icon-button {
+width: 30px; height: 30px; padding: 6px;
+}
+
+.gateway-restart {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+height: 22px;
+padding: 0 8px;
+border: 1px solid var(--mantine-color-yellow-6);
+border-radius: 6px;
+background: var(--mantine-color-default);
+color: var(--mantine-color-yellow-8);
+font-size: .68rem;
+white-space: nowrap;
+}
+
+.gateway-restart:hover:not(:disabled) {
+color: var(--mantine-color-red-7);
+background: color-mix(in srgb, var(--mantine-color-red-1) 70%, transparent);
+}
+
+.gateway-restart:disabled {
+cursor: not-allowed;
+opacity: .6;
+.window-titlebar {
+box-sizing: border-box;
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
+}
+
+.window-titlebar {
+position: sticky;
+  top: 0;
+  z-index: 16;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--titlebar-h);
+  padding: 0 8px 0 12px;
+  border-bottom: 0;
+  color: var(--mantine-color-text);
+  background: color-mix(in srgb, var(--mantine-color-body) 92%, transparent);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.window-titlebar[data-tauri-drag-region],
+.window-titlebar [data-tauri-drag-region],
+.window-titlebar .titlebar-drag {
+app-region: drag;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-titlebar .titlebar-actions,
+.window-titlebar .titlebar-actions *,
+.window-titlebar .icon-button,
+.window-titlebar .gateway-restart,
+.window-titlebar .titlebar-theme,
+.window-titlebar .titlebar-theme * {
+app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-theme {
+display: flex; align-items: center; gap: 6px; height: 100%;
+}
+
+.titlebar-swatch {
+width: 18px; height: 18px; padding: 0; border: 1px solid var(--mantine-color-default-border); border-radius: 50%; cursor: pointer;
+}
+
+.titlebar-color-picker {
+width: 220px;
+}
+
+html[data-chrome="mac"] .window-titlebar {
+padding-left: 84px;
+}
+
+.titlebar-product {
+color: var(--mantine-color-text);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.titlebar-drag {
+flex: 1; align-self: stretch; min-width: 12px;
+}
+
+.window-caption {
+display: flex; align-self: stretch; margin-right: -8px;
+}
+
+.window-caption button {
+display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.window-caption button:hover:not(:disabled) {
+background: rgba(27, 43, 36, 0.08);
+}
+
+.window-caption .window-close:hover:not(:disabled) {
+color: #fff; background: #e81123;
+}
+
+.window-titlebar {
+flex: 0 0 var(--titlebar-h);
+  position: relative;
+  top: auto;
+}

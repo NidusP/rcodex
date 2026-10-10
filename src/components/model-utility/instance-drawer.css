@@ -1,0 +1,7 @@
+.drawer-intro {
+margin: 18px 0 16px; color: var(--mantine-color-dimmed); font-size: .78rem; line-height: 1.55;
+}
+
+.drawer-intro {
+margin: 0 0 15px; color: var(--muted, #718179); font-size: .78rem; line-height: 1.55;
+}

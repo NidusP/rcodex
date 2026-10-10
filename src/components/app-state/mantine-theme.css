@@ -1,0 +1,4 @@
+.rcodex-Notifications-root[data-position="top-right"] {
+top: calc(var(--titlebar-h, 40px) + 12px);
+  right: 24px;
+}

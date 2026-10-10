@@ -1,0 +1,31 @@
+@media (max-width: 420px) {
+.topbar-actions .secondary-action {
+flex: 1;
+}
+}
+
+.channel-drawer-lead {
+display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 16px;
+}
+
+.channel-drawer-lead .drawer-intro {
+margin: 0; flex: 1 1 auto; min-width: 0; color: var(--mantine-color-dimmed); font-size: .78rem; line-height: 1.55;
+}
+
+.channel-drawer-lead .drawer-toolbar {
+display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0; flex: none;
+}
+
+.secondary-action {
+display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+.channel-add-circle {
+--ai-bg: transparent; --ai-hover: transparent; --ai-color: var(--mantine-color-dimmed);
+color: var(--mantine-color-dimmed); background: transparent;
+}
+
+.channel-add-circle:hover:not(:disabled),
+.channel-add-circle:focus-visible:not(:disabled) {
+--ai-color: var(--mantine-color-text); color: var(--mantine-color-text); background: transparent;
+}

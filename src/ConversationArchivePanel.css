@@ -1,0 +1,192 @@
+@media (max-width: 420px) {
+.topbar-actions .secondary-action {
+flex: 1;
+}
+}
+
+.danger-action {
+border-color: #b74a51; color: #fff; background: #b74a51;
+}
+
+.danger-action:hover:not(:disabled) {
+border-color: #96373e; background: #96373e;
+}
+
+.secondary-action,
+.danger-action {
+display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+.conversation-archive {
+margin: 20px 0 25px; border-top: 1px solid #d8e4dc; border-bottom: 1px solid #d8e4dc; padding: 16px 0;
+}
+
+.archive-heading,
+.archive-actions,
+.archive-group-button,
+.archive-request-button,
+.archive-detail-meta {
+display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+
+.archive-heading h3 {
+margin: 0; font-size: .95rem; color: #294638;
+}
+
+.archive-heading small,
+.archive-group-button small,
+.archive-request-button small {
+display: block; color: #718379; font-size: .68rem;
+}
+
+.archive-actions {
+flex-shrink: 0; gap: 6px;
+}
+
+.archive-toggle {
+display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: .72rem; color: #4d6656;
+}
+
+.archive-toggle input {
+accent-color: #217b5a;
+}
+
+.archive-actions .icon-button {
+width: 30px; height: 30px; padding: 6px;
+}
+
+.archive-storage {
+display: block; margin-top: 4px; color: #819187; font-size: .66rem;
+}
+
+.archive-groups {
+display: grid; gap: 2px; margin-top: 12px;
+}
+
+.archive-group {
+border-top: 1px solid #e5ece7;
+}
+
+.archive-group-button,
+.archive-request-button {
+width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer;
+}
+
+.archive-group-button {
+padding: 9px 2px; justify-content: flex-start; color: #345c45;
+}
+
+.archive-group-button span {
+min-width: 0; flex: 1;
+}
+
+.archive-group-button strong,
+.archive-group-button small {
+overflow-wrap: anywhere;
+}
+
+.archive-group-button strong {
+font-size: .73rem;
+}
+
+.archive-group-button em {
+font-size: .7rem; font-style: normal;
+}
+
+.archive-requests {
+padding-left: 20px; border-left: 1px solid #d5e6da;
+}
+
+.archive-request {
+border-top: 1px solid #e8eee9;
+}
+
+.archive-request-button {
+padding: 9px 4px; color: #395144; font-size: .73rem;
+}
+
+.archive-request-button:hover,
+.archive-group-button:hover {
+background: #f3f8f4;
+}
+
+.archive-detail {
+display: grid; gap: 8px; padding: 8px 0 13px; min-width: 0;
+}
+
+.archive-detail > code {
+overflow-wrap: anywhere; font-size: .68rem;
+}
+
+.archive-stage-tabs {
+display: flex; gap: 3px; overflow-x: auto;
+}
+
+.archive-stage-tabs button {
+flex: 0 0 auto; padding: 5px 7px; border: 1px solid #d6e4d9; border-radius: 4px; background: transparent; color: #4d6555; font-size: .7rem; cursor: pointer;
+}
+
+.archive-stage-tabs button.active {
+border-color: #2a8761; background: #e4f4e9; color: #176543;
+}
+
+.archive-detail-meta {
+min-width: 0; color: #718379; font-size: .66rem;
+}
+
+.archive-detail-meta code {
+min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
+
+.archive-body {
+overflow: auto; max-height: 240px; min-height: 46px; max-width: 100%; margin: 0; padding: 9px; border: 1px solid #dce7e0; border-radius: 4px; background: var(--mantine-color-default); color: #293d33; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .67rem; line-height: 1.5;
+}
+
+.archive-compare label {
+display: flex; align-items: center; gap: 6px; color: #647669; font-size: .68rem;
+}
+
+.archive-compare select {
+max-width: 170px; padding: 4px; border: 1px solid #d6e4d9; border-radius: 4px; background: transparent; color: inherit;
+}
+
+.archive-empty,
+.archive-error {
+margin: 12px 0 0; font-size: .73rem;
+}
+
+.archive-error {
+color: var(--mantine-color-red-6); overflow-wrap: anywhere;
+}
+
+.archive-confirm {
+margin-top: 10px; padding: 10px; border: 1px solid #d9aba4; border-radius: 4px; font-size: .74rem;
+}
+
+.archive-confirm p {
+margin: 0 0 9px;
+}
+
+.archive-confirm div {
+display: flex; gap: 8px; justify-content: flex-end;
+}
+
+.archive-body-pair {
+display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px;
+}
+
+@media (max-width: 450px) {
+.archive-heading {
+align-items: flex-start; flex-wrap: wrap;
+}
+
+.archive-body-pair {
+grid-template-columns: 1fr;
+}
+}
+
+.archive-stage-tabs .rcodex-Tabs-list {
+gap: 8px;
+  flex-wrap: wrap;
+  border: 0;
+}

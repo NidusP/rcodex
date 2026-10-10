@@ -1,0 +1,643 @@
+.nav-item.active {
+border-color: var(--mantine-color-default-border); color: var(--mantine-primary-color-filled); background: var(--mantine-primary-color-light);
+}
+
+.detail-drawer::-webkit-scrollbar {
+width: 10px; height: 10px;
+}
+
+.detail-drawer::-webkit-scrollbar-track {
+background: transparent;
+}
+
+.detail-drawer::-webkit-scrollbar-thumb {
+border: 3px solid transparent; border-radius: 999px; background: rgba(99, 122, 111, .34); background-clip: content-box;
+}
+
+.detail-drawer:hover::-webkit-scrollbar-thumb,
+.detail-drawer:focus-within::-webkit-scrollbar-thumb {
+background-color: rgba(77, 104, 91, .58);
+}
+
+.topbar p:not(.eyebrow) {
+margin: 0; color: var(--mantine-color-dimmed); font-size: .84rem;
+}
+
+.eyebrow {
+margin: 0 0 8px; color: var(--mantine-primary-color-filled); font-size: .68rem; font-weight: 800; letter-spacing: .14em;
+}
+
+.installation-gate p:not(.eyebrow) {
+color: var(--mantine-color-dimmed); line-height: 1.65;
+}
+
+.drawer-heading,
+.detail-block-heading {
+display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+}
+
+.drawer-heading h2 {
+margin: 0; color: var(--mantine-color-text); font-size: 1.22rem; letter-spacing: 0;
+}
+
+.mode-pill {
+display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; border-radius: 999px; font-size: .7rem; font-weight: 750;
+}
+
+.detail-list dt {
+color: var(--mantine-color-dimmed); font-size: .7rem;
+}
+
+.runtime-target-route-heading .provider-icon-action {
+width: 26px; height: 26px; flex-basis: 26px;
+}
+
+.runtime-channel-chips .icon-button {
+display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex-basis: 18px; padding: 0; border: 0; border-radius: 50%; color: #789287; background: transparent; cursor: pointer;
+}
+
+.runtime-channel-chips .icon-button:hover:not(:disabled) {
+color: var(--mantine-color-red-6); background: #f8e9e7;
+}
+
+.runtime-channel-chips .icon-button:disabled {
+cursor: not-allowed; opacity: .45;
+}
+
+.runtime-product-actions .primary-action {
+display: inline-flex; align-items: center; gap: 5px;
+}
+
+.app-target-grid .runtime-target-actions .primary-action {
+padding: 7px 9px; font-size: .7rem;
+}
+
+.runtime-target-title-row .provider-icon-action {
+flex: 0 0 auto;
+}
+
+.runtime-target-actions .primary-action {
+display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+
+.muted {
+color: var(--mantine-color-dimmed); font-size: .76rem;
+}
+
+.provider-type-pill {
+display: inline-flex; align-items: center; padding: 3px 7px; border: 1px solid #c8ddf3; border-radius: 999px; color: #386890; background: #f1f7fd; font-size: .68rem; font-weight: 700;
+}
+
+.mode-pill {
+padding: 3px 7px; border: 1px solid #d9e4df; color: #61766b; background: #f8fbf9; font-weight: 600;
+}
+
+.empty-state {
+display: grid; justify-items: center; gap: 7px; padding: 30px 18px; border: 1px dashed #cddbd4; border-radius: 7px; color: #75877d; text-align: center;
+}
+
+.empty-state strong {
+color: var(--mantine-color-text); font-size: .9rem;
+}
+
+.empty-state span {
+font-size: .76rem;
+}
+
+.empty-state button {
+margin-top: 6px;
+}
+
+.diagnostic-list {
+display: grid; gap: 6px;
+}
+
+.diagnostic-row {
+display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-bottom: 1px solid #edf1ef;
+}
+
+.diagnostic-row:last-child {
+border-bottom: 0;
+}
+
+.diagnostic-row > div {
+min-width: 0;
+}
+
+.diagnostic-row strong {
+display: block; color: var(--mantine-color-text); font-size: .76rem;
+}
+
+.diagnostic-row small {
+display: block; overflow-wrap: anywhere; margin-top: 2px; color: var(--mantine-color-dimmed); font-size: .69rem;
+}
+
+.outcome {
+padding: 3px 6px; border-radius: 4px; color: var(--mantine-primary-color-filled); background: #e8f6ef; font-size: .68rem; font-weight: 750;
+}
+
+.outcome.failed {
+color: var(--mantine-color-red-6); background: var(--mantine-color-default);
+}
+
+.diagnostic-meta {
+text-align: right;
+}
+
+.diagnostic-row code {
+grid-column: 2 / -1; color: var(--mantine-color-red-6); font-size: .68rem;
+}
+
+.timeout-form > .muted {
+margin: 12px 0; line-height: 1.5;
+}
+
+.drawer-layer {
+position: fixed; z-index: 60; inset: var(--titlebar-h, 40px) 0 0; display: flex; justify-content: flex-end; background: rgba(26, 43, 36, .18);
+}
+
+.detail-drawer {
+width: min(440px, 100%); height: 100%; overflow-y: auto; padding: 25px 23px 28px; border-left: 1px solid var(--mantine-color-default-border); background: var(--mantine-color-default); box-shadow: -12px 0 28px rgba(34, 58, 47, .13);
+}
+
+.drawer-heading {
+align-items: center;
+}
+
+.drawer-heading h2 {
+font-size: 1.28rem;
+}
+
+.drawer-status {
+display: flex; flex-wrap: wrap; gap: 7px; margin: 17px 0;
+}
+
+.detail-list {
+display: grid; gap: 0; margin: 0; border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.detail-list > div {
+display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.detail-list dt {
+margin: 0;
+}
+
+.detail-list dd {
+overflow-wrap: anywhere; margin: 0; color: var(--mantine-color-text); font-size: .77rem;
+}
+
+.detail-block {
+display: grid; gap: 9px; margin-top: 15px; padding: 14px; border: 1px solid #e0e9e4; border-radius: 7px; background: #fbfdfc;
+}
+
+.detail-block-heading {
+align-items: center; color: var(--mantine-color-text); font-size: .82rem;
+}
+
+.detail-block-heading span {
+color: #829189; font-size: .71rem;
+}
+
+.detail-block p {
+margin: 0; color: #72837a; font-size: .74rem; line-height: 1.45;
+}
+
+.detail-block small {
+color: var(--mantine-color-dimmed); font-size: .68rem;
+}
+
+.detail-block.ready {
+border-color: var(--mantine-primary-color-light);
+}
+
+.detail-block.degraded {
+border-color: var(--mantine-color-yellow-4);
+}
+
+.detail-block.unreachable,
+.detail-block.unauthorized {
+border-color: var(--mantine-color-red-3);
+}
+
+.empty-detail {
+color: #8b9991;
+}
+
+.detail-note {
+color: #8b9991;
+}
+
+@media (max-width: 680px) {
+.nav-item:not(.active) {
+color: var(--mantine-color-dimmed);
+}
+
+.detail-drawer {
+width: 100%; padding: 20px 16px 28px;
+}
+
+.diagnostic-row {
+grid-template-columns: auto minmax(0, 1fr);
+}
+
+.diagnostic-meta {
+grid-column: 2; text-align: left;
+}
+
+.diagnostic-row code {
+grid-column: 1 / -1;
+}
+}
+
+@media (max-width: 420px) {
+.topbar-actions .secondary-action {
+flex: 1;
+}
+}
+
+@media (max-width: 680px) {
+.runtime-target-actions .primary-action {
+justify-content: center;
+}
+
+.runtime-product-actions .primary-action {
+justify-content: center;
+}
+}
+
+.drawer-layer {
+animation: overlay-fade-in .2s ease-out both;
+}
+
+.drawer-layer .detail-drawer {
+animation: overlay-fade-in .2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+.drawer-layer,
+.drawer-layer .detail-drawer {
+animation: none;
+}
+}
+
+.confirm-dialog {
+display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; width: min(430px, 100%); padding: 20px; border: 1px solid #e2c3c2; border-radius: 8px; color: var(--mantine-color-red-6); background: var(--mantine-color-default); box-shadow: 0 20px 50px rgba(32, 20, 20, .22);
+}
+
+.confirm-dialog h2 {
+margin: 0 0 7px; color: #3b292a; font-size: 1rem;
+}
+
+.confirm-dialog p {
+margin: 0; color: #766366; font-size: .77rem; line-height: 1.55;
+}
+
+.confirm-dialog-actions {
+grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;
+}
+
+.danger-action {
+border-color: #b74a51; color: #fff; background: #b74a51;
+}
+
+.danger-action:hover:not(:disabled) {
+border-color: #96373e; background: #96373e;
+}
+
+.launch-dialog {
+display: grid; gap: 16px; width: min(520px, 100%); padding: 20px; border: 1px solid var(--mantine-color-default-border); border-radius: 8px; background: var(--mantine-color-default); box-shadow: 0 20px 50px rgba(32, 48, 40, .24);
+}
+
+.launch-dialog-copy {
+margin: -5px 0 0; color: var(--mantine-color-dimmed); font-size: .78rem; line-height: 1.5;
+}
+
+.launch-directory-field {
+display: grid; gap: 6px; color: #586d62; font-size: .74rem; font-weight: 700;
+}
+
+.launch-directory-field > span {
+display: flex; align-items: center; gap: 6px;
+}
+
+.launch-directory-field input {
+width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid var(--mantine-color-default-border); border-radius: 6px; color: var(--mantine-color-text); background: var(--mantine-color-default); font-size: .79rem;
+}
+
+.launch-directory-field input::placeholder {
+color: #9aa8a1;
+}
+
+@media (max-width: 520px) {
+.launch-dialog {
+padding: 17px;
+}
+}
+
+.secondary-action,
+.primary-action,
+.danger-action,
+.instance-actions button {
+display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+.provider-type-pill.official {
+border-color: #d8cff0; color: #6a5290; background: #f7f3fc;
+}
+
+.instance-list {
+display: grid; gap: 8px;
+}
+
+.preset-model-editor .detail-block-heading {
+margin: 0;
+}
+
+.preset-model-editor .detail-block-heading button {
+display: inline-flex; align-items: center; gap: 4px;
+}
+
+.instance-row {
+display: grid; gap: 12px; padding: 14px; border: 1px solid var(--mantine-color-default-border); border-radius: 7px; background: var(--mantine-color-default); scroll-margin: 24px;
+}
+
+.instance-row.is-focused {
+border-color: #d2a951; box-shadow: inset 3px 0 0 #d2a951;
+}
+
+.instance-heading {
+display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+
+.instance-heading > strong {
+color: #253a31; font-size: .88rem;
+}
+
+.instance-state {
+display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid var(--mantine-color-default-border); border-radius: 999px; color: #788981; background: var(--mantine-color-default); font-size: .68rem; font-weight: 750;
+}
+
+.instance-state i {
+width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+}
+
+.instance-state.running {
+border-color: var(--mantine-primary-color-light); color: #19805d; background: #effaf4;
+}
+
+.instance-state.launching,
+.instance-state.stopping {
+border-color: #c8ddf3; color: #386890; background: #f1f7fd;
+}
+
+.instance-state.orphaned,
+.instance-state.degraded {
+border-color: var(--mantine-color-yellow-4); color: #9a6a22; background: var(--mantine-color-default);
+}
+
+.instance-state.failed {
+border-color: var(--mantine-color-red-3); color: var(--mantine-color-red-6); background: var(--mantine-color-default);
+}
+
+.instance-row dl {
+display: grid; grid-template-columns: 1.2fr 1.4fr 1.4fr .55fr 1.4fr 1fr; gap: 7px; margin: 0;
+}
+
+.instance-row dl > div {
+display: grid; gap: 4px; min-width: 0; padding: 8px 9px; border: 1px solid var(--mantine-color-default-border); border-radius: 6px; background: var(--mantine-color-default);
+}
+
+.instance-row dt {
+color: var(--mantine-color-dimmed); font-size: .66rem;
+}
+
+.instance-row dd {
+overflow-wrap: anywhere; margin: 0; color: var(--mantine-color-text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .69rem;
+}
+
+.instance-log {
+border: 1px solid var(--mantine-color-default-border); border-radius: 6px; background: var(--mantine-color-default);
+}
+
+.instance-log summary {
+cursor: pointer; padding: 8px 10px; color: #496458; font-size: .72rem; font-weight: 700;
+}
+
+.instance-log pre {
+max-height: 220px; overflow: auto; margin: 0; padding: 0 10px 10px; color: #52675d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .68rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.instance-actions {
+display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 7px;
+}
+
+.launch-summary {
+display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px;
+}
+
+.launch-summary > div {
+display: grid; gap: 4px; min-width: 0; padding: 9px 10px; border: 1px solid var(--mantine-color-default-border); border-radius: 6px; background: var(--mantine-color-default);
+}
+
+.launch-summary span {
+color: var(--mantine-color-dimmed); font-size: .67rem;
+}
+
+.launch-summary strong {
+overflow-wrap: anywhere; color: var(--mantine-color-text); font-size: .74rem;
+}
+
+.route-preview {
+display: grid; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid #dce8e1; border-radius: 8px; background: linear-gradient(135deg, #f8fcfa, #f2f8f4);
+}
+
+.route-preview.compact {
+margin-top: 0; padding: 9px; border-radius: 6px;
+}
+
+.route-preview-heading {
+display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+
+.route-preview-heading > div {
+display: grid; gap: 3px; min-width: 0;
+}
+
+.route-preview-heading strong {
+color: var(--mantine-color-text); font-size: .75rem;
+}
+
+.route-preview-heading small {
+color: var(--mantine-color-dimmed); font-size: .66rem;
+}
+
+.route-flow {
+display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: var(--mantine-color-dimmed); font-size: .68rem;
+}
+
+.route-flow-node {
+min-width: 0; padding: 5px 7px; border: 1px solid #d4e3da; border-radius: 5px; color: var(--mantine-color-text); background: var(--mantine-color-default); font-weight: 700; overflow-wrap: anywhere;
+}
+
+.route-model-list {
+display: grid; gap: 5px;
+}
+
+.route-model-row {
+display: grid; grid-template-columns: minmax(90px, .7fr) auto minmax(80px, .8fr) minmax(120px, 1.6fr); gap: 6px; align-items: center; padding: 6px 7px; border: 1px solid #e1eae5; border-radius: 5px; background: rgba(255,255,255,.75); color: #496458; font-size: .68rem;
+}
+
+.route-model-row small {
+color: var(--mantine-color-dimmed); overflow-wrap: anywhere;
+}
+
+.route-model-id {
+color: var(--mantine-primary-color-filled); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; overflow-wrap: anywhere;
+}
+
+.route-model-more {
+color: var(--mantine-color-dimmed); font-size: .66rem;
+}
+
+.instance-route-summary {
+display: grid; gap: 8px; padding: 9px; border: 1px solid #dfe9e3; border-radius: 6px; background: #f8fbf9;
+}
+
+.instance-route-copy {
+display: flex; align-items: flex-start; gap: 8px; color: var(--mantine-color-dimmed);
+}
+
+.instance-route-copy > svg {
+flex: 0 0 auto; margin-top: 2px;
+}
+
+.instance-route-copy > div {
+display: grid; gap: 3px;
+}
+
+.instance-route-copy strong {
+color: var(--mantine-color-text); font-size: .73rem;
+}
+
+.instance-route-copy small {
+color: var(--mantine-color-dimmed); font-size: .66rem; line-height: 1.4;
+}
+
+.instance-exit-note {
+display: flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid #d9e9df; border-radius: 5px; color: #4f6e60; background: #f4faf6; font-size: .69rem;
+}
+
+.instance-exit-note time {
+margin-left: auto; color: #83958c; font-size: .64rem;
+}
+
+@media (max-width: 900px) {
+.instance-row dl {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.instance-row dl > div:last-child {
+grid-column: 1 / -1;
+}
+}
+
+@media (max-width: 680px) {
+.instance-row dl {
+grid-template-columns: 1fr 1fr;
+}
+
+.launch-summary {
+grid-template-columns: 1fr;
+}
+
+.model-route-row .icon-button {
+justify-self: end;
+}
+
+.route-model-row {
+grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.route-model-row small {
+grid-column: 1 / -1;
+}
+
+.instance-exit-note {
+align-items: flex-start;
+}
+
+.instance-exit-note time {
+margin-left: 0;
+}
+}
+
+@media (max-width: 420px) {
+.instance-row dl {
+grid-template-columns: 1fr;
+}
+
+.instance-row dl > div:last-child {
+grid-column: auto;
+}
+
+.instance-actions {
+align-items: stretch; flex-direction: column;
+}
+
+.instance-actions button {
+width: 100%;
+}
+}
+
+.control-drawer-body .instance-list {
+display: grid; gap: 10px;
+}
+
+.archive-actions .icon-button {
+width: 30px; height: 30px; padding: 6px;
+}
+
+.archive-stage-tabs button.active {
+border-color: #2a8761; background: #e4f4e9; color: #176543;
+}
+
+.diagnostics-board .diagnostic-row {
+align-items: start;
+}
+
+ul.diagnostic-list,
+.diagnostic-list {
+list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.diagnostic-list .rcodex-List-item {
+list-style: none;
+}
+
+.empty-workspace-guidance .empty-detail {
+margin: 0;
+}
+
+.instance-scan {
+display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--mantine-color-text); font-size: .78rem;
+}
+
+.instance-technical {
+margin-top: 8px;
+}
+
+.instance-technical summary {
+color: var(--mantine-color-dimmed); font-size: .72rem; cursor: pointer;
+}
+
+.console-brand .eyebrow {
+margin: 4px 0 0; font-size: .58rem;
+}
+
+@keyframes overlay-fade-in {
+from { opacity: 0; } to { opacity: 1; }
+}

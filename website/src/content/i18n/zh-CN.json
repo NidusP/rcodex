@@ -1,0 +1,17 @@
+{
+  "skipLink.label": "跳转到内容",
+  "search.label": "搜索",
+  "search.cancelLabel": "取消",
+  "search.devWarning": "搜索索引仅在生产构建中可用。",
+  "themeSelect.accessibleLabel": "选择主题",
+  "themeSelect.dark": "深色",
+  "themeSelect.light": "浅色",
+  "themeSelect.auto": "跟随系统",
+  "menuButton.accessibleLabel": "打开菜单",
+  "sidebarNav.accessibleLabel": "文档导航",
+  "tableOfContents.onThisPage": "本页内容",
+  "page.editLink": "编辑此页",
+  "page.lastUpdated": "最后更新",
+  "page.previousLink": "上一页",
+  "page.nextLink": "下一页"
+}

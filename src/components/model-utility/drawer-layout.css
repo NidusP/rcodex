@@ -1,0 +1,65 @@
+.control-drawer-body .provider-list,
+.control-drawer-body .instance-list {
+display: grid; gap: 10px;
+}
+
+.control-drawer-inner {
+padding: 0;
+}
+
+.control-drawer-overlay {
+top: var(--titlebar-h, 40px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: auto;
+}
+
+.control-drawer-content {
+display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: none;
+  border-radius: 0;
+  background: var(--mantine-color-default);
+}
+
+.control-drawer-header {
+padding: 16px 20px 10px;
+}
+
+.control-drawer-title {
+flex: 1 1 auto; min-width: 0; color: var(--mantine-color-text);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.control-drawer-body {
+flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 28px;
+}
+
+.control-drawer-body .drawer-toolbar {
+justify-content: flex-start;
+}
+
+.control-drawer-body .surface-panel {
+border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.control-drawer-heading {
+display: flex; align-items: center; gap: 8px; min-width: 0;
+}
+
+.control-drawer-heading span {
+min-width: 0;
+}
+
+.control-drawer-back {
+flex: none; border-radius: 50%;
+}

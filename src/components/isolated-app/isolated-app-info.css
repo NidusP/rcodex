@@ -1,0 +1,99 @@
+.runtime-channel-chips .icon-button {
+display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex-basis: 18px; padding: 0; border: 0; border-radius: 50%; color: #789287; background: transparent; cursor: pointer;
+}
+
+.runtime-channel-chips .icon-button:hover:not(:disabled) {
+color: var(--mantine-color-red-6); background: #f8e9e7;
+}
+
+.runtime-channel-chips .icon-button:disabled {
+cursor: not-allowed; opacity: .45;
+}
+
+@media (max-width: 680px) {
+.model-route-row .icon-button {
+justify-self: end;
+}
+}
+
+.dashboard-home .workspace-auth-summary,
+.dashboard-home .workspace-runtime-summary {
+margin-bottom: 14px;
+}
+
+.dashboard-home .runtime-environment-grid {
+grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px;
+}
+
+@media (max-width: 860px) {
+.dashboard-home .runtime-environment-grid {
+grid-template-columns: 1fr;
+}
+}
+
+.archive-actions .icon-button {
+width: 30px; height: 30px; padding: 6px;
+}
+
+.dashboard-home .channel-rows {
+flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  align-content: start;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+.dashboard-home .channel-rows:hover,
+.dashboard-home .channel-rows:focus-within {
+scrollbar-color: rgba(99, 122, 111, .54) transparent;
+}
+
+.dashboard-home .channel-rows::-webkit-scrollbar {
+width: 10px; height: 10px;
+}
+
+.dashboard-home .channel-rows::-webkit-scrollbar-thumb {
+border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(99, 122, 111, .34);
+  background-clip: content-box;
+}
+
+.dashboard-home {
+display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dashboard-home .runtime-target-card,
+.dashboard-home .runtime-target-card:first-child {
+display: grid;
+  flex: 1 1 auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dashboard-home .runtime-target-route {
+display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+}

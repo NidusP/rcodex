@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+website/dist/
+website/node_modules/
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/gen/
+
+# secrets and local data
+work/updater.key
+*.sqlite
+*.sqlite3
+${sqlite}/
+outputs/
+tmp/
+.DS_Store
+
+# tooling caches
+.claude/
+.cargo/
+.idea/
+.vscode/

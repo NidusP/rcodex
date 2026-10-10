@@ -1,0 +1,253 @@
+:root {
+color: var(--mantine-color-text);
+  background: var(--mantine-color-body);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+}
+
+* {
+box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+width: 100%; height: 100%; overflow: hidden;
+}
+
+body {
+margin: 0; min-width: 320px; min-height: 0; background: var(--mantine-color-body);
+}
+
+button,
+input,
+select {
+font: inherit;
+}
+
+.app-shell {
+display: grid; grid-template-columns: 220px minmax(0, 1fr); width: 100%; height: 100%; min-height: 0; overflow: hidden;
+}
+
+.app-main {
+min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: transparent transparent; scrollbar-width: thin;
+}
+
+.app-main:hover,
+.app-main:focus-within {
+scrollbar-color: rgba(99, 122, 111, .54) transparent;
+}
+
+.app-main::-webkit-scrollbar {
+width: 10px; height: 10px;
+}
+
+.app-main::-webkit-scrollbar-track {
+background: transparent;
+}
+
+.app-main::-webkit-scrollbar-thumb {
+border: 3px solid transparent; border-radius: 999px; background: rgba(99, 122, 111, .34); background-clip: content-box;
+}
+
+.app-main:hover::-webkit-scrollbar-thumb,
+.app-main:focus-within::-webkit-scrollbar-thumb {
+background-color: rgba(77, 104, 91, .58);
+}
+
+.topbar p:not(.eyebrow) {
+margin: 0; color: var(--mantine-color-dimmed); font-size: .84rem;
+}
+
+.eyebrow {
+margin: 0 0 8px; color: var(--mantine-primary-color-filled); font-size: .68rem; font-weight: 800; letter-spacing: .14em;
+}
+
+.installation-gate {
+width: min(560px, calc(100% - 48px)); margin: 12vh auto 0; padding: 36px; border: 1px solid var(--mantine-color-default-border); border-radius: 24px; background: var(--mantine-color-default); box-shadow: 0 18px 48px rgba(27, 43, 36, .12);
+}
+
+.installation-gate-tools {
+display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: -8px 0 8px;
+}
+
+.installation-gate-icon {
+display: inline-flex; padding: 12px; border-radius: 14px; color: var(--mantine-color-yellow-8); background: var(--mantine-color-default);
+}
+
+.installation-gate h2 {
+margin: 8px 0 12px;
+}
+
+.installation-gate p:not(.eyebrow) {
+color: var(--mantine-color-dimmed); line-height: 1.65;
+}
+
+.installation-gate code {
+display: block; margin: 16px 0; color: var(--mantine-color-red-6); white-space: pre-wrap;
+}
+
+.installation-gate button {
+margin-top: 12px;
+}
+
+.installation-gate-tools button {
+margin-top: 0;
+}
+
+.installation-gate small {
+display: block; margin-top: 18px; color: var(--mantine-color-dimmed);
+}
+
+.runtime-product-actions .primary-action {
+display: inline-flex; align-items: center; gap: 5px;
+}
+
+.app-target-grid .runtime-target-actions .primary-action {
+padding: 7px 9px; font-size: .7rem;
+}
+
+.runtime-target-actions .primary-action {
+display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+.app-shell {
+grid-template-columns: 72px minmax(0, 1fr);
+}
+}
+
+@media (max-width: 680px) {
+.app-shell {
+display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+}
+
+.runtime-target-actions .primary-action {
+justify-content: center;
+}
+
+.runtime-product-actions .primary-action {
+justify-content: center;
+}
+}
+
+button:disabled[title] {
+pointer-events: auto; cursor: not-allowed;
+}
+
+button:disabled {
+cursor: not-allowed;
+}
+
+.primary-action {
+display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+html,
+body,
+#root {
+height: auto; min-height: 100%; overflow-x: hidden; overflow-y: auto;
+}
+
+.app-shell {
+display: block; height: auto; min-height: 100vh; overflow: visible;
+}
+
+.app-main {
+width: min(100%, 1480px); margin: 0 auto; overflow: visible;
+}
+
+.console-brand .eyebrow {
+margin: 4px 0 0; font-size: .58rem;
+}
+
+.app-main {
+display: flex; min-height: 100vh; flex-direction: column;
+}
+
+:root {
+--titlebar-h: 0px;
+}
+
+.incident-bubble {
+position: fixed;
+  z-index: 14;
+  top: calc(var(--titlebar-h) + 10px);
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--mantine-color-red-3);
+  border-radius: 10px;
+  color: #8d3d36;
+  background: rgba(255, 246, 244, 0.96);
+  box-shadow: 0 12px 28px rgba(27, 43, 36, 0.16);
+  text-align: left;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.incident-bubble-title,
+.incident-bubble-detail,
+.incident-bubble-detail span,
+.incident-bubble-detail b {
+overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incident-bubble-detail {
+display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.incident-bubble-detail span {
+min-width: 0; flex: 1;
+}
+
+.incident-bubble-detail b {
+flex: none; color: var(--mantine-primary-color-filled); font-size: .72rem; font-weight: 700;
+}
+
+.incident-bubble svg {
+flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+.incident-bubble {
+transition: none;
+}
+}
+
+html,
+body,
+#root {
+width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell {
+display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-main {
+display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}

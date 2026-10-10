@@ -1,0 +1,129 @@
+.empty-state {
+display: grid; justify-items: center; gap: 7px; padding: 30px 18px; border: 1px dashed #cddbd4; border-radius: 7px; color: #75877d; text-align: center;
+}
+
+.empty-state strong {
+color: var(--mantine-color-text); font-size: .9rem;
+}
+
+.empty-state span {
+font-size: .76rem;
+}
+
+.empty-state button {
+margin-top: 6px;
+}
+
+.diagnostic-list {
+display: grid; gap: 6px;
+}
+
+.diagnostic-row {
+display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-bottom: 1px solid #edf1ef;
+}
+
+.diagnostic-row:last-child {
+border-bottom: 0;
+}
+
+.diagnostic-row > div {
+min-width: 0;
+}
+
+.diagnostic-row strong {
+display: block; color: var(--mantine-color-text); font-size: .76rem;
+}
+
+.diagnostic-row small {
+display: block; overflow-wrap: anywhere; margin-top: 2px; color: var(--mantine-color-dimmed); font-size: .69rem;
+}
+
+.outcome {
+padding: 3px 6px; border-radius: 4px; color: var(--mantine-primary-color-filled); background: #e8f6ef; font-size: .68rem; font-weight: 750;
+}
+
+.outcome.failed {
+color: var(--mantine-color-red-6); background: var(--mantine-color-default);
+}
+
+.diagnostic-meta {
+text-align: right;
+}
+
+.diagnostic-row code {
+grid-column: 2 / -1; color: var(--mantine-color-red-6); font-size: .68rem;
+}
+
+@media (max-width: 680px) {
+.diagnostic-row {
+grid-template-columns: auto minmax(0, 1fr);
+}
+
+.diagnostic-meta {
+grid-column: 2; text-align: left;
+}
+
+.diagnostic-row code {
+grid-column: 1 / -1;
+}
+}
+
+@media (max-width: 420px) {
+.topbar-actions .secondary-action {
+flex: 1;
+}
+}
+
+.drawer-intro {
+margin: 18px 0 16px; color: var(--mantine-color-dimmed); font-size: .78rem; line-height: 1.55;
+}
+
+.secondary-action {
+display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+.instance-state.failed {
+border-color: var(--mantine-color-red-3); color: var(--mantine-color-red-6); background: var(--mantine-color-default);
+}
+
+.drawer-intro {
+margin: 0 0 15px; color: var(--muted, #718179); font-size: .78rem; line-height: 1.55;
+}
+
+.drawer-toolbar {
+display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 14px;
+}
+
+@media (max-width: 560px) {
+.drawer-toolbar {
+align-items: stretch; flex-wrap: wrap; justify-content: flex-start;
+}
+}
+
+.surface-panel .drawer-toolbar {
+justify-content: flex-start;
+}
+
+.diagnostics-board .diagnostic-row {
+align-items: start;
+}
+
+ul.diagnostic-list,
+.diagnostic-list {
+list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.diagnostic-list .rcodex-List-item {
+list-style: none;
+}
+
+.recent-console-log .failed {
+color: var(--mantine-color-red-6);
+}
+
+.control-drawer-body .drawer-toolbar,
+.channel-drawer-body .drawer-toolbar {
+justify-content: flex-start;
+}

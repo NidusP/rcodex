@@ -1,0 +1,60 @@
+---
+title: R Codex
+description: 本地优先的 Codex 多模型路由与默认 App 管理工具。
+template: splash
+hero:
+  title: 让 Codex 用上你选择的模型
+  tagline: R Codex 把 Provider、模型路由和本机 Gateway 放在一个清晰的工作区里。默认 App 保留原生历史，模型请求按明确的路由边界转发。
+  actions:
+    - text: 开始使用
+      link: /rcodex/getting-started/quick-start/
+      icon: right-arrow
+    - text: 了解工作原理
+      link: /rcodex/getting-started/how-it-works/
+      variant: minimal
+---
+
+import FlowSwitcher from '../../components/FlowSwitcher.tsx';
+
+<div class="hero-visual" aria-label="R Codex 请求路径">
+  <div>
+    <strong>一条清楚的请求路径</strong>
+    <p>模型选择发生在工作区，凭据留在本机，Gateway 只按已固化的模型路由转发请求。</p>
+  </div>
+  <div class="route-line" aria-hidden="true">
+    <span class="route-node">Codex</span><span class="route-arrow">→</span><span class="route-node emphasis">本机 Gateway</span><span class="route-arrow">→</span><span class="route-node">Provider</span>
+  </div>
+</div>
+
+## 先把默认 App 用起来
+
+首版优先支持默认 App：添加 API Key 模型渠道，检测可用模型，把路由应用到默认配置，再从 R Codex 启动或重启 App。默认 App 的认证、会话和历史仍归 Codex 自己管理。
+
+<div class="feature-grid">
+  <div class="feature-card"><strong>多 Provider</strong><p>在同一个工作区选择多个 API Key 模型渠道，并为每个模型保留明确的上游来源。</p></div>
+  <div class="feature-card"><strong>本机 Gateway</strong><p>请求经 127.0.0.1 回环转发，按公共模型 ID 精确匹配 Provider 和不可变路由快照。</p></div>
+  <div class="feature-card"><strong>可恢复配置</strong><p>默认 App 使用字段级 marker，恢复时只清理仍由 R Codex 写入且未被外部修改的字段。</p></div>
+</div>
+
+## 你需要知道的三个环境
+
+<FlowSwitcher client:load />
+
+## 从配置到对话
+
+1. 在“模型渠道”中保存 API Key Provider，并执行连通性检测。
+2. 在工作区选择检测到的模型，确认公共模型 ID 和默认模型。
+3. 点击“应用默认 App 模型配置”，然后重启默认 App；或直接从 R Codex 启动默认 App。
+4. 如果请求失败，从 Gateway 诊断中查看错误层级、上游状态和下一步动作。
+
+## 先理解边界，再开始使用
+
+R Codex 不修改默认 `auth.json`，不把第三方 API Key 注入 Codex 子进程，也不记录请求正文或响应正文。隔离 App、官方账户模型和三方模型旧会话兼容性仍在验收，官网会持续更新真实状态。
+
+<div class="roadmap-grid">
+  <div class="roadmap-card"><strong>当前可用</strong><p>默认 App 兼容路由、API Key Provider、模型目录、Gateway 和脱敏诊断。</p></div>
+  <div class="roadmap-card pending"><strong>暂缓开放</strong><p>隔离目录和配置已经写入。签名发布与真实桌面验收仍未完成。</p></div>
+  <div class="roadmap-card pending"><strong>持续排查</strong><p>三方模型旧会话无法继续的问题，先做请求形状诊断，再决定兼容或结构化拒绝。</p></div>
+</div>
+
+<p class="hero-note">准备好了？从 <a href="/rcodex/getting-started/quick-start/">快速开始</a> 进入，或查看 <a href="/rcodex/reference/privacy/">隐私与安全</a>。</p>

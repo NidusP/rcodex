@@ -1,0 +1,132 @@
+.drawer-actions,
+.form-actions {
+display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+}
+
+.notice-bar.error {
+border-color: var(--mantine-color-red-3); color: var(--mantine-color-red-6); background: var(--mantine-color-default);
+}
+
+.runtime-product-actions .primary-action {
+display: inline-flex; align-items: center; gap: 5px;
+}
+
+.runtime-product-actions .text-button {
+color: #527263; font-size: .72rem; text-decoration: none;
+}
+
+.app-target-grid .runtime-target-actions .primary-action {
+padding: 7px 9px; font-size: .7rem;
+}
+
+.runtime-target-actions .text-button {
+display: inline-flex; align-items: center; gap: 4px; padding: 7px 0; font-size: .72rem;
+}
+
+.runtime-target-actions .primary-action {
+display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+
+.provider-form {
+margin: 0 0 16px; padding: 15px; border: 1px solid var(--mantine-color-default-border); border-radius: 7px; background: var(--mantine-color-default);
+}
+
+.form-actions {
+margin-top: 13px;
+}
+
+.drawer-actions {
+margin-top: 18px;
+}
+
+@media (max-width: 680px) {
+.provider-actions .text-button {
+padding-left: 0;
+}
+}
+
+@media (max-width: 420px) {
+.topbar-actions .secondary-action {
+flex: 1;
+}
+
+.drawer-actions button {
+width: 100%;
+}
+
+.drawer-actions {
+align-items: stretch;
+}
+}
+
+@media (max-width: 680px) {
+.runtime-target-actions .text-button,
+.runtime-target-actions .primary-action {
+justify-content: center;
+}
+
+.runtime-product-actions .primary-action {
+justify-content: center;
+}
+}
+
+.drawer-intro {
+margin: 18px 0 16px; color: var(--mantine-color-dimmed); font-size: .78rem; line-height: 1.55;
+}
+
+.drawer-form {
+margin: 0; padding: 15px 0 0; border: 0; background: transparent;
+}
+
+.channel-mantine-form {
+display: grid; gap: 14px;
+}
+
+.channel-mantine-form .rcodex-Fieldset-root {
+display: grid; gap: 10px;
+}
+
+.drawer-form .form-grid {
+grid-template-columns: 1fr;
+}
+
+.drawer-form .form-grid .wide-field {
+grid-column: auto;
+}
+
+.drawer-form .form-actions {
+margin-top: 20px;
+}
+
+.channel-probe-result {
+display: grid; gap: 8px; color: #5d7268; font-size: .78rem;
+}
+
+.channel-probe-result div {
+display: flex; flex-wrap: wrap; gap: 6px;
+}
+
+.channel-probe-result span {
+padding: 4px 8px; border-radius: 999px; background: #f3f7f4;
+}
+
+.channel-probe-result strong {
+color: #24483a;
+}
+
+.secondary-action,
+.primary-action {
+display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+
+.authorization-progress-actions .text-button {
+display: inline-flex; align-items: center; gap: 4px;
+}
+
+.drawer-intro {
+margin: 0 0 15px; color: var(--muted, #718179); font-size: .78rem; line-height: 1.55;
+}
+
+.runtime-target-route > .text-button {
+justify-self: start; width: fit-content;
+}
