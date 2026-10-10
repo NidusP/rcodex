@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -21,14 +21,23 @@ const profile = isReleaseBuild ? "release" : "debug";
 const cargoArgs = ["build", "--manifest-path", "src-tauri/Cargo.toml", "--bin", "codex-launcher", "--bin", "codex-gateway"];
 if (isReleaseBuild) cargoArgs.push("--release");
 
+const binariesDir = join("src-tauri", "binaries");
+mkdirSync(binariesDir, { recursive: true });
+for (const name of ["codex-launcher", "codex-gateway"]) {
+  const sidecarPath = join(binariesDir, `${name}-${targetTriple}`);
+  if (!existsSync(sidecarPath)) {
+    // build.rs checks these paths while compiling the sidecar package, before this script can copy the real binaries.
+    writeFileSync(sidecarPath, "");
+    chmodSync(sidecarPath, 0o755);
+  }
+}
+
 console.log(`Preparing ${profile} Codex sidecar…`);
 execFileSync("cargo", cargoArgs, { stdio: "inherit" });
 
 const launcherSource = join("src-tauri", "target", profile, "codex-launcher");
 const gatewaySource = join("src-tauri", "target", profile, "codex-gateway");
 if (!existsSync(launcherSource) || !existsSync(gatewaySource)) throw new Error(`Sidecar build completed without producing ${launcherSource} and ${gatewaySource}`);
-const binariesDir = join("src-tauri", "binaries");
-mkdirSync(binariesDir, { recursive: true });
 copyFileSync(launcherSource, join(binariesDir, `codex-launcher-${targetTriple}`));
 copyFileSync(gatewaySource, join(binariesDir, `codex-gateway-${targetTriple}`));
 chmodSync(join(binariesDir, `codex-launcher-${targetTriple}`), 0o755);

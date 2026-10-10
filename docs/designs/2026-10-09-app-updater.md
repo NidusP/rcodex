@@ -41,6 +41,7 @@
 pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action-setup` 不要再写 `version`；`10` 和 `pnpm@10.13.1` 会被当成两个版本，作业在安装依赖前失败。
 
 2026-10-10：`v0.1.0` 第一次推送因此失败，未产生 Release。去掉 workflow 里的 pnpm `version` 后，标签指向修复提交并重新触发构建。
+第二次构建进入 Tauri 后失败：干净检出没有 `src-tauri/binaries/codex-launcher-<triple>`，而 `build.rs` 在编译附带程序时就检查该路径。脚本改为先放占位文件，编完再覆盖为真正的二进制。
 
 ## 验收
 

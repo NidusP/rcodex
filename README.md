@@ -74,7 +74,7 @@ cargo check --all-targets
 cargo test --all-targets
 ~~~
 
-Tauri 脚本先构建 codex-launcher 和 codex-gateway，再嵌入前端。若原生包显示旧页面，按需执行 cargo clean --manifest-path src-tauri/Cargo.toml 后重新打包。生成的 macOS 包可能为 ad-hoc 签名，不能视为已公证发布包。
+Tauri 脚本先构建 codex-launcher 和 codex-gateway，再嵌入前端。这两个附带程序按目标三元组放在 `src-tauri/binaries/`，不提交。`build.rs` 在编译附带程序时就会检查对应文件存在，所以干净环境里脚本会先放占位文件，编译完成后再换成真正的二进制。本机如果已经有上次构建留下的文件，不会先遇到这个错误。若原生包显示旧页面，按需执行 cargo clean --manifest-path src-tauri/Cargo.toml 后重新打包。生成的 macOS 包可能为 ad-hoc 签名，不能视为已公证发布包。
 
 ## 应用更新
 
