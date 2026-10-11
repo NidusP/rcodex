@@ -1,6 +1,5 @@
 import { desktopChrome } from "./components/title-bar";
 import {
-  isDirectTransport,
   isGatewayTransport,
   type ApiKeyProviderSummary,
   type LaunchPresetSummary,
@@ -296,12 +295,11 @@ export const accentStorageKey = "rcodex-accent";
 // but is intentionally unavailable in the current product surface.
 export const OFFICIAL_AUTH_ENABLED = false;
 export const transportLabels: Record<TransportMode, string> = {
-  direct_responses: "直连 Responses",
   gateway_passthrough: "Gateway 透传",
   gateway_chat_completions: "Gateway 转换 Chat（文本）",
 };
 export const gatewayHint =
-  "Gateway 是本地路由服务，负责请求透传、协议转换、统一诊断和超时控制。直连 Responses 时不需要启动它。";
+  "Gateway 是本地路由服务，负责请求透传、协议转换、统一诊断和超时控制。";
 export function gatewayStateLabel(
   state: GatewayStatus["state"],
 ) {
@@ -325,8 +323,6 @@ export const navHints: Record<NavView, string> = {
 };
 
 export function modeDescription(mode: TransportMode) {
-  if (isDirectTransport(mode))
-    return "Codex 直接访问上游，不启动本地 Gateway。";
   if (mode === "gateway_passthrough")
     return "经本地 Gateway 原样转发 Responses 与 SSE。";
   return "经本地 Gateway 将文本 Responses 转为 Chat Completions。";
@@ -507,15 +503,7 @@ export function maskKey(configured: boolean) {
   return configured ? "••••••••••••" : "未配置";
 }
 export function getInitialThemeMode(): ThemeMode {
-  if (typeof window === "undefined") return "system";
-  try {
-    const stored = window.localStorage?.getItem(themeStorageKey);
-    return stored === "light" || stored === "dark" || stored === "system"
-      ? stored
-      : "system";
-  } catch {
-    return "system";
-  }
+  return "light";
 }
 const namedAccentHex: Record<AccentName, string> = {
   cyan: "#1098ad",

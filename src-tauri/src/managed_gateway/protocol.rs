@@ -1,16 +1,27 @@
 //! Responses/Chat 请求改写、能力预检和用量形状。
 //!
-//! 不发送上游请求，不管理 sidecar。只按 CapabilitySet 删除或改写字段，不伪造工具/图片兼容。
+//! 不发送上游请求，不管理 sidecar。GPT 族保留 Codex Responses 请求体。
+//! 非 GPT 才按 CapabilitySet 删除或改写中继不兼容字段，不伪造工具/图片兼容。
 //! HTTP 入口和转发在打上游之前调用。
 
 use axum::body::Bytes;
 use serde_json::{json, Map, Value};
 
 use crate::diagnostics::RequestDiagnosticOutcome;
-use crate::routing::{CompactMode, ModelRoute};
+use crate::routing::{looks_like_gpt_model_id, CompactMode, ModelRoute};
 
 use super::compaction;
 use super::SUBTASK_FAILURE_RECOVERY_NOTICE;
+
+/// Relay-compat rewrites exist for non-GPT Responses providers.
+///
+/// GPT-family models keep the Codex Responses body. Routing still rewrites the
+/// public model id and injects this channel's API Key. Family is
+/// `looks_like_gpt_model_id`: a Grok/DeepSeek/Claude upstream stays non-GPT
+/// even if the public slug contains `gpt`.
+pub(super) fn needs_relay_compat(route: &ModelRoute) -> bool {
+    !looks_like_gpt_model_id(&route.public_model_id, &route.upstream_model_id)
+}
 
 pub(super) fn filter_unsupported_optional_tools(
     route: &ModelRoute,
@@ -46,16 +57,16 @@ pub(super) fn filter_unsupported_optional_tools(
 /// Some OpenAI-compatible relays reject the otherwise-standard Responses
 /// `metadata` member with HTTP 400. Codex does not depend on this field for
 /// routing or conversation state, so omit it at the managed boundary to keep
-/// external Responses providers interoperable. Request diagnostics retain
-/// their own redacted metadata separately.
+/// non-GPT Responses providers interoperable. Request diagnostics retain
+/// their own redacted metadata separately. GPT-family routes skip this filter.
 pub(super) fn filter_relay_incompatible_fields(request: &mut serde_json::Map<String, Value>) {
     request.remove("metadata");
 }
 
-/// Normalize Codex's private multi-agent history for third-party Responses
+/// Normalize Codex's private multi-agent history for non-GPT Responses
 /// providers. The local Codex client owns delegation and receives ordinary
 /// Responses output unchanged; this only makes its replayed child messages
-/// representable on the public wire.
+/// representable on the public wire. GPT-family routes keep `agent_message`.
 pub(super) fn normalize_routed_agent_messages(
     request: &mut Map<String, Value>,
 ) -> Result<(), &'static str> {
@@ -187,6 +198,9 @@ pub(super) fn preflight_capabilities(
     // native preflight and still hit official_route_unavailable after this.
     if request_contains_compaction_trigger(request) {
         compaction::preflight_compact(route, compact_mode)?;
+    }
+    if !needs_relay_compat(route) {
+        return Ok(());
     }
     if request
         .get("tools")

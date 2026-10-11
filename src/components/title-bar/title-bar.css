@@ -42,6 +42,8 @@ background: color-mix(in srgb, var(--mantine-color-red-1) 70%, transparent);
 .gateway-restart:disabled {
 cursor: not-allowed;
 opacity: .6;
+}
+
 .window-titlebar {
 box-sizing: border-box;
   width: 100vw;

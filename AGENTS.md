@@ -4,17 +4,17 @@
 
 ## 项目定位
 
-R Codex 是本地优先的 Codex 账户、模型渠道和 API Gateway 管理工具，目标平台是 macOS 与 Windows。技术 slug 是 `rcodex`；`3r-gpt` 和 `3rcodex` 只作为升级迁移兼容来源保留。显示名与技术 namespace 的执行计划见 [R Codex 品牌与技术命名空间改造](docs/designs/2026-10-04-r-codex-display-rename.md)。
+R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务商聚合成一份目录，经本机 Gateway 按模型精确转发。目标平台是 macOS 与 Windows。技术 slug 是 `rcodex`；`3r-gpt` 和 `3rcodex` 只作为升级迁移兼容来源保留。显示名与技术 namespace 的执行计划见 [R Codex 品牌与技术命名空间改造](docs/designs/2026-10-04-r-codex-display-rename.md)。
 
 当前产品基线：
 
 - 纯 API Key 多 Provider、多模型的受管理 CLI/App 路由已实现。
-- 多 Provider 运行强制经过本机回环 Gateway；单 Provider 且支持 Responses 直连时可以直连真实 Base URL。
+- 受管理运行都经过本机回环 Gateway。DirectResponses 直连路径已删除。
 - Gateway 使用独立 `codex-gateway` sidecar（伴随进程），只绑定 `127.0.0.1`，不提供 LAN 或公网入口。
 - 每个受管理实例使用独立 `CODEX_HOME`、模型目录、Profile、RouteSet 和实例准入密钥。
 - 产品只保留 R Codex 工作区，启动 App/CLI 均使用独立配置、认证和会话目录。不得读取或修改用户原 config.toml、auth.json、Cookie、Electron 数据；仅用户主动项目导入允许只读源会话。当前合同见 [独立工作区改造](docs/designs/2026-09-21-isolated-only-product-plan.md)。
 - 官方订阅模型经自定义 Gateway 的真实协议和账户合同仍受发布门限制，不能默认打开。
-- 产品目标包含 macOS 与 Windows；当前 `scripts/tauri.mjs` 的 sidecar 打包路径只接受 macOS，Windows 发布链路仍需单独补齐和验收。
+- 产品目标包含 macOS 与 Windows。发版矩阵产出 macOS Apple Silicon、macOS Intel 和 Windows x64 安装包。Windows 包能在运行器上构建，安装和打开仍需 Windows 桌面验收。
 
 产品与架构的完整背景见：
 
@@ -71,7 +71,7 @@ R Codex 是本地优先的 Codex 账户、模型渠道和 API Gateway 管理工�
 
 - 数据路径是 `Codex → 127.0.0.1 Gateway → Provider`；UI 不承载模型 token 流量。
 - Gateway 只接受回环请求和当前 binding 的准入密钥；sidecar 与 UI 生命周期分离。
-- Responses 透传和 Responses→Chat 文本转换必须按 `CapabilitySet` 宣布能力；不伪造工具、图片、MCP、推理或多轮续接兼容性。
+- GPT 族 Responses 原样转发请求体（仍替换公共模型 ID、注入该渠道 Key、去掉官方认证）。非 GPT 才做中继兼容：删 `metadata`、去掉渠道不支持的可选工具、把 `agent_message` 收成公开 user 消息。Responses→Chat 文本转换仍按 `CapabilitySet` 宣布能力；不伪造工具、图片、MCP、推理或多轮续接兼容性。
 - 上游非 2xx 属于 `upstream` 层；本地路由、准入、网络或解析错误属于 `gateway` 层。错误响应保留 `gateway_code`、可选 `upstream_status` 和脱敏 `upstream_detail`。
 - 普通诊断和用量记录是 best-effort，不得阻断模型请求；不得记录 API Key、实例密钥、Authorization、请求正文、响应正文或完整敏感 URL。用户显式启用的完整请求档案是独立存储例外，当前已接入首版，按专项设计维护，不能把正文加入普通日志或用量表。
 
@@ -228,8 +228,10 @@ Tauri 构建脚本会先构建 `codex-launcher` 和 `codex-gateway`，再嵌入 
 - 2026-10-09：运行中的隔离实例不再锁工作区。渠道、模型、排序和 API 登录可以改，下次启动才用新配置；保存后提示「当前隔离实例正在运行，重启可应用修改」。删除模型渠道仍要先停掉占用它的实例。
 - 2026-10-09：删除全部旧选择器自定义类名和样式，包括选择器宽度规则。src/workspace-surface.tsx、src/SessionImportPanel.tsx、src/ConversationArchivePanel.tsx、src/components/model-utility/diagnostics-board.tsx 及对应 CSS。
 - 2026-10-10：标题栏不再显示 Gateway 空闲或转发。只有失联时右侧显示「重启」。应用启动即拉起 Gateway，真正退出先停隔离实例再停 Gateway。关窗口仍只隐藏。
+- 2026-10-11：程序坞「退出」和 Cmd+Q 与菜单栏「退出」走同一条清理。macOS 拦截 `applicationShouldTerminate:`，取消系统 terminate，改发 `exit(0)`，先停隔离实例再停 Gateway。红点关闭仍只隐藏。src-tauri/src/macos_quit.rs、src-tauri/src/lib.rs。
 - 2026-10-10：恢复系统标题栏。去掉网页自绘标题栏、macOS 交通灯改位和 Windows 自绘窗口按钮。失联时的「重启」放在页面「R Codex」右侧。主题和更新也留在这一行。
 - 2026-10-10：初版收口。实例详情和请求记录禁用。明暗和强调色入口隐藏。错误通知不弹出。见 docs/designs/2026-10-10-initial-release-surface.md。
+- 2026-10-10：初版固定浅色，不跟随系统，也不读取已保存明暗。index.html、src/app-model.ts、docs/designs/2026-10-10-initial-release-surface.md。
 - 2026-10-10：添加渠道不再确认。下拉选中后直接加入当前隔离空间，并排在第一个。
 - 2026-10-10：系统标题栏不再显示「R Codex」。窗口标题仍保留给系统和菜单，页面里的「R Codex」和重启按钮不动。
 - 2026-10-10：隔离 App 运行时，控制带 App 按钮直接显示停止图标，不再悬停才从播放换成停止。未运行时仍是播放图标。src/workspace-surface.css。

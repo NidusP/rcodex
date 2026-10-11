@@ -3,7 +3,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 const now = Math.floor(Date.now() / 1000);
 
 const providers = [
-  { id: "provider-primary", name: "Primary API", baseUrl: "https://api.openai.com/v1", isDefault: true, configured: true, transportMode: "direct_responses", currentRevisionId: "provider-revision-primary" },
+  { id: "provider-primary", name: "Primary API", baseUrl: "https://api.openai.com/v1", isDefault: true, configured: true, transportMode: "gateway_passthrough", currentRevisionId: "provider-revision-primary" },
   { id: "provider-relay", name: "Team Relay", baseUrl: "https://relay.example.test/v1", isDefault: false, configured: true, transportMode: "gateway_passthrough", currentRevisionId: "provider-revision-relay" },
   { id: "provider-spare", name: "Spare Relay", baseUrl: "https://spare.example.test/v1", isDefault: false, configured: true, transportMode: "gateway_passthrough", currentRevisionId: "provider-revision-spare" },
 ];
@@ -188,7 +188,7 @@ export function installControlFixture() {
         if (providerId === "provider-primary") return { providerId, checkedAt: now - 50, status: "unauthorized", model: null, models: [], modelsCheck: "failed", textCheck: "not_run", errorCode: "unauthorized", wireApi: null };
         return { providerId, checkedAt: now - 40, status: "ready", model: "grok-code-fast-1", models: [{ upstreamModelId: "grok-code-fast-1", displayName: "Grok Code Fast", ownedBy: "xai" }], modelsCheck: "ready", textCheck: "ready", errorCode: null, wireApi: "responses" };
       }
-      case "gateway_recent_diagnostics": return search.get("no-failure") === "1" ? [] : [{ id: 9, providerId: "provider-primary", createdAt: now - 30, source: "probe", route: "/models", model: null, transportMode: "direct_responses", stream: false, outcome: "failed", httpStatus: 401, latencyMs: 120, errorCode: "unauthorized" }];
+      case "gateway_recent_diagnostics": return search.get("no-failure") === "1" ? [] : [{ id: 9, providerId: "provider-primary", createdAt: now - 30, source: "probe", route: "/models", model: null, transportMode: "gateway_passthrough", stream: false, outcome: "failed", httpStatus: 401, latencyMs: 120, errorCode: "unauthorized" }];
       case "recent_gateway_requests": return search.get("no-failure") === "1" ? [] : [{ id: 4, instanceId: "instance-api", sessionId: null, createdAt: now - 20, route: "/v1/responses", stream: false, wireApi: "responses", publicModelId: "team-relay-grok-code-fast-1", upstreamModelId: "grok-code-fast-1", providerId: "provider-relay", providerRevisionId: "provider-revision-relay", httpStatus: 502, responseContentType: null, firstByteMs: null, totalLatencyMs: 800, outcome: "failed", errorCode: "upstream_unavailable", errorDetail: "relay.example.test/v1", inputLength: 20, outputLength: 0, inputTokens: null, outputTokens: null, totalTokens: null }];
       case "check_codex_updates": return { state: "up_to_date", checkedAt: now, currentVersion: "0.150.0", latestVersion: "0.150.0" };
       case "instance_request_diagnostics": return instanceDiagnostics;

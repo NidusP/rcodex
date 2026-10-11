@@ -9,10 +9,10 @@ use super::migrate_legacy::{migrate_to_v5, migrate_to_v6};
 use super::migrate_v7_plus::{
     migrate_to_v10, migrate_to_v11, migrate_to_v12, migrate_to_v13, migrate_to_v14, migrate_to_v15,
     migrate_to_v16, migrate_to_v17, migrate_to_v18, migrate_to_v19, migrate_to_v20, migrate_to_v21,
-    migrate_to_v22, migrate_to_v7, migrate_to_v8, migrate_to_v9,
+    migrate_to_v22, migrate_to_v23, migrate_to_v7, migrate_to_v8, migrate_to_v9,
 };
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 22;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 23;
 
 pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
     let version: i64 = connection
@@ -247,6 +247,7 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
     migrate_to_v20(&transaction)?;
     migrate_to_v21(&transaction)?;
     migrate_to_v22(&transaction, version < 22)?;
+    migrate_to_v23(&transaction)?;
     transaction
         .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
         .map_err(|error| format!("无法保存 SQLite schema 版本：{error}"))?;

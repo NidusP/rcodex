@@ -14,9 +14,11 @@ mod diagnostics;
 pub mod launcher_protocol;
 pub use codex_control::{CredentialKind, EntryKind, InstanceState};
 mod commands;
+pub mod managed_app_launch;
 mod managed_codex_config;
 pub mod managed_gateway;
 mod managed_launch;
+mod managed_spawn;
 mod model_family_profile;
 mod official_accounts;
 mod official_auth;
@@ -28,7 +30,12 @@ mod session_import;
 mod settings;
 mod special_models;
 mod support;
+pub use support::user_home;
+#[cfg(target_os = "macos")]
+mod macos_quit;
 mod usage;
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
@@ -77,6 +84,31 @@ fn park_main_window(window: &tauri::Window) {
 /// Menu-bar quit calls `exit(0)` and must stop instances and the gateway.
 pub(crate) fn exit_preserves_instances(code: Option<i32>) -> bool {
     code == Some(tauri::RESTART_EXIT_CODE)
+}
+
+static EXIT_CLEANUP_DONE: AtomicBool = AtomicBool::new(false);
+static EXIT_PRESERVES_RUNTIME: AtomicBool = AtomicBool::new(false);
+
+fn perform_exit_cleanup(app: &tauri::AppHandle, code: Option<i32>) -> Result<(), String> {
+    if exit_preserves_instances(code) {
+        EXIT_PRESERVES_RUNTIME.store(true, Ordering::SeqCst);
+        return Ok(());
+    }
+    if EXIT_PRESERVES_RUNTIME.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    if EXIT_CLEANUP_DONE.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let result = tauri::async_runtime::block_on(stop_active_instances_and_gateway(
+        app.state::<CodexControlStore>().inner(),
+        app.state::<ManagedGatewayClient>().inner(),
+        app.state::<ManagedLaunchStore>().inner(),
+    ));
+    if result.is_err() {
+        EXIT_CLEANUP_DONE.store(false, Ordering::SeqCst);
+    }
+    result
 }
 
 fn install_menu_bar_icon(app: &tauri::App) {
@@ -151,9 +183,10 @@ pub fn run() {
         builder = builder.on_window_event(|window, event| {
             match event {
                 WindowEvent::CloseRequested { api, .. } => {
-                    // Closing the window hides the control plane. It must not
+                    // Red close button: hide the control plane. It must not
                     // tear down a sidecar that an active Codex CLI still uses.
                     // On macOS the dock icon goes away; the menu bar icon stays.
+                    // Dock Quit and Cmd+Q are handled by macos_quit, not here.
                     api.prevent_close();
                     park_main_window(window);
                 }
@@ -165,6 +198,12 @@ pub fn run() {
     let app = builder
         .setup(|app| {
             install_menu_bar_icon(app);
+            #[cfg(target_os = "macos")]
+            macos_quit::install(app.handle().clone());
+            #[cfg(debug_assertions)]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_title("R Codex Dev");
+            }
             let database = Database::open(app)?;
             let api_key_vault =
                 std::sync::Arc::new(secrets::DatabaseApiKeyVault::new(database.connection()));
@@ -267,19 +306,13 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building R Codex");
-    app.run(|app, event| {
-        if let RunEvent::ExitRequested { api, code, .. } = event {
-            if exit_preserves_instances(code) {
-                // Controlled restart. Leave isolated instances and the
-                // detached sidecar running so the next process can adopt them.
-                return;
-            }
-            let stop_result = tauri::async_runtime::block_on(stop_active_instances_and_gateway(
-                app.state::<CodexControlStore>().inner(),
-                app.state::<ManagedGatewayClient>().inner(),
-                app.state::<ManagedLaunchStore>().inner(),
-            ));
-            if let Err(error) = stop_result {
+    app.run(|app, event| match event {
+        RunEvent::Ready => {
+            #[cfg(target_os = "macos")]
+            macos_quit::install(app.clone());
+        }
+        RunEvent::ExitRequested { api, code, .. } => {
+            if let Err(error) = perform_exit_cleanup(app, code) {
                 api.prevent_exit();
                 let _ = app.emit(
                     "app-exit-blocked",
@@ -290,6 +323,12 @@ pub fn run() {
                 );
             }
         }
+        RunEvent::Exit => {
+            // Dock Quit previously skipped ExitRequested and only reached
+            // LoopDestroyed/Exit. Keep this as a last-chance cleanup.
+            let _ = perform_exit_cleanup(app, None);
+        }
+        _ => {}
     });
 }
 

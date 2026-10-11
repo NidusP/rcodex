@@ -379,7 +379,7 @@ pub(super) fn save_gateway_timeout_in_transaction(
 pub(super) fn wire_api(transport_mode: TransportMode) -> &'static str {
     match transport_mode {
         TransportMode::GatewayChatCompletions => "chat_completions",
-        TransportMode::DirectResponses | TransportMode::GatewayPassthrough => "responses",
+        TransportMode::GatewayPassthrough => "responses",
     }
 }
 

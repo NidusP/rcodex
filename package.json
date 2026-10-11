@@ -1,7 +1,32 @@
 {
   "name": "rcodex",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "专为 Codex 做的本机路由转发工具：把多个模型服务商聚合成一份目录，按模型精确转发。",
+  "keywords": [
+    "codex",
+    "openai",
+    "llm",
+    "gateway",
+    "routing",
+    "multi-provider",
+    "tauri",
+    "desktop",
+    "rcodex"
+  ],
+  "homepage": "https://github.com/NidusP/rcodex",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NidusP/rcodex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NidusP/rcodex/issues"
+  },
+  "author": {
+    "name": "populus",
+    "email": "30283065+NidusP@users.noreply.github.com",
+    "url": "https://github.com/NidusP"
+  },
   "packageManager": "pnpm@10.13.1",
   "type": "module",
   "scripts": {

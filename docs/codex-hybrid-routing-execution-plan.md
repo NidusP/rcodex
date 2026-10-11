@@ -2,6 +2,31 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-11：发布 0.1.1 以验证在线更新
+
+- 变更目的：已安装的 0.1.0 需要一个更高版本的 GitHub Release 才会提示更新。
+- 合同：package.json、Cargo.toml、tauri.conf.json、website/package.json 版本为 0.1.1。打 tag v0.1.1 触发草稿 Release，人工发布后 /releases/latest 指向 0.1.1。签名私钥不变。
+- 当前工作区自 0.1.0 以来的未提交改动一并进入此版本。
+- 验证：发版前跑 pnpm run check 与 cargo 测试。CI 成功且草稿发布后，用 0.1.0 客户端确认出现 R Codex 0.1.1 可用。
+- 回滚：不要把 0.1.1 发成 latest；保留 0.1.0 为 latest 即可。已安装 0.1.1 的机器只能手动重装 0.1.0。
+
+### 2026-10-11：程序坞退出与 Cmd+Q 停实例和 Gateway
+
+- 变更目的：程序坞右键退出和 Cmd+Q 以前走 `NSApp.terminate`，Tao 没有 `applicationShouldTerminate:`，控制面在 `applicationWillTerminate` 里被杀掉，`ExitRequested` 清理不跑，sidecar 和隔离实例成为孤儿。
+- 合同：红点关闭仍只隐藏控制面。菜单栏「退出」、程序坞「退出」和 Cmd+Q 都先停活动隔离实例，再 `stop_if_unused()`。macOS 把系统 terminate 取消后改发 `exit(0)`。`RunEvent::Exit` 作为兜底再清一次。只有 `RESTART_EXIT_CODE` 保留实例和 sidecar。
+- 修改文件：`src-tauri/src/macos_quit.rs`、`src-tauri/src/lib.rs`、`src-tauri/Cargo.toml`；产品原理、混合路由设计、隔离启动核对、AGENTS.md。
+- 验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check` 通过。`cargo check --manifest-path src-tauri/Cargo.toml --lib` 通过。`cargo test --manifest-path src-tauri/Cargo.toml --lib tests::only_the_restart_exit_code_preserves_instances -- --exact` 1 passed。未启动 Tauri，未做程序坞退出实机验收。
+- 回滚：去掉 `macos_quit` 钩子和 `RunEvent::Exit` 兜底，恢复关窗口只隐藏、系统 terminate 直接杀控制面的行为。
+- 下一步：commander 用 `pnpm run tauri:dev` 加载本次代码后，启动一个隔离实例，程序坞右键退出，确认 `codex-gateway` 和该隔离会话都已结束。
+
+### 2026-10-11：GPT 族 Responses 原样转发，兼容处理只打非 GPT
+
+- 变更目的：commander 确认只有非 GPT 模型才做中继兼容。GPT 族按 Codex 发出的 Responses 原样转发请求体。
+- 合同：`needs_relay_compat` 取反 `looks_like_gpt_model_id`。非 GPT 仍删 `metadata`、去掉渠道不支持的可选工具、把 `agent_message` 收成公开 user 消息，并做工具/图片预检。GPT 族跳过这些改写和预检。公共模型 ID 替换、渠道 Key 注入、去掉官方认证、压缩预检不变。Chat Completions 与官方账号登录仍未完善。
+- 修改文件：`src-tauri/src/managed_gateway/protocol.rs`、`http.rs`、`tests_forward.rs`、`routing.rs`；README、AGENTS.md、混合路由设计、协议兼容计划、agent_message 专项和隔离压缩说明。
+- 验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check` 通过。`cargo test --manifest-path src-tauri/Cargo.toml --lib -- --exact managed_gateway::tests_forward::relay_compat_applies_only_to_non_gpt_family managed_gateway::tests_forward::gpt_family_responses_are_forwarded_without_relay_compat managed_gateway::tests_forward::routed_agent_message_is_normalized_before_provider_forward managed_gateway::tests_forward::provider_route_isolates_headers_and_rewrites_models managed_gateway::tests_forward::unsupported_optional_web_search_is_removed_without_dropping_supported_tools` 5 passed。沙箱内绑定 127.0.0.1 被拒；无代理环境下上述 5 项通过。未启动 Tauri，未打真实 Provider。
+- 回滚：去掉 `needs_relay_compat` 门，恢复对所有 Responses 路由做 metadata/工具/`agent_message` 改写。
+
 ### 2026-10-10：Gateway 随应用启动，退出时停实例
 
 - 变更目的：所有隔离空间继续共用一个 Gateway。应用打开就在 `127.0.0.1:43123` 等待绑定，不再等第一次启动实例。标题栏不再显示空闲或转发。5 秒没有启动回执时保留原绑定。真正退出先停掉活动隔离实例，再停止没有绑定的 Gateway。
@@ -655,7 +680,7 @@
 
 - **现象**：切换到第三方 Grok 4.6 后，某个已有会话的连续请求在 2026-09-14 16:55–17:08 持续返回 `502 upstream_error`；同一路由在 17:42–17:43、19:01–19:02 的新请求随后成功。错误详情为 `https://ai.3rcd.com/v1/responses · Upstream request failed`。
 - **已确定**：sidecar 日志对这些失败请求均有 `event=forward`，且 `loopback=0`。请求已经进入 Gateway 并被转发到上游，因此本机回环代理拦截不是这组失败的原因。失败请求体长度约 491 KB；同一路由后续成功请求达到约 599 KB，单纯请求大小上限也不成立。失败与成功请求的工具类型集合相同（`custom`、`function`、`namespace`），工具定义集合本身不足以解释差异。
-- **当前实现边界**：Responses API（Codex 使用的响应生成协议）请求会保留大部分 `input` 历史和服务端续接字段；Gateway 当前只删除中继明确不接受的 `metadata`，并按能力过滤可选工具。`previous_response_id`（上游服务端响应的续接指针）不会被自动清除，历史中的工具调用、推理/加密项目、图片和 Provider 私有状态也不会被伪造迁移。Chat 适配器则明确拒绝非空 `previous_response_id` 和 `mcp_servers`。
+- **当前实现边界**：Responses API（Codex 使用的响应生成协议）请求会保留大部分 `input` 历史和服务端续接字段；非 GPT 路由删除中继明确不接受的 `metadata` 并按能力过滤可选工具；GPT 族保留请求体。`previous_response_id`（上游服务端响应的续接指针）不会被自动清除，历史中的工具调用、推理/加密项目、图片和 Provider 私有状态也不会被伪造迁移。Chat 适配器则明确拒绝非空 `previous_response_id` 和 `mcp_servers`。
 - **结论等级**：当前证据可以确定“失败发生在上游接收已转发请求之后”，并高度指向“旧会话携带的续接指针或历史项目与目标三方 Provider 的 Responses 合同不兼容”。但现有请求账本只保存长度、哈希、工具类型和脱敏错误摘要，不保存原始正文、顶层字段集合或 `input` 项目类型，所以**尚不能仅凭现有数据断言具体是 `previous_response_id`，也不能断言某一个历史项目字段**。同一工具集合和可变请求大小已经排除了两个较弱解释，但不等于完成字段级归因。
 - **本地会话侧补充证据**：本机 Grok 归档中，长历史会话包含多条带 `encrypted_content` 的 `reasoning` 项和工具调用；新建的短 Grok 会话只有普通消息项。由于 Codex 的归档文件不是 Gateway 原始请求，且请求账本当前没有可用 `session_id`，这能解释“旧/新会话形状不同”，但不能把某条归档 item 与 491 KB 失败请求逐一对应。
 - **不采用**：不在运行中的 SQLite、rollout 或会话历史上删字段/改 Provider；不把旧会话静默降级到原模型；不把上游 502 重试到另一地址。这些做法会破坏用户历史或掩盖路由边界。

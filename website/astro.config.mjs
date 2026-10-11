@@ -3,7 +3,7 @@ import solid from "@astrojs/solid-js";
 import starlight from "@astrojs/starlight";
 
 const repository = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "rcodex";
-const owner = process.env.GITHUB_REPOSITORY_OWNER ?? "OWNER";
+const owner = process.env.GITHUB_REPOSITORY_OWNER ?? "NidusP";
 const base = process.env.PUBLIC_BASE ?? (repository.endsWith(".github.io") ? "" : `/${repository}`);
 
 export default defineConfig({
@@ -13,7 +13,7 @@ export default defineConfig({
     solid(),
     starlight({
       title: "R Codex",
-      description: "本地优先的 Codex 多模型路由与默认 App 管理工具。",
+      description: "专为 Codex 做的本机路由转发工具：多渠道模型目录，按模型精确转发。",
       defaultLocale: "root",
       locales: {
         root: { label: "简体中文", lang: "zh-CN" },

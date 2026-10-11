@@ -148,14 +148,11 @@ pub struct PreparedManagedLaunch {
     pub filtered_mcp_servers: Vec<String>,
     pub route_set: RouteSetRevision,
     pub transport_mode: ManagedLaunchTransport,
-    pub direct_secret_ref: Option<String>,
-    pub direct_base_url: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManagedLaunchTransport {
     Gateway,
-    DirectResponses,
 }
 
 pub(super) struct ProviderSnapshot {

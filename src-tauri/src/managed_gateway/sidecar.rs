@@ -24,12 +24,12 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use super::gateway_listen_port;
 use super::runtime_types::{
     GatewayBinding, GatewayBindingRegistration, ManagedGatewayClientState,
     ManagedGatewayCredential, ManagedGatewayStatus, SidecarEndpoint, SidecarReady,
     SidecarWireStatus,
 };
-use super::GATEWAY_PORT;
 
 /// Main-process control-plane client for the independent Gateway sidecar.
 /// Codex requests never use this client; it only manages sidecar lifecycle.
@@ -432,7 +432,7 @@ impl ManagedGatewayClient {
             .arg("--control-token")
             .arg(&token)
             .arg("--data-port")
-            .arg(GATEWAY_PORT.to_string())
+            .arg(gateway_listen_port().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null());
         // Sidecar used to discard stderr, so Codex's loopback 502 had no
@@ -480,7 +480,7 @@ fn gateway_data_port_open() -> bool {
         return forced;
     }
     std::net::TcpStream::connect_timeout(
-        &std::net::SocketAddr::from(([127, 0, 0, 1], GATEWAY_PORT)),
+        &std::net::SocketAddr::from(([127, 0, 0, 1], gateway_listen_port())),
         Duration::from_millis(150),
     )
     .is_ok()
@@ -494,7 +494,7 @@ fn gateway_listener_pids() -> Result<Vec<u32>, String> {
                 "-nP",
                 "-a",
                 "-t",
-                &format!("-iTCP:{GATEWAY_PORT}"),
+                &format!("-iTCP:{}", gateway_listen_port()),
                 "-sTCP:LISTEN",
             ])
             .output()
@@ -517,7 +517,7 @@ fn gateway_listener_pids() -> Result<Vec<u32>, String> {
             .args(["-ano", "-p", "tcp"])
             .output()
             .map_err(|_| "managed_gateway_cleanup_process_lookup_failed".to_string())?;
-        let port = format!(":{GATEWAY_PORT}");
+        let port = format!(":{}", gateway_listen_port());
         let mut pids = output
             .stdout
             .split(|byte| *byte == b'\n' || *byte == b'\r')

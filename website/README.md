@@ -1,6 +1,6 @@
 # R Codex 官网
 
-这是 R Codex 的 Astro + Starlight + Solid.js 静态官网。桌面应用继续位于仓库根目录，官网只负责产品解释和用户文档，不连接本机 Gateway。
+这是 R Codex 的 Astro + Starlight + Solid.js 静态官网。R Codex 是专为 Codex 做的本机路由转发工具。桌面应用在仓库根目录，官网只负责产品解释和用户文档，不连接本机 Gateway。
 
 ## 本地运行
 

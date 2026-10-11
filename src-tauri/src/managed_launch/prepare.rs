@@ -12,13 +12,13 @@ use uuid::Uuid;
 
 use crate::codex_control::InstanceState;
 use crate::launcher_protocol::LaunchTarget;
-#[cfg(not(test))]
+#[cfg(all(not(test), target_os = "macos"))]
 use crate::managed_codex_config::materialize_isolated_computer_use_mcp;
 use crate::managed_codex_config::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility,
     keep_managed_permission_selector_available, materialize_managed_app_config,
-    materialize_managed_codex_config_with_auto_review, materialize_managed_direct_codex_config,
-    read_bundled_catalog, seed_default_codex_preferences, verify_catalog_models_with_codex,
+    materialize_managed_codex_config_with_auto_review, read_bundled_catalog,
+    seed_default_codex_preferences, verify_catalog_models_with_codex,
     verify_managed_profile_with_codex,
 };
 use crate::model_family_profile::{
@@ -71,59 +71,17 @@ impl ManagedLaunchStore {
             .connection
             .lock()
             .map_err(|_| "managed_launch_database_lock_failed".to_string())?;
-        let mut statement = connection
-            .prepare(
-                "SELECT COALESCE(gateway_policy, 'gateway_passthrough')
-                 FROM launch_presets WHERE id=?1 AND deleted_at IS NULL",
-            )
-            .map_err(|error| format!("managed_launch_transport_read_failed:{error}"))?;
-        let modes = statement
-            .query_map([id], |row| row.get::<_, String>(0))
-            .map_err(|error| format!("managed_launch_transport_read_failed:{error}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("managed_launch_transport_read_failed:{error}"))?;
-        let has_role_model: bool = connection
+        let exists: bool = connection
             .query_row(
-                "SELECT EXISTS(
-                   SELECT 1 FROM launch_preset_role_models
-                   WHERE launch_preset_id=?1
-                 )",
+                "SELECT EXISTS(SELECT 1 FROM launch_presets WHERE id=?1 AND deleted_at IS NULL)",
                 [id],
                 |row| row.get(0),
             )
             .map_err(|error| format!("managed_launch_transport_read_failed:{error}"))?;
-        let has_automatic_review_route: bool = connection
-            .query_row(
-                "SELECT EXISTS(
-                   SELECT 1
-                   FROM launch_preset_model_selections selection
-                   JOIN model_route_identities identity
-                     ON identity.id=selection.route_identity_id
-                   JOIN api_key_providers provider
-                     ON provider.id=identity.api_key_provider_id
-                   JOIN api_key_provider_revisions revision
-                     ON revision.id=provider.current_revision_id
-                   WHERE selection.launch_preset_id=?1
-                     AND identity.source_kind='api_provider'
-                     AND revision.state='active'
-                     AND revision.wire_api='responses'
-                 )",
-                [id],
-                |row| row.get(0),
-            )
-            .map_err(|error| format!("managed_launch_transport_read_failed:{error}"))?;
-        // Automatic review uses each catalog row's public model ID. Keep these
-        // requests on the Gateway so public IDs are rewritten to the exact
-        // upstream IDs and remain covered by normal credential isolation.
-        if !has_role_model
-            && !has_automatic_review_route
-            && modes.len() == 1
-            && modes[0] == "direct"
-        {
-            Ok(ManagedLaunchTransport::DirectResponses)
-        } else {
-            Ok(ManagedLaunchTransport::Gateway)
+        if !exists {
+            return Err("managed_preset_not_found".to_string());
         }
+        Ok(ManagedLaunchTransport::Gateway)
     }
 
     #[cfg(test)]
@@ -358,11 +316,7 @@ impl ManagedLaunchStore {
             if selection.source_kind != RouteKind::ApiProvider {
                 return Err("official_hybrid_route_experimental_disabled".to_string());
             }
-            let wire_api = if gateway_policy == "gateway_chat_completions" {
-                WireApi::ChatCompletions
-            } else {
-                provider.wire_api
-            };
+            let wire_api = provider.wire_api;
             let mut route = ModelRoute {
                 id: Uuid::new_v4().to_string(),
                 route_identity_id: selection.route_identity_id,
@@ -447,77 +401,31 @@ impl ManagedLaunchStore {
         // Each Responses API route has a self-referential catalog override.
         // Enabling the native review role here makes the active conversation
         // model select its own reviewer without exposing a second UI choice.
-        let auto_review_enabled = routes.iter().any(|route| {
-            route.wire_api == WireApi::Responses
-                && matches!(route.source, RouteSource::ApiProvider { .. })
-        });
         let profile_name = format!(
             "managed_{}_{}",
             instance_id.replace('-', ""),
             launch_nonce.replace('-', "").get(..12).unwrap_or("launch")
         );
-        let direct_mode = gateway_policy == "direct"
-            && provider_snapshots.len() == 1
-            && !auto_review_enabled
-            && routes.iter().all(|route| {
-                route.wire_api == WireApi::Responses
-                    && matches!(
-                        route.source,
-                        RouteSource::ApiProvider { ref provider_id, .. }
-                            if provider_id == &provider_snapshots[0].provider_id
-                    )
-            });
-        let transport_mode = if direct_mode {
-            ManagedLaunchTransport::DirectResponses
-        } else {
-            ManagedLaunchTransport::Gateway
-        };
-        let direct_provider_url = if direct_mode {
-            Some(
-                provider_snapshots[0]
-                    .base_url
-                    .parse::<Url>()
-                    .map_err(|_| "managed_direct_provider_url_invalid".to_string())?,
-            )
-        } else {
-            None
-        };
-        let materialized = match direct_provider_url.as_ref() {
-            Some(provider_url) => materialize_managed_direct_codex_config(
-                &managed_codex_home,
-                &profile_name,
-                routes
-                    .first()
-                    .map(|route| route.public_model_id.as_str())
-                    .ok_or_else(|| "route_set_has_no_models".to_string())?,
-                provider_url,
-                &catalog,
-            )?,
-            None => materialize_managed_codex_config_with_auto_review(
-                &managed_codex_home,
-                &profile_name,
-                routes
-                    .first()
-                    .map(|route| route.public_model_id.as_str())
-                    .ok_or_else(|| "route_set_has_no_models".to_string())?,
-                gateway_base_url.ok_or_else(|| "managed_gateway_not_serving".to_string())?,
-                official_account_id.is_some(),
-                &catalog,
-            )?,
-        };
-        if LaunchTarget::wire_is_managed_app(&launch_target)
-            && transport_mode != ManagedLaunchTransport::Gateway
-        {
-            return Err("managed_app_requires_gateway".to_string());
-        }
+        let transport_mode = ManagedLaunchTransport::Gateway;
+        let materialized = materialize_managed_codex_config_with_auto_review(
+            &managed_codex_home,
+            &profile_name,
+            routes
+                .first()
+                .map(|route| route.public_model_id.as_str())
+                .ok_or_else(|| "route_set_has_no_models".to_string())?,
+            gateway_base_url.ok_or_else(|| "managed_gateway_not_serving".to_string())?,
+            official_account_id.is_some(),
+            &catalog,
+        )?;
         // Isolated App and CLI share the first-run preference seed and the
         // home config.toml merge. Computer Use MCP stays App-only.
-        if let Some(source_home) = std::env::var_os("HOME").map(std::path::PathBuf::from) {
+        if let Some(source_home) = crate::support::user_home() {
             seed_default_codex_preferences(&managed_codex_home, &source_home.join(".codex"))?;
         }
         materialize_managed_app_config(&managed_codex_home, &materialized.profile_path)?;
         if LaunchTarget::wire_is_managed_app(&launch_target) {
-            #[cfg(not(test))]
+            #[cfg(all(not(test), target_os = "macos"))]
             materialize_isolated_computer_use_mcp(&managed_codex_home)?;
             keep_managed_permission_selector_available(&managed_codex_home)?;
         }
@@ -551,12 +459,9 @@ impl ManagedLaunchStore {
         let now = unix_now_seconds();
         let gateway_snapshot = serde_json::json!({
             "protocolVersion": 1,
-            "transportMode": match transport_mode {
-                ManagedLaunchTransport::Gateway => "gateway",
-                ManagedLaunchTransport::DirectResponses => "direct_responses",
-            },
+            "transportMode": "gateway",
             "bindHost": "127.0.0.1",
-            "baseUrl": gateway_base_url.map(Url::as_str).or_else(|| direct_provider_url.as_ref().map(Url::as_str)),
+            "baseUrl": gateway_base_url.map(Url::as_str),
             "compactMode": compact_mode.as_snapshot_str(),
         })
         .to_string();
@@ -595,14 +500,10 @@ impl ManagedLaunchStore {
             .map_err(|error| error.to_string())?;
         self.route_store.insert_ready_route_set(&route_set)?;
 
-        let gateway_credentials = if transport_mode == ManagedLaunchTransport::Gateway {
-            let instance_key = InstanceGatewayKey::generate();
-            let instance_key_ref = instance_gateway_key_ref(&instance_id)?;
-            let instance_key_hash = instance_gateway_key_hash(&instance_key);
-            Some((instance_key_ref, instance_key_hash, instance_key))
-        } else {
-            None
-        };
+        let instance_key = InstanceGatewayKey::generate();
+        let instance_key_ref = instance_gateway_key_ref(&instance_id)?;
+        let instance_key_hash = instance_gateway_key_hash(&instance_key);
+        let gateway_credentials = Some((instance_key_ref, instance_key_hash, instance_key));
         let write_result = self.insert_launch_records(
             &instance_id,
             &launch_nonce,
@@ -651,8 +552,6 @@ impl ManagedLaunchStore {
             filtered_mcp_servers: Vec::new(),
             route_set,
             transport_mode,
-            direct_secret_ref: direct_mode.then(|| provider_snapshots[0].secret_ref.clone()),
-            direct_base_url: direct_mode.then(|| provider_snapshots[0].base_url.clone()),
         })
     }
 

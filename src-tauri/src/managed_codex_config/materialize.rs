@@ -14,8 +14,8 @@ use url::Url;
 use crate::routing::validate_public_model_id;
 
 use super::io::{
-    reject_link, sha256_label, validate_direct_provider_url, validate_gateway_url,
-    validate_profile_name, write_immutable_atomically, write_private_atomically_overwrite,
+    reject_link, sha256_label, validate_gateway_url, validate_profile_name,
+    write_immutable_atomically, write_private_atomically_overwrite,
 };
 use super::preferences::ensure_collaboration_feature;
 use super::{
@@ -133,33 +133,6 @@ fn allow_short_codex_home_symlink(root: &mut toml::Table) {
     );
 }
 
-pub fn materialize_managed_direct_codex_config(
-    codex_home: &Path,
-    profile_name: &str,
-    default_model_id: &str,
-    provider_base_url: &Url,
-    catalog: &JsonValue,
-) -> Result<MaterializedCodexConfig, String> {
-    validate_profile_name(profile_name)?;
-    validate_direct_provider_url(provider_base_url)?;
-    let codex_home = codex_home
-        .canonicalize()
-        .map_err(|error| format!("managed_codex_home_invalid:{error}"))?;
-    if !codex_home.is_dir() {
-        return Err("managed_codex_home_not_directory".to_string());
-    }
-    let catalog_path = codex_home.join(format!("{profile_name}.models.json"));
-    let profile =
-        render_direct_managed_profile(provider_base_url, &catalog_path, default_model_id)?;
-    materialize_profile_files(
-        &codex_home,
-        profile_name,
-        catalog,
-        default_model_id,
-        profile,
-    )
-}
-
 fn materialize_profile_files(
     codex_home: &Path,
     profile_name: &str,
@@ -252,68 +225,6 @@ fn render_profile(
     toml::to_string(&root).map_err(|error| format!("managed_profile_encode_failed:{error}"))
 }
 
-fn render_direct_managed_profile(
-    provider_base_url: &Url,
-    catalog_path: &Path,
-    default_model_id: &str,
-) -> Result<String, String> {
-    let mut root = toml::Table::new();
-    root.insert(
-        "cli_auth_credentials_store".to_string(),
-        toml::Value::String("file".to_string()),
-    );
-    root.insert(
-        "model_provider".to_string(),
-        toml::Value::String(MANAGED_DIRECT_MODEL_PROVIDER_ID.to_string()),
-    );
-    root.insert(
-        "model_catalog_json".to_string(),
-        toml::Value::String(catalog_path.display().to_string()),
-    );
-    root.insert(
-        "model".to_string(),
-        toml::Value::String(default_model_id.to_string()),
-    );
-    root.insert(
-        "check_for_update_on_startup".to_string(),
-        toml::Value::Boolean(false),
-    );
-    allow_short_codex_home_symlink(&mut root);
-    let mut provider = toml::Table::new();
-    provider.insert(
-        "name".to_string(),
-        toml::Value::String("R Codex Direct Provider".to_string()),
-    );
-    provider.insert(
-        "base_url".to_string(),
-        toml::Value::String(provider_base_url.as_str().trim_end_matches('/').to_string()),
-    );
-    provider.insert(
-        "env_key".to_string(),
-        toml::Value::String("OPENAI_API_KEY".to_string()),
-    );
-    provider.insert(
-        "wire_api".to_string(),
-        toml::Value::String("responses".to_string()),
-    );
-    provider.insert(
-        "requires_openai_auth".to_string(),
-        toml::Value::Boolean(false),
-    );
-    let mut providers = toml::Table::new();
-    providers.insert(
-        MANAGED_DIRECT_MODEL_PROVIDER_ID.to_string(),
-        toml::Value::Table(provider),
-    );
-    root.insert("model_providers".to_string(), toml::Value::Table(providers));
-    require_user_approval(&mut root);
-    toml::to_string(&root).map_err(|error| format!("managed_profile_encode_failed:{error}"))
-}
-
-/// Keep the workspace sandbox, but make Codex ask before leaving it.
-///
-/// `approvals_reviewer` stays absent so Codex defaults to the user. Writing
-/// `auto_review` would answer those prompts without showing them.
 fn require_user_approval(config: &mut toml::Table) {
     config.insert(
         "approval_policy".to_string(),

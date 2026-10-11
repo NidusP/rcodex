@@ -8,6 +8,9 @@ use r_codex_lib::codex_installation::{resolve_codex_app_executable, resolve_code
 use r_codex_lib::launcher_protocol::{
     append_startup_log, process_start_identity, write_receipt_atomically, LauncherReceipt,
 };
+use r_codex_lib::managed_app_launch::{
+    apply_loopback_no_proxy, configure_managed_app_command, configure_unmanaged_app_command,
+};
 use zeroize::Zeroize;
 
 struct ReceiptTarget {
@@ -139,23 +142,9 @@ fn run() -> Result<(), String> {
             } else {
                 match credential_kind.as_str() {
                     "api_key" => {
-                        let _secret_ref = secret_ref
-                            .ok_or_else(|| "API Key 启动缺少 --secret-ref。".to_string())?;
-                        let secret_file = secret_file
-                            .as_deref()
-                            .ok_or_else(|| "API Key 启动缺少一次性凭据管道。".to_string())?;
-                        log_event(log_file.as_deref(), "provider_key_handoff_read_requested");
-                        let key = read_secret_file(secret_file).map_err(|error| {
-                            log_error(
-                                log_file.as_deref(),
-                                "provider_key_handoff_read_failed",
-                                &error,
-                            );
-                            error
-                        })?;
-                        log_event(log_file.as_deref(), "provider_key_loaded");
-                        command.env("OPENAI_API_KEY", &key);
-                        Some(key)
+                        return Err(
+                            "受管理启动必须经过 Gateway，不再支持直连 API Key。".to_string()
+                        );
                     }
                     "official" => None,
                     _ => return Err(format!("未知凭据类型：{credential_kind}")),
@@ -173,7 +162,7 @@ fn run() -> Result<(), String> {
                 if let Some(profile) = profile.as_deref() {
                     let model = model
                         .as_deref()
-                        .ok_or_else(|| "受管理直连启动缺少 --model。".to_string())?;
+                        .ok_or_else(|| "受管理启动缺少 --model。".to_string())?;
                     validate_profile_name(profile)?;
                     validate_model_id(model)?;
                     command
@@ -259,6 +248,22 @@ fn run() -> Result<(), String> {
             let mut instance_key =
                 read_instance_key_handoff(secret_file.as_deref(), log_file.as_deref())?;
             let app_executable = resolve_codex_app_executable(&codex)?;
+            #[cfg(target_os = "windows")]
+            {
+                use r_codex_lib::managed_app_launch::windows::{
+                    managed_launch_route, ManagedLaunchRoute,
+                };
+                use r_codex_lib::managed_app_launch::windows_package::query_registered_launch;
+                let registered = query_registered_launch(&app_executable)?;
+                match managed_launch_route(&app_executable, registered.as_ref())? {
+                    ManagedLaunchRoute::DirectExe => {}
+                    ManagedLaunchRoute::PackageIdentity(_) => {
+                        return Err(
+                            "商店包激活尚未在此 Windows 桌面验收，暂不启动隔离 App。".to_string()
+                        );
+                    }
+                }
+            }
             let mut command = Command::new(&app_executable);
             command
                 .stdin(Stdio::inherit())
@@ -330,14 +335,6 @@ fn run() -> Result<(), String> {
     }
 }
 
-fn apply_loopback_no_proxy(command: &mut Command) {
-    let no_proxy = merged_loopback_no_proxy(
-        env::var("NO_PROXY").ok().as_deref(),
-        env::var("no_proxy").ok().as_deref(),
-    );
-    command.env("NO_PROXY", &no_proxy).env("no_proxy", no_proxy);
-}
-
 fn configure_managed_cli_command(
     command: &mut Command,
     profile: &str,
@@ -363,33 +360,6 @@ fn configure_managed_cli_command(
     apply_loopback_no_proxy(command);
 }
 
-fn merged_loopback_no_proxy(upper: Option<&str>, lower: Option<&str>) -> String {
-    let mut entries = Vec::<String>::new();
-    for value in [upper, lower].into_iter().flatten() {
-        for entry in value
-            .split(',')
-            .map(str::trim)
-            .filter(|entry| !entry.is_empty())
-        {
-            if !entries
-                .iter()
-                .any(|current| current.eq_ignore_ascii_case(entry))
-            {
-                entries.push(entry.to_string());
-            }
-        }
-    }
-    for entry in ["127.0.0.1", "localhost", "::1"] {
-        if !entries
-            .iter()
-            .any(|current| current.eq_ignore_ascii_case(entry))
-        {
-            entries.push(entry.to_string());
-        }
-    }
-    entries.join(",")
-}
-
 fn validate_model_id(value: &str) -> Result<(), String> {
     if value.is_empty()
         || value.len() > 128
@@ -412,46 +382,6 @@ fn validate_profile_name(value: &str) -> Result<(), String> {
         return Err("受管理 Profile 名称无效。".to_string());
     }
     Ok(())
-}
-
-fn configure_unmanaged_app_command(command: &mut Command, directory: &Path) {
-    command
-        .arg("app")
-        .arg(directory)
-        .env_remove("CODEX_HOME")
-        .env_remove("CODEX_SQLITE_HOME")
-        .env_remove("CODEX_ACCESS_TOKEN")
-        .env_remove("CODEX_API_KEY")
-        .env_remove("OPENAI_API_KEY");
-}
-
-fn configure_managed_app_command(
-    command: &mut Command,
-    codex_home: &Path,
-    electron_user_data_dir: &Path,
-    sqlite_home: &Path,
-    instance_key: &str,
-) {
-    command
-        .env("CODEX_HOME", codex_home)
-        .env("CODEX_SQLITE_HOME", sqlite_home)
-        .env("CODEX_ELECTRON_USER_DATA_PATH", electron_user_data_dir)
-        .env("RCODEX_INSTANCE_KEY", instance_key)
-        // Electron must see the user-data path in the initial argv parse. The
-        // space-separated form can be treated as a late path mutation by the
-        // desktop wrapper and then forwarded to the default singleton.
-        .arg(format!(
-            "--user-data-dir={}",
-            electron_user_data_dir.display()
-        ))
-        .env_remove("OPENAI_API_KEY")
-        .env_remove("CODEX_API_KEY")
-        .env_remove("CODEX_ACCESS_TOKEN");
-    // Codex Desktop honors macOS system proxy. A local Clash/V2Ray on
-    // 127.0.0.1:789x answers loopback Gateway POSTs with an empty 502
-    // (`content-length: 0`), which Codex prints as Unknown error. CLI
-    // launches already bypass loopback; App must too.
-    apply_loopback_no_proxy(command);
 }
 
 fn supervise_child(
@@ -565,12 +495,9 @@ fn resolve_working_directory(value: Option<&str>) -> Result<Option<PathBuf>, Str
         return Ok(None);
     };
     let expanded = if value == "~" {
-        env::var_os("HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| "无法定位用户主目录。".to_string())?
+        r_codex_lib::user_home().ok_or_else(|| "无法定位用户主目录。".to_string())?
     } else if let Some(relative) = value.strip_prefix("~/") {
-        env::var_os("HOME")
-            .map(PathBuf::from)
+        r_codex_lib::user_home()
             .ok_or_else(|| "无法定位用户主目录。".to_string())?
             .join(relative)
     } else {
@@ -586,8 +513,7 @@ fn resolve_working_directory(value: Option<&str>) -> Result<Option<PathBuf>, Str
 }
 
 fn default_working_directory() -> Result<PathBuf, String> {
-    let directory = env::var_os("HOME")
-        .map(PathBuf::from)
+    let directory = r_codex_lib::user_home()
         .ok_or_else(|| "无法定位用户主目录作为 Codex 工作目录。".to_string())?
         .canonicalize()
         .map_err(|error| format!("无法定位用户主目录作为 Codex 工作目录：{error}"))?;
@@ -692,73 +618,6 @@ mod tests {
     }
 
     #[test]
-    fn managed_app_uses_isolated_home_and_electron_data_dir_without_provider_key() {
-        let home = PathBuf::from("/tmp/3r-managed-app-home");
-        let electron = PathBuf::from("/tmp/3r-managed-app-electron");
-        let mut command = Command::new("/bin/true");
-        command
-            .env("OPENAI_API_KEY", "provider-secret-sentinel")
-            .env("CODEX_ACCESS_TOKEN", "official-token-sentinel");
-        configure_managed_app_command(
-            &mut command,
-            &home,
-            &electron,
-            Path::new("/tmp/3r-managed-app-sqlite"),
-            "instance-sentinel",
-        );
-
-        let arguments = command
-            .get_args()
-            .map(|value| value.to_string_lossy().to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            arguments,
-            vec!["--user-data-dir=/tmp/3r-managed-app-electron"]
-        );
-        let environment = command
-            .get_envs()
-            .map(|(name, value)| {
-                (
-                    name.to_string_lossy().to_string(),
-                    value.map(|item| item.to_string_lossy().to_string()),
-                )
-            })
-            .collect::<std::collections::HashMap<_, _>>();
-        assert_eq!(
-            environment.get("CODEX_HOME"),
-            Some(&Some("/tmp/3r-managed-app-home".to_string()))
-        );
-        assert_eq!(
-            environment.get("CODEX_ELECTRON_USER_DATA_PATH"),
-            Some(&Some("/tmp/3r-managed-app-electron".to_string()))
-        );
-        assert_eq!(
-            environment.get("CODEX_SQLITE_HOME"),
-            Some(&Some("/tmp/3r-managed-app-sqlite".to_string()))
-        );
-        assert_eq!(
-            environment.get("RCODEX_INSTANCE_KEY"),
-            Some(&Some("instance-sentinel".to_string()))
-        );
-        for name in ["OPENAI_API_KEY", "CODEX_ACCESS_TOKEN"] {
-            assert_eq!(environment.get(name), Some(&None));
-        }
-        let no_proxy = environment
-            .get("NO_PROXY")
-            .and_then(|value| value.as_deref())
-            .unwrap();
-        assert_eq!(
-            environment
-                .get("no_proxy")
-                .and_then(|value| value.as_deref()),
-            Some(no_proxy)
-        );
-        for entry in ["127.0.0.1", "localhost", "::1"] {
-            assert!(no_proxy.split(',').any(|current| current == entry));
-        }
-    }
-
-    #[test]
     fn resolves_desktop_app_next_to_bundled_codex_cli() {
         let codex = PathBuf::from(
             "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
@@ -770,21 +629,6 @@ mod tests {
                 PathBuf::from("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT")
             );
         }
-    }
-
-    #[test]
-    fn loopback_proxy_bypass_preserves_and_deduplicates_parent_entries() {
-        assert_eq!(
-            merged_loopback_no_proxy(
-                Some("internal.example, 127.0.0.1"),
-                Some("LOCALHOST,.corp.example,internal.example"),
-            ),
-            "internal.example,127.0.0.1,LOCALHOST,.corp.example,::1"
-        );
-        assert_eq!(
-            merged_loopback_no_proxy(None, None),
-            "127.0.0.1,localhost,::1"
-        );
     }
 
     #[test]

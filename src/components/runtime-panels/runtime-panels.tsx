@@ -107,7 +107,7 @@ export function RoutePreview({
         </div>
         <span
           className="mode-pill"
-          title={modeDescription(preset.transportMode ?? "direct_responses")}
+          title={modeDescription(preset.transportMode ?? "gateway_passthrough")}
         >
           {isGatewayPreset(preset) ? "Gateway 统一路由" : "单渠道直连"}
         </span>

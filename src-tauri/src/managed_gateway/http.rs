@@ -33,7 +33,7 @@ use super::errors::{api_error, not_found, reject_local};
 use super::forward::forward_provider;
 use super::helpers::{ephemeral_family_alias_route, gateway_trace};
 use super::protocol::{
-    filter_relay_incompatible_fields, filter_unsupported_optional_tools,
+    filter_relay_incompatible_fields, filter_unsupported_optional_tools, needs_relay_compat,
     normalize_routed_agent_messages, preflight_capabilities, request_contains_compaction_trigger,
 };
 use super::runtime_types::{BindingRuntime, ManagedGatewayAppState};
@@ -189,8 +189,10 @@ pub(super) async fn responses(
                 StatusCode::NOT_FOUND,
             );
         };
-        filter_unsupported_optional_tools(&route, &mut request);
-        filter_relay_incompatible_fields(&mut request);
+        if needs_relay_compat(&route) {
+            filter_unsupported_optional_tools(&route, &mut request);
+            filter_relay_incompatible_fields(&mut request);
+        }
         let compact_mode =
             CompactMode::from_gateway_snapshot(&binding.route_set.gateway_service.config_snapshot);
         if let Err(code) =
@@ -255,10 +257,12 @@ pub(super) async fn responses(
                     );
                 }
                 // agent_message is a Codex collaboration-private input item.
-                // OpenAI-compatible Responses relays reject it before inference,
-                // so normalize only ordinary third-party turns. Compaction owns
-                // its own input transformation and must remain fail-closed.
-                if route.wire_api == WireApi::Responses
+                // Non-GPT OpenAI-compatible relays reject it before inference,
+                // so normalize only ordinary third-party turns. GPT-family
+                // Responses keep the body. Compaction owns its own input
+                // transformation and must remain fail-closed.
+                if needs_relay_compat(&route)
+                    && route.wire_api == WireApi::Responses
                     && !request_contains_compaction_trigger(&Value::Object(request.clone()))
                 {
                     if let Err(code) = normalize_routed_agent_messages(&mut request) {

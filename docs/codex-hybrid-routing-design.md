@@ -553,7 +553,7 @@ R Codex 将模型目录分为三个层次，而不是把所有模型都交给同
 
 替代策略严格绑定：自动审核条目必须来自该运行方案选中的 Responses API Provider 并满足角色合同；角色请求不可达时失败并记录角色与公共模型 ID，不自动改用其他 Provider。这样既能把自动审核路由到当前第三方模型，又能避免把内部实现细节暴露给用户或上游。
 
-Responses Provider 保留 Codex 的工具请求；模型声明不支持网页搜索时，Gateway 会在转发前移除 Codex 自动附带但不可用的 `web_search` 工具定义。为兼容会拒绝可选 `metadata` 字段的 OpenAI 兼容中继，Responses 转发也会移除该字段；它不参与路由、会话恢复或工具回合，诊断仍记录脱敏元数据。Chat Completions 转换接受真实 Codex 的多消息文本数组并生成完整 Responses SSE 生命周期事件，但首版明确是纯文本能力：Gateway 移除工具声明，不伪装支持 Codex custom grammar、MCP 或工具回合；包含无法表示的图像或服务端历史引用时返回稳定兼容错误。
+非 GPT 的 Responses Provider 保留 Codex 的工具请求；模型声明不支持网页搜索时，Gateway 会在转发前移除 Codex 自动附带但不可用的 `web_search` 工具定义。为兼容会拒绝可选 `metadata` 字段的 OpenAI 兼容中继，非 GPT 转发也会移除该字段；它不参与路由、会话恢复或工具回合，诊断仍记录脱敏元数据。GPT 族 Responses 原样转发请求体，不删 `metadata`、不改可选工具、不改写 `agent_message`。Chat Completions 转换接受真实 Codex 的多消息文本数组并生成完整 Responses SSE 生命周期事件，但首版明确是纯文本能力：Gateway 移除工具声明，不伪装支持 Codex custom grammar、MCP 或工具回合；包含无法表示的图像或服务端历史引用时返回稳定兼容错误。
 
 ### 9.2 launcher
 
@@ -610,7 +610,7 @@ v5 legacy 启动仅在迁移兼容路径保留，不允许新预设创建 direct
 #### 生命周期与恢复
 
 - R Codex 启动时优先发现并复用同一应用数据目录中的健康 sidecar；发现失效端点后清理 ready 文件并重新拉起。
-- 关闭 R Codex 窗口只隐藏控制面。菜单栏「退出」和其他非重启退出先停止活动隔离实例，注销绑定后再 `stop_if_unused()`。停止失败则阻止退出。只有 Tauri `RESTART_EXIT_CODE` 保留实例和 sidecar。开发热更新从外部结束控制面进程，独立 sidecar 留下并由下次启动健康检查复用。
+- 关闭 R Codex 窗口只隐藏控制面。菜单栏「退出」、程序坞「退出」、Cmd+Q 和其他非重启退出先停止活动隔离实例，注销绑定后再 `stop_if_unused()`。停止失败则阻止退出。只有 Tauri `RESTART_EXIT_CODE` 保留实例和 sidecar。开发热更新从外部结束控制面进程，独立 sidecar 留下并由下次启动健康检查复用。
 - sidecar 重启可以恢复新的 binding；已经断开的流式响应不承诺从中间续接，必须记录 `gateway_restarted`/`gateway_unavailable` 诊断。
 - R Codex 重启后先 reconcile CLI PID 和启动身份，再按实例数据库状态重新注册仍然有效的 binding；无法确认的实例保持 `orphaned`/`degraded`，不得自动重绑到最新配置。
 - 终态实例（`exited`/`failed`）不得继续拥有 Gateway binding。`reconcile_codex_instance` 是这一合同的后端收口：每次核验进入终态都会幂等注销 binding、撤销 SQLite 记录并尝试 `stop_if_unused()`；并发回收时另一实例仍在使用 Gateway 返回的 `configuration_in_use` 只表示 Gateway 应继续服务，不算清理失败。这样自然退出、崩溃回执和显式停止都经过同一条回收路径，前端轮询不再承担生命周期写入。

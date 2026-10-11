@@ -23,7 +23,7 @@ pub use connection::Database;
 use connection::{configure_connection, prune_expired, DATABASE_FILENAME};
 #[cfg(test)]
 #[allow(unused_imports)]
-use migrate_v7_plus::migrate_to_v20;
+use migrate_v7_plus::{migrate_to_v20, migrate_to_v23};
 #[cfg(test)]
 #[allow(unused_imports)]
 use rusqlite::{Connection, Transaction, TransactionBehavior};

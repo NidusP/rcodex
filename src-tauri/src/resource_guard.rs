@@ -817,7 +817,7 @@ mod tests {
                     id, name, base_url, secret_ref, is_default,
                     transport_mode, configured, created_at, updated_at
                  ) VALUES ('provider-a', 'A', 'https://example.com/v1',
-                           'provider:a', 1, 'direct_responses', 1, 1, 1)",
+                           'provider:a', 1, 'gateway_passthrough', 1, 1, 1)",
                 [],
             )
             .unwrap();
@@ -828,7 +828,7 @@ mod tests {
                     transport_mode, state, created_at
                  ) VALUES ('v4-provider:provider-a:revision:1', 'provider-a',
                            'provider:a:revision:1', 'https://example.com/v1',
-                           'responses', 'direct_responses', 'active', 1)",
+                           'responses', 'gateway_passthrough', 'active', 1)",
                 [],
             )
             .unwrap();

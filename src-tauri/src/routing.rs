@@ -118,6 +118,7 @@ impl CompactionSupport {
 ///
 /// Known Grok / DeepSeek / Claude upstream ids are excluded even when a public
 /// slug happens to contain `gpt`. Relay `gpt-*` names stay fail-closed.
+/// Gateway also uses this to skip relay-compat rewrites for GPT-family routes.
 pub fn looks_like_gpt_model_id(public_model_id: &str, upstream_model_id: &str) -> bool {
     if known_non_gpt_family(upstream_model_id) {
         return false;

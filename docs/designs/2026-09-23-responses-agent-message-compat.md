@@ -1,6 +1,6 @@
 # 第三方 Responses：Codex `agent_message` 兼容（2026-09-23）
 
-> 状态：**方案 A 已实现，隔离 App 实机通过（2026-09-23）。** Chat Completions 仍未处理。
+> 状态：**方案 A 已实现，隔离 App 实机通过（2026-09-23）。** 2026-10-11 起只对非 GPT 族做出站改写；GPT 族 Responses 原样转发 `agent_message`。Chat Completions 仍未处理。
 > 证据：隔离实例 `45b5727c-d303-4d16-8588-d5f5bf27bb68` 子任务 502；9 月 21 日请求档案同形状；OpenCodex issue 3911；Cockpit cliproxy Responses 透传路径。
 > 配套：[混合路由详细设计](../codex-hybrid-routing-design.md) Gateway 转发、[Grok 会话错误待办](2026-09-19-grok-session-error-todos.md)。
 
@@ -113,3 +113,7 @@ OpenCodex issue 3911 证明：只把 `agent_message` 换成等价 `message`，�
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test managed_gateway::tests::routed_agent_message -- --nocapture` 通过（4 项）；`cargo test managed_gateway::tests::compaction_request_keeps_its_existing_fail_closed_path -- --nocapture` 通过。集成用例确认第三方 mock 收到的是 `message/user`、不含 agent 私有字段、模型仍改写为绑定 upstream。
 - 实机：commander 重启隔离 App 后，本会话并行派出 probe_docs 与 probe_code（fork_turns=none，只读）。两个子任务都返回最终回答，父会话接住回写。没有子任务首包 502 连打，也没有父会话因 agent_message 一起失败。
 - 回滚：移除 API Provider 分支中的 `normalize_routed_agent_messages` 调用及对应辅助函数/测试，恢复原有普通 Responses 透传。
+
+## 2026-10-11：GPT 族不再改写
+
+产品确认：兼容处理只服务非 GPT 模型。GPT 族（`looks_like_gpt_model_id`，例如 `gpt-*`、`o3`）保留 Codex Responses 请求体，包括 `agent_message`、`metadata` 和可选工具。上游是 Grok / DeepSeek / Claude 时仍走方案 A，即使公开名带 `gpt`。认证注入、公共模型 ID 替换和压缩预检不变。

@@ -624,7 +624,7 @@ fn migration_backfills_multiple_v4_providers_without_reading_secrets() {
                     CREATE UNIQUE INDEX one_default_provider
                         ON api_key_providers(is_default) WHERE is_default = 1;
                     INSERT INTO api_key_providers VALUES
-                        ('a', 'Provider A', 'https://a.example/v1', 'provider:a', 1, 'direct_responses', 1, 10),
+                        ('a', 'Provider A', 'https://a.example/v1', 'provider:a', 1, 'gateway_passthrough', 1, 10),
                         ('b', 'Provider B', 'https://b.example/v1', 'provider:b', 0, 'gateway_chat_completions', 0, 20);
                     PRAGMA user_version = 4;",
                 )
@@ -1024,4 +1024,51 @@ fn open_path_ignores_legacy_app_data_and_runtime_sockets() {
     }
     let _ = std::fs::remove_file(socket_path);
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn migration_v23_rewrites_direct_rows() {
+    let connection = Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE launch_presets (gateway_policy TEXT);
+             CREATE TABLE api_key_providers (transport_mode TEXT);
+             CREATE TABLE api_key_provider_revisions (transport_mode TEXT);
+             INSERT INTO launch_presets VALUES ('direct'), ('gateway_passthrough');
+             INSERT INTO api_key_providers VALUES ('direct_responses'), ('gateway_chat_completions');
+             INSERT INTO api_key_provider_revisions VALUES ('direct_responses');",
+        )
+        .unwrap();
+    let transaction =
+        Transaction::new_unchecked(&connection, TransactionBehavior::Immediate).unwrap();
+    migrate_to_v23(&transaction).unwrap();
+    transaction.commit().unwrap();
+    let policies: Vec<String> = connection
+        .prepare("SELECT gateway_policy FROM launch_presets ORDER BY rowid")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        policies,
+        vec![
+            "gateway_passthrough".to_string(),
+            "gateway_passthrough".to_string()
+        ]
+    );
+    let modes: Vec<String> = connection
+        .prepare("SELECT transport_mode FROM api_key_providers ORDER BY rowid")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        modes,
+        vec![
+            "gateway_passthrough".to_string(),
+            "gateway_chat_completions".to_string()
+        ]
+    );
 }

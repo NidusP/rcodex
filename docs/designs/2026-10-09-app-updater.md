@@ -36,13 +36,15 @@
 
 ## 发版
 
-打 tag `v0.1.x` 触发 `.github/workflows/release.yml`。macOS runner 走 `pnpm run tauri --bundles app`（先编 sidecar）。`tauri-action` 建 draft Release，带 `.app.tar.gz`、`.sig` 和 updater 清单。人工确认附件后再发布。
+打 tag `v0.1.x` 触发 `.github/workflows/release.yml`。同一次草稿 Release 打三份包：macOS Apple Silicon 与 Intel 各一份 `.dmg` 和 `.app.tar.gz`，Windows x64 一份 NSIS 安装包。macOS Intel 包在 Apple Silicon 运行器上交叉编译。在线更新仍使用各平台的安装包签名，DMG 只供手动下载。不做 Apple 公证，也不做 Windows Authenticode。人工确认附件后再发布。
 
 pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action-setup` 不要再写 `version`；`10` 和 `pnpm@10.13.1` 会被当成两个版本，作业在安装依赖前失败。
 
 2026-10-10：`v0.1.0` 第一次推送因此失败，未产生 Release。去掉 workflow 里的 pnpm `version` 后，标签指向修复提交并重新触发构建。
 第二次构建进入 Tauri 后失败：干净检出没有 `src-tauri/binaries/codex-launcher-<triple>`，而 `build.rs` 在编译附带程序时就检查该路径。脚本改为先放占位文件，编完再覆盖为真正的二进制。
 第三次构建在 `tauri build` 入口失败：Rust 的 `tauri` 2.12、`tauri-plugin-opener` 2.7 与 npm 的 `@tauri-apps/api` 2.11、`@tauri-apps/plugin-opener` 2.5 小版本不一致。CI 会把这种不一致当成错误。npm 包需要和对应 crate 保持同一个 major.minor。
+
+2026-10-11：v0.1.1 用来验证已安装的 0.1.0 能否在线更新。版本写在 package.json、src-tauri/Cargo.toml、src-tauri/tauri.conf.json 和 website/package.json。打 tag 后 CI 仍出草稿 Release；必须人工发布，0.1.0 才会从 /releases/latest 看到 0.1.1。私钥不变。客户端先请求 latest-darwin.json（当前没有这份附件），再回落到 latest.json。
 
 ## 验收
 

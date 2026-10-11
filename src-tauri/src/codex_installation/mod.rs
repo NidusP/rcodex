@@ -1,17 +1,15 @@
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
-const CODEX_APP_BUNDLE_NAMES: [&str; 2] = ["Codex.app", "ChatGPT.app"];
-
-#[cfg(target_os = "macos")]
-const BUNDLED_CODEX_CLI_RELATIVE_PATHS: [&str; 2] = [
-    "Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
-    "Contents/Resources/codex",
-];
+mod macos;
+#[cfg(any(test, target_os = "windows"))]
+pub mod windows;
+#[cfg(any(test, target_os = "windows"))]
+pub mod windows_store;
 
 /// Resolve the CLI runtime needed for the managed configuration and launch
 /// contract. A desktop installation may embed that runtime instead of putting
-/// `codex` on the user's shell PATH.
+///  on the user's shell PATH.
 pub fn resolve_codex_executable() -> Result<PathBuf, String> {
     if let Some(path) = std::env::var_os("CODEX_BIN").map(PathBuf::from) {
         if !is_executable_file(&path) {
@@ -27,9 +25,11 @@ pub fn resolve_codex_executable() -> Result<PathBuf, String> {
 
     if let Some(path_value) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&path_value) {
-            let path = directory.join("codex");
-            if is_executable_file(&path) {
-                return path.canonicalize().map_err(|error| error.to_string());
+            for name in path_cli_file_names() {
+                let path = directory.join(name);
+                if is_executable_file(&path) {
+                    return path.canonicalize().map_err(|error| error.to_string());
+                }
             }
         }
     }
@@ -45,11 +45,26 @@ pub fn resolve_codex_executable() -> Result<PathBuf, String> {
         }
     }
 
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        for path in [
-            home.join(".local/bin/codex"),
-            home.join(".npm-global/bin/codex"),
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+            for candidate in windows::program_cli_candidates(&local_app_data.to_string_lossy()) {
+                let path = PathBuf::from(&candidate);
+                if is_executable_file(&path) {
+                    return path.canonicalize().map_err(|error| error.to_string());
+                }
+            }
+        }
+    }
+
+    if let Some(home) = crate::support::user_home() {
+        for relative in [
+            ".local/bin/codex",
+            ".local/bin/codex.exe",
+            ".npm-global/bin/codex",
+            ".npm-global/bin/codex.exe",
         ] {
+            let path = home.join(relative);
             if is_executable_file(&path) {
                 return path.canonicalize().map_err(|error| error.to_string());
             }
@@ -62,20 +77,15 @@ pub fn resolve_codex_executable() -> Result<PathBuf, String> {
     )
 }
 
+fn path_cli_file_names() -> &'static [&'static str] {
+    &["codex", "codex.exe"]
+}
+
 /// Standard macOS install locations for the desktop application. Both current
 /// Codex branding and the legacy ChatGPT bundle name remain supported.
 #[cfg(target_os = "macos")]
 pub fn codex_app_bundle_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    for root in app_roots() {
-        for name in CODEX_APP_BUNDLE_NAMES {
-            let candidate = root.join(name);
-            if !candidates.contains(&candidate) {
-                candidates.push(candidate);
-            }
-        }
-    }
-    candidates
+    macos::codex_app_bundle_candidates()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -84,23 +94,8 @@ pub fn codex_app_bundle_candidates() -> Vec<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-fn app_roots() -> Vec<PathBuf> {
-    let mut roots = vec![PathBuf::from("/Applications")];
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        let user_applications = home.join("Applications");
-        if !roots.contains(&user_applications) {
-            roots.push(user_applications);
-        }
-    }
-    roots
-}
-
-#[cfg(target_os = "macos")]
 pub fn bundled_codex_cli_candidates(bundle: &Path) -> Vec<PathBuf> {
-    BUNDLED_CODEX_CLI_RELATIVE_PATHS
-        .iter()
-        .map(|relative| bundle.join(relative))
-        .collect()
+    macos::bundled_codex_cli_candidates(bundle)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -108,8 +103,8 @@ pub fn bundled_codex_cli_candidates(_bundle: &Path) -> Vec<PathBuf> {
     Vec::new()
 }
 
-/// The desktop bundle is the outermost `.app` ancestor. New desktop builds
-/// place the CLI in an inner `CodexCLI.app`, which is not the application that
+/// The desktop bundle is the outermost  ancestor. New desktop builds
+/// place the CLI in an inner , which is not the application that
 /// must receive the isolated Electron environment.
 pub fn codex_app_bundle_from_cli(codex: &Path) -> Result<PathBuf, String> {
     codex
@@ -121,25 +116,19 @@ pub fn codex_app_bundle_from_cli(codex: &Path) -> Result<PathBuf, String> {
 }
 
 pub fn resolve_codex_app_executable(codex: &Path) -> Result<PathBuf, String> {
-    let bundle = codex_app_bundle_from_cli(codex)?;
-    let bundle_name = bundle
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "无法识别 Codex Desktop 应用名。".to_string())?;
-    let mut names = vec![
-        bundle_name.to_string(),
-        "Codex".to_string(),
-        "ChatGPT".to_string(),
-    ];
-    names.dedup();
-    for name in names {
-        let executable = bundle.join("Contents").join("MacOS").join(name);
-        if is_executable_file(&executable) {
-            return Ok(executable);
-        }
+    #[cfg(target_os = "macos")]
+    {
+        return macos::resolve_gui_executable(codex);
     }
-    Err("未找到与 Codex CLI 匹配的桌面 App 可执行文件。".to_string())
+    #[cfg(target_os = "windows")]
+    {
+        return windows::resolve_gui_executable(codex);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = codex;
+        Err("当前平台尚不支持受管理 Codex Desktop。".to_string())
+    }
 }
 
 pub fn is_executable_file(path: &Path) -> bool {
@@ -189,5 +178,10 @@ mod tests {
                 bundle.join("Contents/Resources/codex"),
             ]
         );
+    }
+
+    #[test]
+    fn path_search_tries_codex_exe_as_well_as_codex() {
+        assert_eq!(path_cli_file_names(), &["codex", "codex.exe"]);
     }
 }

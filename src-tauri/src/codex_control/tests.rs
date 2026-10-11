@@ -33,7 +33,7 @@ fn seeded_store() -> (CodexControlStore, PathBuf) {
                     id, name, base_url, secret_ref, is_default,
                     transport_mode, configured, created_at, updated_at
                  ) VALUES ('provider-a','Provider A','https://example.test/v1',
-                           'provider:a',1,'direct_responses',1,1,1)",
+                           'provider:a',1,'gateway_passthrough',1,1,1)",
                 [],
             )
             .unwrap();
@@ -44,7 +44,7 @@ fn seeded_store() -> (CodexControlStore, PathBuf) {
                     transport_mode, state, created_at
                  ) VALUES ('revision-a','provider-a','provider:a',
                            'https://example.test/v1','responses',
-                           'direct_responses','active',1)",
+                           'gateway_passthrough','active',1)",
                 [],
             )
             .unwrap();

@@ -375,39 +375,8 @@ impl ManagedLaunchStore {
         transaction
             .execute("UPDATE launch_presets SET is_preferred=0", [])
             .map_err(|error| format!("preferred_preset_update_failed:{error}"))?;
-        let gateway_policy = if let Some(mode) = input.transport_mode.as_deref() {
-            match mode {
-                "direct_responses" => "direct",
-                "gateway_passthrough" => "gateway_passthrough",
-                "gateway_chat_completions" => "gateway_chat_completions",
-                _ => return Err("invalid_gateway_policy".to_string()),
-            }
-        } else {
-            let direct_single_provider =
-                if provider_ids.len() == 1 && auto_review_public_model_id.is_none() {
-                    transaction
-                        .query_row(
-                            "SELECT revision.transport_mode
-                     FROM api_key_providers provider
-                     JOIN api_key_provider_revisions revision
-                       ON revision.id=provider.current_revision_id
-                     WHERE provider.id=?1 AND revision.state='active'",
-                            [provider_ids[0].as_str()],
-                            |row| row.get::<_, String>(0),
-                        )
-                        .optional()
-                        .map_err(|error| format!("managed_provider_transport_read_failed:{error}"))?
-                        .as_deref()
-                        == Some("direct_responses")
-                } else {
-                    false
-                };
-            if direct_single_provider {
-                "direct"
-            } else {
-                "gateway_passthrough"
-            }
-        };
+        let _ = input.transport_mode.as_deref();
+        let gateway_policy = "gateway_passthrough";
         let (credential_kind, projected_provider, projected_account, gateway_policy) =
             if input.models.is_empty()
                 && input.official_account_id.is_none()

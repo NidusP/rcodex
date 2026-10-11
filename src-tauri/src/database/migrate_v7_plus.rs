@@ -1,4 +1,4 @@
-//! v7 到 v22 的增量迁移。
+//! v7 到 v23 的增量迁移。
 //!
 //! 不处理 v5/v6 重建，不打开连接。
 //! 由 `migrate` 按版本号调用。
@@ -390,6 +390,48 @@ pub(super) fn migrate_to_v22(
                 [],
             )
             .map_err(|error| format!("无法标记缺少凭据的 Provider revision：{error}"))?;
+    }
+    Ok(())
+}
+
+pub(super) fn migrate_to_v23(transaction: &Transaction<'_>) -> Result<(), String> {
+    // DirectResponses is retired. Keep the columns and CHECK tokens so this
+    // is a data rewrite, not a table rebuild. Launch always uses Gateway;
+    // Chat vs Responses stays on the provider revision wire_api.
+    for (table, column, from, to) in [
+        (
+            "launch_presets",
+            "gateway_policy",
+            "direct",
+            "gateway_passthrough",
+        ),
+        (
+            "api_key_providers",
+            "transport_mode",
+            "direct_responses",
+            "gateway_passthrough",
+        ),
+        (
+            "api_key_provider_revisions",
+            "transport_mode",
+            "direct_responses",
+            "gateway_passthrough",
+        ),
+    ] {
+        let table_exists: bool = transaction
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("无法检查 {table} 是否存在：{error}"))?;
+        if !table_exists {
+            continue;
+        }
+        let sql = format!("UPDATE {table} SET {column}=?1 WHERE {column}=?2");
+        transaction
+            .execute(&sql, [to, from])
+            .map_err(|error| format!("无法迁移 {table}.{column}：{error}"))?;
     }
     Ok(())
 }

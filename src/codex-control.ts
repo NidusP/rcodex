@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type TransportMode = "direct_responses" | "gateway_passthrough" | "gateway_chat_completions";
+export type TransportMode = "gateway_passthrough" | "gateway_chat_completions";
 export type CodexAuthSummary = { state: "configured" | "not_detected" | "unreadable" | string; method?: string | null; sourcePath?: string | null; updatedAt?: number | null };
 export type CodexInstallationStatus = { installed: boolean; executablePath?: string | null; version?: string | null; executableUpdatedAt?: number | null; appPath?: string | null; appVersion?: string | null; appUpdatedAt?: number | null; auth: CodexAuthSummary; error?: string | null };
 export type CodexUpdateStatus = { state: "up_to_date" | "update_available" | "unavailable" | string; currentVersion?: string | null; latestVersion?: string | null; publishedAt?: string | null; releaseUrl?: string | null; notes?: string | null; checkedAt: number; error?: string | null };
@@ -191,7 +191,7 @@ type RawSnapshot = {
 };
 
 const activeStates = new Set<InstanceState>(["launching", "running", "stopping", "orphaned", "degraded"]);
-const transportModes = new Set<TransportMode>(["direct_responses", "gateway_passthrough", "gateway_chat_completions"]);
+const transportModes = new Set<TransportMode>(["gateway_passthrough", "gateway_chat_completions"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -212,7 +212,7 @@ function normalizeAuthState(value: unknown): OfficialAuthState {
 }
 
 function normalizeTransportMode(value: unknown): TransportMode | null {
-  if (value === "direct") return "direct_responses";
+  if (value === "direct" || value === "direct_responses") return "gateway_passthrough";
   return typeof value === "string" && transportModes.has(value as TransportMode) ? value as TransportMode : null;
 }
 
@@ -508,12 +508,8 @@ export function credentialKindLabel(kind: CredentialKind, officialLabel = "å®˜æ–
   return "API Key";
 }
 
-export function isDirectTransport(mode: string | null | undefined) {
-  return mode === "direct_responses";
-}
-
 export function isGatewayTransport(mode: string | null | undefined) {
-  return mode === "gateway_passthrough" || mode === "gateway_chat_completions";
+  return mode === "gateway_passthrough" || mode === "gateway_chat_completions" || mode === "direct_responses" || mode === "direct";
 }
 
 export function usesOfficialModel(preset: { credentialKind: CredentialKind; models: readonly { sourceKind: string }[] }) {

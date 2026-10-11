@@ -303,7 +303,10 @@ pub(super) fn codex_visible_error_message(
         "upstream_error" => "上游返回了失败响应。",
         _ => "请求失败。",
     };
-    let loopback_note = "Codex 打印的 url 是本机 Gateway（127.0.0.1:43123），不是上游。";
+    let loopback_note = format!(
+        "Codex 打印的 url 是本机 Gateway（127.0.0.1:{}），不是上游。",
+        super::gateway_listen_port()
+    );
     match (layer, url, detail.filter(|value| !value.is_empty())) {
         ("upstream", Some(url), Some(detail)) => {
             format!("R Codex Gateway 已转发到 {url}，上游失败：{detail}。{loopback_note}")

@@ -22,7 +22,6 @@ import {
   successRate,
 } from "../../app-model";
 import {
-  isDirectTransport,
   runningProviderLockReason,
 } from "../../codex-control";
 import {
@@ -208,9 +207,7 @@ function UsagePanel({
       </div>
       <div className="usage-grid">
         {(() => {
-          const observed =
-            !isDirectTransport(provider.transportMode) &&
-            summary.lastRequestAt !== null;
+          const observed = summary.lastRequestAt !== null;
           return (
             <>
               <UsagePeriodCard
@@ -557,16 +554,13 @@ export function ProviderList({
                         {usageObservationLabel(provider.transportMode, usage)}
                       </strong>
                       <small>
-                        {isDirectTransport(provider.transportMode)
-                          ? "直连不经过 Gateway"
-                          : "Gateway 观测"}
+                        Gateway 观测
                       </small>
                     </div>
                     <div>
                       <span>今日 Token</span>
                       <strong>
-                        {isDirectTransport(provider.transportMode) ||
-                        usage.lastRequestAt === null
+                        {usage.lastRequestAt === null
                           ? "—"
                           : tokenCount(tokenTotal(usage.today))}
                       </strong>

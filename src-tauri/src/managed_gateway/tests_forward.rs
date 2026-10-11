@@ -214,7 +214,7 @@ async fn provider_plain_text_502_is_returned_with_upstream_detail() {
     assert_eq!(body["error"]["code"], "upstream_error");
     assert!(message.contains("Unknown error"));
     assert!(message.contains(&format!("http://127.0.0.1:{port}/v1/responses")));
-    assert!(message.contains("127.0.0.1:43123"));
+    assert!(message.contains(&format!("127.0.0.1:{}", gateway_listen_port())));
     assert_eq!(
         body["error"]["upstream_url"],
         format!("http://127.0.0.1:{port}/v1/responses")
@@ -796,6 +796,107 @@ async fn routed_agent_message_is_normalized_before_provider_forward() {
         .get("internal_chat_message_metadata_passthrough")
         .is_none());
     assert_eq!(item["content"][1]["text"], "Inspect the target file.");
+}
+
+#[test]
+fn relay_compat_applies_only_to_non_gpt_family() {
+    let mut route = route_set("provider-a".to_string(), "revision-a".to_string())
+        .routes
+        .remove(0);
+    assert!(needs_relay_compat(&route));
+
+    route.public_model_id = "gpt-5.4".to_string();
+    route.upstream_model_id = "gpt-5.4".to_string();
+    assert!(!needs_relay_compat(&route));
+
+    route.public_model_id = "hashed-public".to_string();
+    route.upstream_model_id = "o3-mini".to_string();
+    assert!(!needs_relay_compat(&route));
+
+    route.public_model_id = "gpt-5.6-luna".to_string();
+    route.upstream_model_id = "grok-4.6".to_string();
+    assert!(needs_relay_compat(&route));
+}
+
+#[tokio::test]
+async fn gpt_family_responses_are_forwarded_without_relay_compat() {
+    let observed = Arc::new(StdMutex::new(None));
+    let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let app = Router::new()
+        .route("/v1/responses", post(mock_upstream))
+        .with_state(observed.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let key = InstanceGatewayKey::for_test("gpt-passthrough-key");
+    let mut upstream = fixture_upstream(
+        &format!("http://127.0.0.1:{port}"),
+        WireApi::Responses,
+        test_timeouts(),
+    )
+    .unwrap();
+    upstream.provider_id = "provider-a".to_string();
+    upstream.provider_revision_id = "revision-a".to_string();
+    let mut routes = route_set("provider-a".to_string(), "revision-a".to_string());
+    routes.routes[0].public_model_id = "gpt-managed".to_string();
+    routes.routes[0].upstream_model_id = "gpt-5.4".to_string();
+    let state = bind_channel_state(
+        "gpt-passthrough-instance",
+        &key,
+        routes,
+        upstream,
+        CompactMode::LocalClient,
+        CompactionSupport::Unsupported,
+    )
+    .await;
+
+    let response = managed_gateway_router(state)
+        .oneshot(
+            axum::http::Request::post("/v1/responses")
+                .header(CONTENT_TYPE, "application/json")
+                .header(INSTANCE_GATEWAY_HEADER, key.expose())
+                .body(Body::from(
+                    json!({
+                        "model": "gpt-managed",
+                        "metadata": {"session_id": "keep-me"},
+                        "tools": [
+                            {"type": "web_search"},
+                            {"type": "function", "name": "local_tool"}
+                        ],
+                        "input": [{
+                            "type": "agent_message",
+                            "author": "/root/child",
+                            "recipient": "/root",
+                            "internal_chat_message_metadata_passthrough": {"turn_id": "private"},
+                            "content": [{
+                                "type": "encrypted_content",
+                                "encrypted_content": "Inspect the target file."
+                            }]
+                        }]
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let (_, request) = observed.lock().unwrap().take().unwrap();
+    assert_eq!(request["model"], "gpt-5.4");
+    assert_eq!(request["metadata"]["session_id"], "keep-me");
+    assert_eq!(request["tools"].as_array().unwrap().len(), 2);
+    assert_eq!(request["tools"][0]["type"], "web_search");
+    let item = &request["input"][0];
+    assert_eq!(item["type"], "agent_message");
+    assert_eq!(item["author"], "/root/child");
+    assert_eq!(item["recipient"], "/root");
+    assert_eq!(
+        item["internal_chat_message_metadata_passthrough"]["turn_id"],
+        "private"
+    );
 }
 
 #[test]

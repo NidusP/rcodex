@@ -9,7 +9,7 @@
 - 控制面 `setup` 调用 `ensure_serving()`，先在 `127.0.0.1:43123` 等待。端口被失联 sidecar 占用时不卡住窗口。
 - 窗口使用系统标题栏，不再自绘标题栏。没有为请求数另开轮询。失联时，页面里的「R Codex」右侧显示「重启」，活动实例不禁用它。第一次读到失联会提示一次。
 - `launch_unconfirmed` 不调用 `cleanup_managed_instance`。界面会刷新，让仍处于 `launching` 的实例进入现有每 2 秒核对；回执到达后改成 `running`，不补绑。
-- 关窗口只隐藏控制面。菜单栏「退出」调用 `exit(0)`，会停止 `launching`、`running`、`stopping`、`orphaned`、`degraded` 实例，再 `stop_if_unused()`。停止失败则阻止退出，并通过 `app-exit-blocked` 说明原因。
+- 关窗口只隐藏控制面。菜单栏「退出」、程序坞「退出」和 Cmd+Q 都走 `exit(0)`，会停止 `launching`、`running`、`stopping`、`orphaned`、`degraded` 实例，再 `stop_if_unused()`。停止失败则阻止退出，并通过 `app-exit-blocked` 说明原因。
 - 只有 Tauri 的重启退出码 `RESTART_EXIT_CODE` 保留实例和 sidecar。开发热更新是从外部结束控制面进程，不会走到这条退出回调，sidecar 因脱离进程会话而留下。
 - 不迁移三枚旧配置，不改阻塞 Apple Event，不做发现进程还在就重新绑定的轮询。
 
@@ -144,7 +144,7 @@ Gateway 处于服务中时，按一个短间隔读取 `gateway_status`，用 `in
 
 1. 标题栏去掉 Gateway 状态点、空闲和转发文案。失联时保留「重启」。状态命令仍给诊断和这个按钮使用，不为请求数轮询。
 2. 控制面 `setup` 完成后调用 `ensure_serving()`。失败时应用仍打开，并给出一次失败提示，不把窗口卡住。
-3. 菜单栏「退出」和其他非重启退出：逐个停止活动隔离实例，再 `stop_if_unused()`。停止失败则仍阻止退出并说明原因。`exit(0)` 也算真正退出，不能因为带了退出码就跳过。
+3. 菜单栏「退出」、程序坞「退出」、Cmd+Q 和其他非重启退出：逐个停止活动隔离实例，再 `stop_if_unused()`。停止失败则仍阻止退出并说明原因。`exit(0)` 也算真正退出，不能因为带了退出码就跳过。
 4. 只有 Tauri `RESTART_EXIT_CODE` 直接返回。开发热更新从外部结束控制面进程，不靠这个分支。
 5. `launch_unconfirmed` 只报告「终端还没确认」，不调用 `cleanup_managed_instance`。用户之后点「停止实例」，或退出应用，才拆绑定。
 6. 关窗口仍只隐藏，不当成退出。macOS 停靠栏图标可以消失，菜单栏入口留下。

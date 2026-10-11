@@ -94,12 +94,8 @@ justify-self: start; width: fit-content;
 display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
 }
 
-.channel-rows {
-display: grid; gap: 8px;
-}
-
 .dashboard-home .channel-rows {
-flex: 1 1 auto;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
@@ -110,23 +106,32 @@ flex: 1 1 auto;
 
 .dashboard-home .channel-rows:hover,
 .dashboard-home .channel-rows:focus-within {
-scrollbar-color: rgba(99, 122, 111, .54) transparent;
+  scrollbar-color: rgba(99, 122, 111, .54) transparent;
 }
 
 .dashboard-home .channel-rows::-webkit-scrollbar {
-width: 10px; height: 10px;
+  width: 10px;
+  height: 10px;
 }
 
 .dashboard-home .channel-rows::-webkit-scrollbar-thumb {
-border: 3px solid transparent;
+  border: 3px solid transparent;
   border-radius: 999px;
   background: rgba(99, 122, 111, .34);
   background-clip: content-box;
 }
 
+
+
 .channel-row {
 position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 8px; overflow: hidden; padding: 12px 44px 12px 12px; border: 1px solid var(--mantine-color-default-border); border-radius: 8px; background: var(--mantine-color-default); transition: border-color .2s ease, box-shadow .2s ease;
 }
+
+/* .channel-row 外下边距，除去最后一个元素 */
+.channel-row:not(:last-child) {
+  margin-bottom: 8px;
+}
+
 
 .channel-row:hover {
 border-color: var(--mantine-primary-color-light-hover);

@@ -112,9 +112,6 @@ pub fn desired_transport(current: TransportMode, wire_api: Option<&str>) -> Opti
     if current == desired {
         return None;
     }
-    if current == TransportMode::DirectResponses && desired == TransportMode::GatewayPassthrough {
-        return None;
-    }
     Some(desired)
 }
 

@@ -164,13 +164,13 @@ pub(super) fn seed_direct_provider(database: &Database, id: &str, revision: &str
     let connection = connection.lock().unwrap();
     connection
         .execute(
-            "UPDATE api_key_providers SET transport_mode='direct_responses' WHERE id=?1",
+            "UPDATE api_key_providers SET transport_mode='gateway_passthrough' WHERE id=?1",
             [id],
         )
         .unwrap();
     connection
         .execute(
-            "UPDATE api_key_provider_revisions SET transport_mode='direct_responses' WHERE id=?1",
+            "UPDATE api_key_provider_revisions SET transport_mode='gateway_passthrough' WHERE id=?1",
             [revision],
         )
         .unwrap();

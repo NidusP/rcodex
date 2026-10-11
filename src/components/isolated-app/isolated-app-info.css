@@ -35,32 +35,6 @@ grid-template-columns: 1fr;
 width: 30px; height: 30px; padding: 6px;
 }
 
-.dashboard-home .channel-rows {
-flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  align-content: start;
-  scrollbar-color: transparent transparent;
-  scrollbar-width: thin;
-}
-
-.dashboard-home .channel-rows:hover,
-.dashboard-home .channel-rows:focus-within {
-scrollbar-color: rgba(99, 122, 111, .54) transparent;
-}
-
-.dashboard-home .channel-rows::-webkit-scrollbar {
-width: 10px; height: 10px;
-}
-
-.dashboard-home .channel-rows::-webkit-scrollbar-thumb {
-border: 3px solid transparent;
-  border-radius: 999px;
-  background: rgba(99, 122, 111, .34);
-  background-clip: content-box;
-}
-
 .dashboard-home {
 display: flex;
   flex: 1 1 auto;
@@ -89,11 +63,4 @@ display: grid;
   box-shadow: none;
 }
 
-.dashboard-home .runtime-target-route {
-display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  border: 0;
-  background: transparent;
-}
+

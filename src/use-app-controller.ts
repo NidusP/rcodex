@@ -401,6 +401,7 @@ export function useAppController() {
   }, [activeInstanceIds]);
   useEffect(() => {
     document.documentElement.dataset.chrome = desktopChrome();
+    document.documentElement.dataset.theme = resolvedTheme;
     document.documentElement.style.colorScheme = resolvedTheme;
     try {
       window.localStorage.setItem(themeStorageKey, themeMode);

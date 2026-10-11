@@ -24,7 +24,12 @@ pub fn managed_app_compatibility_enabled() -> bool {
         env::var("THREER_CODEX_DISABLE_MANAGED_APP").as_deref() != Ok("1")
             && managed_app_runtime_probe()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        env::var("THREER_CODEX_DISABLE_MANAGED_APP").as_deref() != Ok("1")
+            && managed_app_runtime_probe()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         false
     }
@@ -37,19 +42,49 @@ fn managed_app_runtime_probe() -> bool {
     let Some(parent) = executable.parent() else {
         return false;
     };
-    if !parent.join("codex-launcher").is_file() || !parent.join("codex-gateway").is_file() {
+    let windows = cfg!(target_os = "windows");
+    let launcher = if windows {
+        "codex-launcher.exe"
+    } else {
+        "codex-launcher"
+    };
+    let gateway = if windows {
+        "codex-gateway.exe"
+    } else {
+        "codex-gateway"
+    };
+    if !parent.join(launcher).is_file() || !parent.join(gateway).is_file() {
         return false;
     }
-    // The launcher resolves the CLI and derives its sibling desktop binary;
-    // the probe only needs to establish that one supported desktop bundle is
-    // installed. Avoid depending on PATH or a user-provided CODEX_BIN here so
-    // a valid packaged install is not hidden by an unrelated shell override.
-    [
-        "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
-        "/Applications/Codex.app/Contents/MacOS/Codex",
-    ]
-    .into_iter()
-    .any(|path| std::path::Path::new(path).is_file())
+    #[cfg(target_os = "macos")]
+    {
+        // The launcher resolves the CLI and derives its sibling desktop binary;
+        // the probe only needs to establish that one supported desktop bundle is
+        // installed. Avoid depending on PATH or a user-provided CODEX_BIN here so
+        // a valid packaged install is not hidden by an unrelated shell override.
+        return [
+            "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+            "/Applications/Codex.app/Contents/MacOS/Codex",
+        ]
+        .into_iter()
+        .any(|path| std::path::Path::new(path).is_file());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // First Windows testers use an unpackaged ChatGPT.exe / Codex.exe.
+        // Store packages stay unavailable until package activation is recorded.
+        let Ok(cli) = crate::codex_installation::resolve_codex_executable() else {
+            return false;
+        };
+        let Ok(gui) = crate::codex_installation::resolve_codex_app_executable(&cli) else {
+            return false;
+        };
+        return !crate::codex_installation::windows::is_windowsapps_launch_path(&gui);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        false
+    }
 }
 
 pub(crate) fn sanitize_startup_log(value: &str) -> String {
@@ -104,15 +139,5 @@ pub(super) fn safe_resource_path_component(value: &str) -> bool {
 }
 
 pub(super) fn process_exists(pid: u32) -> bool {
-    #[cfg(unix)]
-    {
-        // SAFETY: signal 0 performs existence/permission checking only.
-        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
-        if result == 0 {
-            return true;
-        }
-        return std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH);
-    }
-    #[cfg(not(unix))]
-    true
+    crate::support::process_exists(pid)
 }

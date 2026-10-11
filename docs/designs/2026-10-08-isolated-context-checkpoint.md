@@ -8,7 +8,7 @@
 
 上下文变长时，Codex 会在本地做一次检查点：自己写一份交接摘要，再把更早的用户原话和这份摘要一起放进下一次请求。R Codex 收到的是合法的普通请求，里面没有远程压缩标记。Gateway 不会从这些文字里判断哪一句才是最新任务，也不会把偏到旧问题上的回答改回来。
 
-转发时会做的，只是让请求能被当前渠道接受：换成上游模型名、去掉中继不接受的字段、拿掉渠道不支持的工具，以及把 Codex 私有的协作消息改成公开格式。这些都不改变用户说了什么。
+转发时会做的，只是让请求能被当前渠道接受。所有路由都换成上游模型名。非 GPT 还会去掉中继不接受的字段、拿掉渠道不支持的工具，以及把 Codex 私有的协作消息改成公开格式。GPT 族按 Codex 发出的 Responses 原样转发请求体。这些都不改变用户说了什么。
 
 所以，压缩后续跑如果拿起更早的一条要求，而放下刚刚正在做的方案，这是 Codex 本地压缩的组包方式。不是 R Codex 换了渠道、改了模型，或漏掉了最新问题。R Codex 不对这种任务偏移做兜底修正。
 
@@ -18,9 +18,9 @@
 可以改的是协议形状，不是任务选择。`managed_gateway.rs` 在普通转发前已经做这些机械修正：
 
 - 把公共模型名换成该路由的 `upstream_model_id`。
-- 删掉 Responses 的 `metadata`。部分兼容中继会因此返回 400，而 Codex 不靠这个字段维持会话。
-- 渠道不支持工具或网页搜索时，去掉对应的 `tools`。
-- 普通第三方回合把 Codex 私有的 `agent_message` 收成公开的 user 消息，并丢掉 `internal_chat_message_metadata_passthrough`。读不懂就拒绝，不猜测。
+- 非 GPT 才删掉 Responses 的 `metadata`。部分兼容中继会因此返回 400，而 Codex 不靠这个字段维持会话。GPT 族保留该字段。
+- 非 GPT 且渠道不支持工具或网页搜索时，去掉对应的 `tools`。GPT 族保留 Codex 附带的工具。
+- 非 GPT 的普通第三方回合把 Codex 私有的 `agent_message` 收成公开的 user 消息，并丢掉 `internal_chat_message_metadata_passthrough`。读不懂就拒绝，不猜测。GPT 族保留 `agent_message`。
 - 非 NativeRemote 的普通回合把 R Codex 自己的 `3r-compaction-v1` 压缩项展开成助手文本。认不出的压缩信封直接拒绝。
 
 隔离实例的 `local_client` 不走 GatewaySummarizer。请求里若出现 `compaction_trigger`，预检返回 `unsupported_compaction`，不把触发项改成另一条压缩路径。摘要路径才会折叠 reasoning 密文；普通转发不折叠。

@@ -45,16 +45,6 @@ pub(super) fn validate_gateway_url(url: &Url) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn validate_direct_provider_url(url: &Url) -> Result<(), String> {
-    let valid = url.scheme() == "https"
-        || (url.scheme() == "http"
-            && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")));
-    if !valid || url.host_str().is_none() {
-        return Err("managed_direct_provider_url_invalid".to_string());
-    }
-    Ok(())
-}
-
 pub(super) fn validate_profile_name(value: &str) -> Result<(), String> {
     if value.is_empty()
         || value.len() > 96

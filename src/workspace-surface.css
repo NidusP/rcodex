@@ -90,10 +90,6 @@ margin: 0; color: var(--mantine-color-text); font-size: .96rem;
 margin: 0; color: #6f8378; font-size: .73rem; line-height: 1.55;
 }
 
-.runtime-target-route {
-display: grid; gap: 5px; min-width: 0; 
-}
-
 .runtime-target-route > span {
 color: var(--mantine-color-dimmed); font-size: .67rem;
 }
@@ -452,7 +448,7 @@ display: grid;
 }
 
 .dashboard-home .runtime-target-route {
-display: flex;
+  display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;

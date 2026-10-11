@@ -1,7 +1,12 @@
 {
   "name": "rcodex-website",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "author": {
+    "name": "populus",
+    "email": "30283065+NidusP@users.noreply.github.com",
+    "url": "https://github.com/NidusP"
+  },
   "type": "module",
   "scripts": {
     "dev": "astro dev",
@@ -18,5 +23,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.6",
     "typescript": "^5.8.3"
-  }
+  },
+  "description": "R Codex 官网：Codex 本机多渠道路由转发说明。",
+  "homepage": "https://github.com/NidusP/rcodex"
 }

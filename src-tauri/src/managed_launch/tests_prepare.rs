@@ -593,7 +593,7 @@ fn prepare_launch_uses_gateway_when_auto_review_is_enabled() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(gateway_policy, "direct");
+    assert_eq!(gateway_policy, "gateway_passthrough");
     drop(connection);
     assert_eq!(
         store.launch_transport(&saved.id).unwrap(),

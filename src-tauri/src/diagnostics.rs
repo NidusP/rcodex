@@ -733,8 +733,7 @@ impl DiagnosticsStore {
         let result = statement
             .query_map(params![provider_id, MAX_RECENT_EVENTS], |row| {
                 let transport_mode = match row.get::<_, String>(6)?.as_str() {
-                    "direct_responses" => TransportMode::DirectResponses,
-                    "gateway_passthrough" => TransportMode::GatewayPassthrough,
+                    "direct_responses" | "gateway_passthrough" => TransportMode::GatewayPassthrough,
                     "gateway_chat_completions" => TransportMode::GatewayChatCompletions,
                     _ => return Err(rusqlite::Error::InvalidQuery),
                 };
@@ -781,7 +780,6 @@ impl DiagnosticsStore {
 
 fn transport_mode_db(mode: TransportMode) -> &'static str {
     match mode {
-        TransportMode::DirectResponses => "direct_responses",
         TransportMode::GatewayPassthrough => "gateway_passthrough",
         TransportMode::GatewayChatCompletions => "gateway_chat_completions",
     }

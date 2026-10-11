@@ -361,14 +361,14 @@ fn updating_provider_persists_metadata_and_optionally_replaces_key() {
                 name: "Renamed".to_string(),
                 base_url: "https://example.com/v1/".to_string(),
                 api_key: None,
-                transport_mode: TransportMode::DirectResponses,
+                transport_mode: TransportMode::GatewayPassthrough,
                 gateway_timeout_settings: None,
             },
         )
         .unwrap();
     assert_eq!(updated.name, "Renamed");
     assert_eq!(updated.base_url, "https://example.com/v1");
-    assert_eq!(updated.transport_mode, TransportMode::DirectResponses);
+    assert_eq!(updated.transport_mode, TransportMode::GatewayPassthrough);
     let copied_revision = current_record(&store, &provider.id);
     assert_eq!(
         vault
@@ -386,7 +386,7 @@ fn updating_provider_persists_metadata_and_optionally_replaces_key() {
                 name: "Renamed".to_string(),
                 base_url: "https://example.com/v1".to_string(),
                 api_key: Some("sk-replaced".to_string()),
-                transport_mode: TransportMode::DirectResponses,
+                transport_mode: TransportMode::GatewayPassthrough,
                 gateway_timeout_settings: None,
             },
         )
@@ -615,7 +615,7 @@ fn updating_provider_restores_the_previous_key_when_sqlite_rejects_metadata() {
             name: "Renamed".to_string(),
             base_url: OPENAI_BASE_URL.to_string(),
             api_key: Some("sk-replaced".to_string()),
-            transport_mode: TransportMode::DirectResponses,
+            transport_mode: TransportMode::GatewayPassthrough,
             gateway_timeout_settings: None,
         },
     ) {
@@ -670,7 +670,7 @@ fn failed_secret_compensation_marks_the_operation_for_recovery() {
             name: "Renamed".to_string(),
             base_url: provider.base_url,
             api_key: Some("sk-replaced".to_string()),
-            transport_mode: TransportMode::DirectResponses,
+            transport_mode: TransportMode::GatewayPassthrough,
             gateway_timeout_settings: None,
         },
     ) {

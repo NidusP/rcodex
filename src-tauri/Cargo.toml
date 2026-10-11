@@ -1,8 +1,11 @@
 [package]
 name = "r-codex"
-version = "0.1.0"
-description = "R Codex local-first Codex account and gateway control plane"
-authors = ["R Codex contributors"]
+version = "0.1.1"
+description = "Local routing gateway that aggregates multiple model providers for Codex"
+keywords = ["codex", "gateway", "llm", "routing", "tauri"]
+repository = "https://github.com/NidusP/rcodex"
+homepage = "https://github.com/NidusP/rcodex"
+authors = ["populus <30283065+NidusP@users.noreply.github.com>"]
 edition = "2021"
 rust-version = "1.77"
 default-run = "r-codex"
@@ -41,3 +44,7 @@ tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder"] }

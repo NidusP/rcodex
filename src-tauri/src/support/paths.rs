@@ -5,19 +5,28 @@
 
 use std::path::{Path, PathBuf};
 
-/// 把 `~` 或相对主目录路径展开成绝对工作目录。
+/// 用户主目录：先看 HOME，没有再看 USERPROFILE。
+pub fn user_home() -> Option<PathBuf> {
+    user_home_from(std::env::var_os("HOME"), std::env::var_os("USERPROFILE"))
+}
+
+fn user_home_from(
+    home: Option<std::ffi::OsString>,
+    userprofile: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    home.or(userprofile).map(PathBuf::from)
+}
+
+/// 把 ~ 或相对主目录路径展开成绝对工作目录。
 /// 空值表示未指定；文件或无法规范化的路径返回现有错误文案。
 pub fn resolve_workspace(value: Option<&str>) -> Result<Option<String>, String> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
     let path = if value == "~" {
-        std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .ok_or_else(|| "无法定位用户主目录。".to_string())?
+        user_home().ok_or_else(|| "无法定位用户主目录。".to_string())?
     } else if let Some(relative) = value.strip_prefix("~/") {
-        std::env::var_os("HOME")
-            .map(PathBuf::from)
+        user_home()
             .ok_or_else(|| "无法定位用户主目录。".to_string())?
             .join(relative)
     } else {
@@ -32,7 +41,7 @@ pub fn resolve_workspace(value: Option<&str>) -> Result<Option<String>, String> 
     Ok(Some(path.display().to_string()))
 }
 
-/// 把目录权限设为 `0o700`。非 Unix 平台是空操作。
+/// 把目录权限设为 0o700。非 Unix 平台是空操作。
 pub fn set_private_directory(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -41,4 +50,26 @@ pub fn set_private_directory(path: &Path) -> Result<(), String> {
             .map_err(|error| format!("无法保护受管理目录：{error}"))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn user_home_prefers_home_then_userprofile() {
+        assert_eq!(
+            user_home_from(
+                Some(OsString::from("/Users/a")),
+                Some(OsString::from(r"C:\Users\a"))
+            ),
+            Some(PathBuf::from("/Users/a"))
+        );
+        assert_eq!(
+            user_home_from(None, Some(OsString::from(r"C:\Users\a"))),
+            Some(PathBuf::from(r"C:\Users\a"))
+        );
+        assert_eq!(user_home_from(None, None), None);
+    }
 }

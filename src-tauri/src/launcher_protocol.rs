@@ -148,36 +148,7 @@ pub fn append_startup_log(path: &Path, event: &str) -> Result<(), String> {
 }
 
 pub fn process_start_identity(pid: u32) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-        let size: libc::c_int = std::mem::size_of::<libc::proc_bsdinfo>()
-            .try_into()
-            .map_err(|_| "进程信息结构大小无效。".to_string())?;
-        // SAFETY: `info` points to a writable buffer with the exact size
-        // required by PROC_PIDTBSDINFO; success is checked before assume_init.
-        let result = unsafe {
-            libc::proc_pidinfo(
-                pid as libc::c_int,
-                libc::PROC_PIDTBSDINFO,
-                0,
-                info.as_mut_ptr().cast(),
-                size,
-            )
-        };
-        if result != size {
-            return Err(format!("进程 {pid} 已不存在。"));
-        }
-        // SAFETY: proc_pidinfo returned a full initialized proc_bsdinfo.
-        let info = unsafe { info.assume_init() };
-        return Ok(format!(
-            "{}.{:06}",
-            info.pbi_start_tvsec, info.pbi_start_tvusec
-        ));
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    Err("当前平台尚不支持进程启动身份核验。".to_string())
+    crate::support::process_start_identity(pid)
 }
 
 fn unix_time_millis() -> u64 {

@@ -11,7 +11,6 @@ import { Button, Menu, Select, Tooltip } from "@mantine/core";
 import { ChannelRowList } from "./channel-sort-list";
 import { HintedButton } from "./components/hinted-button";
 import { AppUpdateButton, GatewayRestartButton } from "./components/title-bar";
-import { isDirectTransport } from "./codex-control";
 import "./workspace-surface.css";
 
 export type WorkspaceChannelRow = {
@@ -67,7 +66,6 @@ export function usageObservationLabel(
     | { today: { requests: number }; lastRequestAt: number | null }
     | undefined,
 ) {
-  if (isDirectTransport(transportMode)) return "直连未观测";
   if (!usage || usage.lastRequestAt === null) return "未观测";
   return `今日 ${usage.today.requests.toLocaleString()} 次`;
 }
@@ -313,11 +311,11 @@ export function ChannelWorkspaceCard({
           <div className="space-brand-tools">
             <AppUpdateButton />
             <HintedButton
-            className="space-channel-entry"
-            type="button"
-            onClick={onOpenChannels}
-          >
-            <span>模型渠道</span>
+              className="space-channel-entry"
+              type="button"
+              onClick={onOpenChannels}
+            >
+              <span>模型渠道</span>
             </HintedButton>
           </div>
         </div>
@@ -326,7 +324,9 @@ export function ChannelWorkspaceCard({
         <div className="runtime-target-route-heading channel-section-heading">
           <div className="channel-section-title">
             <strong>{instanceName}</strong>
-            {lockNotice ? <small className="channel-lock-note">{lockNotice}</small> : null}
+            {lockNotice ? (
+              <small className="channel-lock-note">{lockNotice}</small>
+            ) : null}
           </div>
           {configured && (
             <ChannelAddMenu
@@ -339,32 +339,32 @@ export function ChannelWorkspaceCard({
         </div>
         {configured ? (
           rows.length === 0 ? (
-              <div className="empty-workspace-guidance">
-                <p className="empty-detail">
-                  尚未加入模型渠道。使用上方“添加渠道”选择已有渠道，或新建一个模型渠道。
-                </p>
-                <HintedButton
-                  className="secondary-action"
-                  type="button"
-                  onClick={onOpenChannels}
-                >
-                  选择或新建模型渠道
-                </HintedButton>
-              </div>
-            ) : (
-              <ChannelRowList
-                rows={rows}
-                onReorder={onReorderChannels}
-                actions={{
-                  configureDisabled,
-                  configureReason,
-                  testingChannelId,
-                  onTestChannel,
-                  onToggleModel,
-                  onRemoveChannel,
-                }}
-              />
-            )
+            <div className="empty-workspace-guidance">
+              <p className="empty-detail">
+                尚未加入模型渠道。使用上方“添加渠道”选择已有渠道，或新建一个模型渠道。
+              </p>
+              <HintedButton
+                className="secondary-action"
+                type="button"
+                onClick={onOpenChannels}
+              >
+                选择或新建模型渠道
+              </HintedButton>
+            </div>
+          ) : (
+            <ChannelRowList
+              rows={rows}
+              onReorder={onReorderChannels}
+              actions={{
+                configureDisabled,
+                configureReason,
+                testingChannelId,
+                onTestChannel,
+                onToggleModel,
+                onRemoveChannel,
+              }}
+            />
+          )
         ) : (
           <div className="empty-workspace-guidance">
             <p className="empty-detail">
@@ -383,18 +383,16 @@ export function ChannelWorkspaceCard({
       <div className="control-strip">
         {configured && (
           <div className="calibration-grid">
-            {modelOptions.length > 0 && (
-              <CalibrationSelect
-                label="默认调用模型"
-                hint="启动时的主模型。"
-                value={defaultModelId}
-                placeholder="未选择"
-                options={modelOptions}
-                disabled={configureDisabled}
-                disabledReason={configureReason}
-                onChange={onDefaultModelChange}
-              />
-            )}
+            <CalibrationSelect
+              label="默认调用模型"
+              hint="启动时的主模型。"
+              value={defaultModelId}
+              placeholder="未选择"
+              options={modelOptions}
+              disabled={configureDisabled}
+              disabledReason={configureReason}
+              onChange={onDefaultModelChange}
+            />
             <CalibrationSelect
               label="API 登录渠道"
               hint="会话鉴权来源。"
@@ -421,22 +419,31 @@ export function ChannelWorkspaceCard({
             <Terminal size={18} aria-hidden="true" />
           </HintedButton>
           <HintedButton
-            className={"icon-button control-icon control-app" + (appRunning ? " is-running" : "")}
+            className={
+              "icon-button control-icon control-app" +
+              (appRunning ? " is-running" : "")
+            }
             type="button"
             size="md"
             title={appRunning ? "停止当前app实例" : "启动当前app实例"}
             aria-label={appRunning ? "停止当前app实例" : "启动当前app实例"}
-            disabled={appRunning ? stopBusy || !onStop : !configured || launchDisabled}
+            disabled={
+              appRunning ? stopBusy || !onStop : !configured || launchDisabled
+            }
             disabledReason={
               appRunning
                 ? "正在停止当前 App 实例。"
-                : launchReason ?? "请先配置模型渠道和模型。"
+                : (launchReason ?? "请先配置模型渠道和模型。")
             }
             onClick={appRunning ? onStop : onLaunch}
           >
             <Play className="control-app-play" size={18} aria-hidden="true" />
             {appRunning ? (
-              <Square className="control-app-stop" size={16} aria-hidden="true" />
+              <Square
+                className="control-app-stop"
+                size={16}
+                aria-hidden="true"
+              />
             ) : null}
           </HintedButton>
           {moreActions}

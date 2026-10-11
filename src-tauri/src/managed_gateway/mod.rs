@@ -35,6 +35,16 @@ pub use sidecar::ManagedGatewayClient;
 pub(super) const LOOPBACK_HOST: &str = "127.0.0.1";
 /// Stable loopback data-plane port owned by the R Codex sidecar.
 pub const GATEWAY_PORT: u16 = 43123;
+
+/// Port the control plane binds. Release builds stay on [`GATEWAY_PORT`].
+/// `tauri dev` sets `RCODEX_GATEWAY_PORT` so it can run beside the installed app.
+pub fn gateway_listen_port() -> u16 {
+    std::env::var("RCODEX_GATEWAY_PORT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|port| (1..=65535).contains(port))
+        .unwrap_or(GATEWAY_PORT)
+}
 pub(super) const SIDECAR_PROTOCOL_VERSION: u32 = 2;
 pub(super) const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
 // 解析预算和档案预算独立：记录关闭后，恶意/异常上游仍不能无限占用内存。

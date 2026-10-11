@@ -39,7 +39,6 @@ pub use computer_use::materialize_isolated_computer_use_mcp;
 pub use materialize::materialize_managed_codex_config;
 pub use materialize::{
     materialize_managed_app_config, materialize_managed_codex_config_with_auto_review,
-    materialize_managed_direct_codex_config,
 };
 pub use preferences::{
     keep_managed_permission_selector_available, seed_default_codex_preferences,

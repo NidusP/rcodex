@@ -136,7 +136,7 @@ Codex
 | P1 | 转发处理函数重新创建计时起点 | 从发送前统一记录 request、first byte、stream、completed 时间 | 诊断中的延迟与真实请求一致 |
 | P1 | SSE 解析按行分散实现 | 抽取共享 `SseFramer`，支持 LF、CRLF、多行 data、跨 chunk JSON 和 `[DONE]` | 减少特定中继的流式兼容问题 |
 | P1 | 上游响应头没有白名单转发 | 保留安全的 request ID、retry hint 等，过滤 hop-by-hop 头 | 更容易排查 Provider 错误，不破坏 HTTP 传输 |
-| P1 | `metadata` 当前全局删除 | 改成 Provider/Adapter 级兼容策略 | 不再无条件丢弃用户元数据 |
+| P1 | 非 GPT 删除 `metadata`；GPT 原样转发 | 若某家 GPT 中继仍拒收，再做成该渠道的兼容策略 | GPT 不再丢用户元数据 |
 | P1 | 模型字段递归重写范围较宽 | 优先修改 Responses 规范中的已知模型字段 | 降低嵌套业务对象被误改的风险 |
 | P2 | 协议适配、SSE 解析、usage 和错误映射需要持续收敛 | 以 Managed Gateway 为唯一数据面，抽取共享适配器 | 所有 Provider 使用同一套转发语义 |
 | P2 | Responses 能力预检不完整 | 增加 reasoning、response format、输入模态、流式 usage 等能力字段 | 模型目录与真实行为更一致 |
@@ -158,7 +158,7 @@ request
 
 建议默认采用保守策略：
 
-- `metadata` 是否删除由 Provider 兼容配置决定；
+- GPT 族保留 `metadata`；非 GPT 删除该字段。若某家 GPT 中继仍拒收，再做成该渠道的兼容策略；
 - 工具、图片、推理和结构化输出无法证明支持时返回稳定错误；
 - 只有明确属于可选自动能力的字段才允许被删除；
 - 不从 `/models` 响应推断 reasoning 或工具能力；

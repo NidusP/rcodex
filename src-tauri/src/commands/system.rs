@@ -4,6 +4,8 @@
 //! 不启动受管理实例，也不读取用户原 auth.json。
 //! 由工作区控制带和安装状态调用。
 
+#[cfg(target_os = "windows")]
+use crate::codex_installation::resolve_codex_app_executable;
 use crate::codex_installation::{
     codex_app_bundle_candidates, codex_app_bundle_from_cli, resolve_codex_executable,
 };
@@ -310,8 +312,7 @@ pub fn sync_managed_preferences(
     // Config files are part of the running App's launch contract; require the
     // managed App to be stopped before replacing selected preferences.
     let home = managed_launch.isolated_codex_home_for_preset(&input.launch_preset_id)?;
-    let source = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
+    let source = crate::support::user_home()
         .ok_or_else(|| "default_codex_home_unavailable".to_string())?
         .join(".codex");
     sync_default_codex_preferences(&home, &source, &input.sections)
@@ -344,10 +345,22 @@ fn reveal_owned_directory(path: &std::path::Path) -> Result<(), String> {
             Err(format!("无法打开目录：open 以状态 {status} 退出。"))
         }
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("explorer")
+            .arg(path)
+            .status()
+            .map_err(|error| format!("无法打开目录：{error}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("无法打开目录：explorer 以状态 {status} 退出。"))
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = path;
-        Err("当前版本仅在 macOS 打开隔离 CODEX_HOME。".to_string())
+        Err("当前版本仅在 macOS 和 Windows 打开隔离 CODEX_HOME。".to_string())
     }
 }
 
@@ -367,17 +380,37 @@ fn launch_codex_in_app(_working_directory: Option<&str>) -> Result<(), String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn launch_codex_in_app(_working_directory: Option<&str>) -> Result<(), String> {
-    Err("当前版本仅在 macOS 提供 Codex App 启动。".to_string())
+    let cli = resolve_codex_executable()?;
+    let gui = resolve_codex_app_executable(&cli)?;
+    if crate::codex_installation::windows::is_windowsapps_launch_path(&gui) {
+        return Err("当前版本请使用非商店安装的 Codex 桌面。商店包激活尚未验收。".to_string());
+    }
+    std::process::Command::new(&gui)
+        .env_remove("CODEX_HOME")
+        .env_remove("CODEX_SQLITE_HOME")
+        .env_remove("CODEX_ELECTRON_USER_DATA_PATH")
+        .env_remove("CODEX_API_KEY")
+        .env_remove("CODEX_ACCESS_TOKEN")
+        .env_remove("OPENAI_API_KEY")
+        .env_remove("RCODEX_INSTANCE_KEY")
+        .env_remove("THREER_INSTANCE_KEY")
+        .spawn()
+        .map_err(|error| format!("无法打开默认 Codex：{error}"))?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn launch_codex_in_app(_working_directory: Option<&str>) -> Result<(), String> {
+    Err("当前版本仅在 macOS 和 Windows 提供 Codex App 启动。".to_string())
 }
 
 pub(crate) fn resolve_current_codex_home() -> std::path::PathBuf {
     if let Some(value) = std::env::var_os("CODEX_HOME") {
         return std::path::PathBuf::from(value);
     }
-    std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
+    crate::support::user_home()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".codex")
 }

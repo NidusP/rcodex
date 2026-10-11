@@ -15,7 +15,6 @@ pub(super) const PROVIDER_RECORD_COLUMNS: &str =
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TransportMode {
-    DirectResponses,
     GatewayPassthrough,
     GatewayChatCompletions,
 }
@@ -29,8 +28,7 @@ impl Default for TransportMode {
 impl TransportMode {
     pub(crate) fn from_db(value: String) -> rusqlite::Result<Self> {
         match value.as_str() {
-            "direct_responses" => Ok(Self::DirectResponses),
-            "gateway_passthrough" => Ok(Self::GatewayPassthrough),
+            "direct_responses" | "gateway_passthrough" => Ok(Self::GatewayPassthrough),
             "gateway_chat_completions" => Ok(Self::GatewayChatCompletions),
             _ => Err(rusqlite::Error::FromSqlConversionFailure(
                 5,
@@ -42,7 +40,6 @@ impl TransportMode {
 
     pub(super) fn as_db(self) -> &'static str {
         match self {
-            Self::DirectResponses => "direct_responses",
             Self::GatewayPassthrough => "gateway_passthrough",
             Self::GatewayChatCompletions => "gateway_chat_completions",
         }
