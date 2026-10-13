@@ -42,6 +42,66 @@ pub fn keep_managed_permission_selector_available(codex_home: &Path) -> Result<(
     write_private_atomically_overwrite(&path, &encoded, "managed_permission_selector")
 }
 
+const DESKTOP_REASONING_EFFORT_ALLOWLIST: &[&str] =
+    &["low", "medium", "high", "xhigh", "ultra", "persistent"];
+const CATALOG_REASONING_EFFORTS_HIDDEN_BY_DEFAULT: &[&str] = &["none", "minimal", "max"];
+
+/// Keep family efforts visible in the Codex desktop model picker.
+///
+/// The app's default allowlist is low, medium, high, xhigh, ultra, and
+/// persistent. Catalog levels such as none and max are dropped from the
+/// picker until they are added to enabled-reasoning-efforts. Do not create
+/// the state file, and do not remove efforts the user already enabled.
+pub fn keep_catalog_reasoning_efforts_selectable(codex_home: &Path) -> Result<(), String> {
+    let path = codex_home.join(".codex-global-state.json");
+    if !path.exists() {
+        return Ok(());
+    }
+    reject_link(&path)?;
+    let mut value: JsonValue = serde_json::from_slice(
+        &fs::read(&path)
+            .map_err(|error| format!("managed_reasoning_allowlist_read_failed:{error}"))?,
+    )
+    .map_err(|_| "managed_reasoning_allowlist_state_invalid".to_string())?;
+    let Some(root) = value.as_object_mut() else {
+        return Ok(());
+    };
+    let state = root
+        .entry("electron-persisted-atom-state")
+        .or_insert_with(|| JsonValue::Object(JsonMap::new()));
+    let Some(state) = state.as_object_mut() else {
+        return Ok(());
+    };
+    let mut efforts = state
+        .get("enabled-reasoning-efforts")
+        .and_then(JsonValue::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(JsonValue::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| {
+            DESKTOP_REASONING_EFFORT_ALLOWLIST
+                .iter()
+                .map(|effort| (*effort).to_string())
+                .collect()
+        });
+    for effort in CATALOG_REASONING_EFFORTS_HIDDEN_BY_DEFAULT {
+        if !efforts.iter().any(|value| value == effort) {
+            efforts.push((*effort).to_string());
+        }
+    }
+    state.insert(
+        "enabled-reasoning-efforts".to_string(),
+        JsonValue::Array(efforts.into_iter().map(JsonValue::String).collect()),
+    );
+    let encoded = serde_json::to_vec_pretty(&value)
+        .map_err(|error| format!("managed_reasoning_allowlist_encode_failed:{error}"))?;
+    write_private_atomically_overwrite(&path, &encoded, "managed_reasoning_allowlist")
+}
+
 const PREFERENCE_SEED_MARKER: &str = ".rcodex-preference-seed";
 
 /// Copy non-secret app preferences and onboarding state from the user's default

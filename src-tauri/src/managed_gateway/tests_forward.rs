@@ -25,12 +25,14 @@ use axum::{
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use super::chat_bridge::*;
 use super::errors::*;
 use super::forward::*;
 use super::helpers::*;
 use super::http::*;
 use super::lifecycle::*;
 use super::protocol::*;
+use super::responses_compat::*;
 use super::runtime::*;
 use super::runtime_types;
 use super::runtime_types::*;
@@ -733,7 +735,7 @@ async fn routed_agent_message_is_normalized_before_provider_forward() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(mock_upstream))
+        .route("/responses", post(mock_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -818,13 +820,90 @@ fn relay_compat_applies_only_to_non_gpt_family() {
     assert!(needs_relay_compat(&route));
 }
 
+#[test]
+fn responses_relay_pipeline_keeps_current_non_gpt_body() {
+    let route = route_set("provider-a".to_string(), "revision-a".to_string())
+        .routes
+        .remove(0);
+    let mut request = serde_json::Map::from_iter([
+        ("model".to_string(), json!("deepseek-managed")),
+        ("previous_response_id".to_string(), json!("resp_keep")),
+        ("metadata".to_string(), json!({"session_id": "local"})),
+        (
+            "tools".to_string(),
+            json!([
+                {"type": "web_search"},
+                {"type": "function", "name": "local_tool"},
+                {"type": "custom", "name": "apply_patch"}
+            ]),
+        ),
+        (
+            "input".to_string(),
+            json!([
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "keep"}]
+                },
+                {
+                    "type": "agent_message",
+                    "author": "/root/child",
+                    "recipient": "/root",
+                    "content": [{"type": "input_text", "text": "child result"}]
+                }
+            ]),
+        ),
+    ]);
+
+    assert_eq!(
+        prepare_responses_relay(&route, CompactMode::LocalClient, &mut request),
+        Ok(())
+    );
+    assert!(request.get("metadata").is_none());
+    assert_eq!(request["previous_response_id"], "resp_keep");
+    assert_eq!(
+        request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["local_tool", "apply_patch"]
+    );
+    assert_eq!(request["input"][0]["type"], "message");
+    assert_eq!(request["input"][0]["content"][0]["text"], "keep");
+    assert_eq!(request["input"][1]["type"], "message");
+    assert_eq!(request["input"][1]["role"], "user");
+    assert_eq!(request["input"][1]["content"][1]["text"], "child result");
+
+    let mut gpt = route.clone();
+    gpt.public_model_id = "gpt-5.4".to_string();
+    gpt.upstream_model_id = "gpt-5.4".to_string();
+    let mut untouched = serde_json::Map::from_iter([
+        ("metadata".to_string(), json!({"session_id": "local"})),
+        (
+            "input".to_string(),
+            json!([{
+                "type": "agent_message",
+                "content": [{"type": "input_text", "text": "stay private"}]
+            }]),
+        ),
+    ]);
+    assert_eq!(
+        prepare_responses_relay(&gpt, CompactMode::LocalClient, &mut untouched),
+        Ok(())
+    );
+    assert_eq!(untouched["metadata"]["session_id"], "local");
+    assert_eq!(untouched["input"][0]["type"], "agent_message");
+}
+
 #[tokio::test]
 async fn gpt_family_responses_are_forwarded_without_relay_compat() {
     let observed = Arc::new(StdMutex::new(None));
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(mock_upstream))
+        .route("/responses", post(mock_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -900,7 +979,7 @@ async fn gpt_family_responses_are_forwarded_without_relay_compat() {
 }
 
 #[test]
-fn chat_adapter_accepts_codex_multi_message_text_and_ignores_reasoning_metadata() {
+fn chat_adapter_accepts_codex_multi_message_text_and_maps_reasoning_effort() {
     let input = json!({
         "model": "grok-upstream",
         "input": [
@@ -919,4 +998,232 @@ fn chat_adapter_accepts_codex_multi_message_text_and_ignores_reasoning_metadata(
     assert_eq!(chat["messages"][1]["content"], "Hello");
     assert_eq!(chat["stream"], true);
     assert!(chat.get("reasoning").is_none());
+    assert_eq!(chat["reasoning_effort"], "low");
+    assert!(chat.get("thinking").is_none());
+
+    let max_effort = json!({
+        "model": "deepseek-flash",
+        "reasoning": {"effort": " max "},
+        "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "think"}]}]
+    });
+    let max_chat = response_request_to_chat(&max_effort).unwrap();
+    assert_eq!(max_chat["reasoning_effort"], "max");
+    assert!(max_chat.get("thinking").is_none());
+
+    let disabled = json!({
+        "model": "deepseek-flash",
+        "reasoning": {"effort": "none"},
+        "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "plain"}]}]
+    });
+    let plain = response_request_to_chat(&disabled).unwrap();
+    assert!(plain.get("reasoning_effort").is_none());
+    assert_eq!(plain["thinking"]["type"], "disabled");
+
+    let untouched = json!({
+        "model": "deepseek-flash",
+        "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "plain"}]}]
+    });
+    let bare = response_request_to_chat(&untouched).unwrap();
+    assert!(bare.get("reasoning_effort").is_none());
+    assert!(bare.get("thinking").is_none());
+}
+
+#[test]
+fn chat_adapter_maps_function_custom_and_namespace_tools() {
+    let input = json!({
+        "model": "deepseek-flash",
+        "tool_choice": {"type": "custom", "name": "apply_patch"},
+        "tools": [
+            {"type": "web_search"},
+            {"type": "tool_search"},
+            {"type": "function", "name": "local_tool", "parameters": {"type": "object"}},
+            {"type": "custom", "name": "apply_patch", "description": "edit"},
+            {"type": "namespace", "name": "mcp", "tools": [
+                {"type": "function", "name": "mcp_list", "parameters": {"type": "object"}}
+            ]}
+        ],
+        "input": [
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "look"},
+                {"type": "input_image", "image_url": "data:image/png;base64,aaaa"}
+            ]},
+            {"type": "function_call", "call_id": "call_1", "name": "local_tool", "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "call_1", "output": "ok"},
+            {"type": "custom_tool_call", "call_id": "call_2", "name": "apply_patch", "input": "*** patch"}
+        ]
+    });
+    let outbound = prepare_chat_outbound(&input).unwrap();
+    let tools = outbound.body["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 4);
+    assert_eq!(tools[0]["function"]["name"], "tool_search");
+    assert_eq!(tools[1]["function"]["name"], "local_tool");
+    assert_eq!(tools[1]["function"]["parameters"]["type"], "object");
+    assert_eq!(tools[2]["function"]["name"], "apply_patch");
+    assert_eq!(tools[2]["function"]["parameters"]["required"][0], "input");
+    assert!(tools[2]["function"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("apply_patch"));
+    assert_eq!(tools[3]["function"]["name"], "mcp__mcp_list");
+    assert_eq!(
+        outbound
+            .tools
+            .spec("apply_patch")
+            .map(|spec| spec.kind.clone()),
+        Some(ChatToolKind::Custom)
+    );
+    assert_eq!(
+        outbound.body["tool_choice"]["function"]["name"],
+        "apply_patch"
+    );
+    let messages = outbound.body["messages"].as_array().unwrap();
+    assert_eq!(messages[0]["content"][0]["text"], "look");
+    assert_eq!(
+        messages[0]["content"][1]["image_url"]["url"],
+        "data:image/png;base64,aaaa"
+    );
+    assert_eq!(messages[1]["tool_calls"][0]["id"], "call_1");
+    assert_eq!(messages[2]["role"], "tool");
+    assert_eq!(messages[2]["content"], "ok");
+    assert_eq!(
+        messages[3]["tool_calls"][0]["function"]["name"],
+        "apply_patch"
+    );
+    let refused = json!({
+        "model": "deepseek-flash",
+        "tool_choice": {"type": "web_search"},
+        "input": "hello"
+    });
+    assert_eq!(
+        prepare_chat_outbound(&refused).unwrap_err(),
+        "unsupported_tools"
+    );
+}
+
+#[test]
+fn chat_completion_tool_call_round_trip_and_dsml_failure() {
+    let outbound = prepare_chat_outbound(&json!({
+        "model": "deepseek-flash",
+        "tools": [
+            {"type": "function", "name": "local_tool", "parameters": {"type": "object"}},
+            {"type": "custom", "name": "apply_patch"},
+            {"type": "tool_search"},
+            {"type": "namespace", "name": "functions", "tools": [
+                {"type": "function", "name": "exec_command", "parameters": {"type": "object"}}
+            ]}
+        ],
+        "input": "hi"
+    }))
+    .unwrap();
+    let mut message = json!({
+        "content": "",
+        "tool_calls": [
+            {"id": "call_2", "type": "function", "function": {"name": "apply_patch", "arguments": ""}},
+            {"id": "call_1", "type": "function", "function": {"name": "local_tool", "arguments": ""}},
+            {"id": "call_3", "type": "function", "function": {"name": "functions__exec_command", "arguments": "{\"cmd\":\"ls\"}"}},
+            {"id": "call_4", "type": "function", "function": {"name": "tool_search", "arguments": "{\"query\":\"gmail\"}"}}]
+    });
+    message["tool_calls"][0]["function"]["arguments"] = json!(r#"{"input":"patch-body"}"#);
+    message["tool_calls"][1]["function"]["arguments"] = json!({"a": 1});
+    let items = output_items_from_chat_message(&message, &outbound.tools).unwrap();
+    assert_eq!(items[0]["type"], "custom_tool_call");
+    assert_eq!(items[0]["input"], "patch-body");
+    assert_eq!(items[1]["type"], "function_call");
+    assert_eq!(items[1]["name"], "local_tool");
+    assert_eq!(items[1]["arguments"], r#"{"a":1}"#);
+    assert_eq!(items[2]["type"], "function_call");
+    assert_eq!(items[2]["name"], "exec_command");
+    assert_eq!(items[2]["namespace"], "functions");
+    assert_eq!(items[3]["type"], "tool_search_call");
+    assert_eq!(items[3]["arguments"]["query"], "gmail");
+    let dsml = json!({"content": "<|DSML|tool_calls>local_tool"});
+    assert_eq!(
+        output_items_from_chat_message(&dsml, &outbound.tools).unwrap_err(),
+        "chat_tool_call_not_structured"
+    );
+}
+
+#[test]
+fn chat_adapter_lifts_additional_tools_and_object_arguments() {
+    let outbound = prepare_chat_outbound(&json!({
+        "model": "deepseek-flash",
+        "input": [
+            {
+                "type": "additional_tools",
+                "role": "developer",
+                "tools": [{
+                    "type": "namespace",
+                    "name": "functions",
+                    "tools": [{
+                        "type": "function",
+                        "name": "exec_command",
+                        "parameters": {"properties": {"cmd": {"type": "string"}}}
+                    }]
+                }]
+            },
+            {"type": "message", "role": "user", "content": "run"},
+            {
+                "type": "function_call",
+                "call_id": "call_exec",
+                "name": "exec_command",
+                "namespace": "functions",
+                "arguments": {"cmd": "ls"}
+            },
+            {"type": "function_call_output", "call_id": "call_exec", "output": "ok"}
+        ]
+    }))
+    .unwrap();
+    let names: Vec<&str> = outbound.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["function"]["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["functions__exec_command"]);
+    assert_eq!(
+        outbound.body["tools"][0]["function"]["parameters"]["type"],
+        "object"
+    );
+    let messages = outbound.body["messages"].as_array().unwrap();
+    assert_eq!(messages.len(), 3);
+    assert_eq!(messages[0]["role"], "user");
+    assert_eq!(
+        messages[1]["tool_calls"][0]["function"]["name"],
+        "functions__exec_command"
+    );
+    assert_eq!(
+        messages[1]["tool_calls"][0]["function"]["arguments"],
+        "{\"cmd\":\"ls\"}"
+    );
+    assert_eq!(messages[2]["role"], "tool");
+    assert_eq!(messages[2]["content"], "ok");
+}
+
+#[test]
+fn chat_adapter_lifts_tool_result_images_out_of_tool_text() {
+    let outbound = prepare_chat_outbound(&json!({
+        "model": "deepseek-flash",
+        "tools": [{"type": "custom", "name": "exec"}],
+        "input": [
+            {"type": "custom_tool_call", "call_id": "call_view", "name": "exec", "input": "view"},
+            {"type": "custom_tool_call_output", "call_id": "call_view", "output": [
+                {"type": "input_text", "text": "Script completed"},
+                {"type": "input_image", "image_url": "data:image/png;base64,aaaa", "detail": "high"}
+            ]}
+        ]
+    }))
+    .unwrap();
+    let messages = outbound.body["messages"].as_array().unwrap();
+    assert_eq!(messages[0]["tool_calls"][0]["function"]["name"], "exec");
+    assert_eq!(messages[1]["role"], "tool");
+    let content = messages[1]["content"].as_str().unwrap();
+    assert!(content.contains("Script completed"));
+    assert!(!content.contains("base64"));
+    assert_eq!(messages[2]["role"], "user");
+    assert_eq!(messages[2]["content"][1]["type"], "image_url");
+    assert_eq!(
+        messages[2]["content"][1]["image_url"]["url"],
+        "data:image/png;base64,aaaa"
+    );
+    assert_eq!(messages[2]["content"][1]["image_url"]["detail"], "high");
 }

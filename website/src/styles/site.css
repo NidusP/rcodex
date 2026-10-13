@@ -1,7 +1,8 @@
+/* Starlight 的 :root 是深色色板。--sl-color-white 是文字色，不是字面白色。 */
 :root {
-  --sl-color-accent-low: #e0f3e8;
-  --sl-color-accent: #1d7b5d;
-  --sl-color-accent-high: #103d2f;
+  --sl-color-accent-low: #173b2f;
+  --sl-color-accent: #73d2a5;
+  --sl-color-accent-high: #d7f8e5;
   --sl-color-white: #f7fbf8;
   --sl-color-gray-1: #e6eee9;
   --sl-color-gray-2: #bccbc2;
@@ -9,14 +10,24 @@
   --sl-color-gray-4: #53675c;
   --sl-color-gray-5: #2f4036;
   --sl-color-gray-6: #17241e;
+  --sl-color-black: #111a15;
   --sl-font: "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
   --sl-font-mono: "SFMono-Regular", "Cascadia Code", monospace;
 }
 
-:root[data-theme="dark"] {
-  --sl-color-accent-low: #173b2f;
-  --sl-color-accent: #73d2a5;
-  --sl-color-accent-high: #d7f8e5;
+:root[data-theme="light"] {
+  --sl-color-accent-low: #e0f3e8;
+  --sl-color-accent: #1d7b5d;
+  --sl-color-accent-high: #103d2f;
+  --sl-color-white: #111a15;
+  --sl-color-gray-1: #17241e;
+  --sl-color-gray-2: #2f4036;
+  --sl-color-gray-3: #53675c;
+  --sl-color-gray-4: #82948a;
+  --sl-color-gray-5: #bccbc2;
+  --sl-color-gray-6: #e6eee9;
+  --sl-color-gray-7: #f7fbf8;
+  --sl-color-black: #f5f8f6;
 }
 
 body { background: #f5f8f6; }
@@ -24,7 +35,7 @@ main { background: transparent; }
 .hero { padding-block: 4rem 2.5rem; }
 .hero h1 { max-width: 760px; letter-spacing: -0.045em; line-height: 1.02; }
 .hero .tagline { max-width: 640px; font-size: 1.12rem; line-height: 1.7; }
-.sl-markdown-content { color: #3b5146; }
+.sl-markdown-content { color: var(--sl-color-text); }
 .sl-markdown-content h2 { margin-top: 4.5rem; letter-spacing: -0.035em; }
 .sl-markdown-content h3 { letter-spacing: -0.02em; }
 .sl-markdown-content a { text-underline-offset: 3px; }

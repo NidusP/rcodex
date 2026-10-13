@@ -112,7 +112,22 @@ OpenAI 兼容合同的标准形状是 `id`、`object`、`created`、`owned_by`�
 
 GPT 模板里的 `max` / `ultra` 不是 Grok 档位，不得随克隆泄漏到第三方条目。
 
-DeepSeek、Claude 中继等同理：以该模型族公开合同或用户在接入 UI 勾选为准，不以中继 `/v1/models` 为准。
+2026-10-13：DeepSeek、GLM、Qwen 改读厂商公开模型卡，不探针，也不读中继 /v1/models。别名如果会被厂商折成另一个档，目录只保留折完后仍有区别的名字。厂商没公布 Codex 档位名单的族，目录留空，不再套未知族的 low / medium / high / xhigh。Claude 还没有按同一轮卡片誊写，暂时仍用这套未知族兜底。
+
+| 模型 | 可用档位 | 官方默认 | 上下文 | 看图 | 来源 |
+| --- | --- | --- | --- | --- | --- |
+| deepseek-flash，以及仍由 Flash 承接的旧 flash 名 | none、low、high、max | high | 1,000,000 | 是 | DeepSeek Thinking Mode 与 Models & Pricing，2026-10-13 |
+| deepseek-v4-pro | 同上 | high | 1,000,000 | 否 | 同上。medium / xhigh 折成 high，ultra 折成 max，目录不单列 |
+| deepseek-chat 等不在当前价目卡上的旧名 | 同上 | high | 不写 | 否 | 推理控制是当前 API 的参数；窗口和看图只属于价目卡上的模型 |
+| glm-5.3 | low、high、max | max | 1,000,000 | 否 | Z.AI GLM-5.3。思考不能关闭 |
+| glm-5.3-flash / flashx | 同上 | max | 1,000,000 | 是 | Z.AI GLM-5.3-Flash。文本参数与 GLM-5.3 相同 |
+| glm-5.2 | none、high、max | max | 1,000,000 | 否 | Z.AI GLM-5.2 与 Core Parameters。low / medium 折成 high，xhigh 折成 max |
+| 更早的 GLM | 不写 | 无 | 不写 | 仅名称里带 4.5V、4.6V、OCR 的视觉卡 | reasoning_effort 从 GLM-5.2 起才有文档。本次卡片没有 20 万这个数字，所以不写 |
+| qwen3.8-max、qwen3.8-flash、qwen3.7-plus、qwen3.7-flash、qwen3.6-plus、qwen3.6-flash、qwen3.5-plus、qwen3.5-flash、qwen3-coder、qwen2.5-vl | 不写 | 无 | 1,000,000 | 视觉模型页列出的才开 | 阿里云 Model Studio 文本模型页，2026-10-11。思考开关是 enable_thinking，页面没有给出 effort 名单 |
+| qwen3.7-max 本体、2026-05-20、2026-05-17、preview | 不写 | 无 | 1,000,000 | 否 | 文本接口。2026-06-08 快照改为可看图 |
+| qwen3.5 开源规格、qwen3 小模型、qwen3.5-omni | 不写 | 无 | 256,000 | omni 与名称带 vl 的可以 | 同一文本模型页；omni 的窗口来自视觉模型页 |
+| qwen-long | 不写 | 无 | 不写 | 否 | 官方是 10,000,000，超过客户端可保存的 1,000,000 |
+
 
 ## 5. 身份 overlay（2026-09-17 确认）
 
@@ -123,7 +138,9 @@ R Codex 接入 Responses 模型，是为了把它放进 Codex 工作区，不是
 | 模型族 | 产品身份句 |
 | --- | --- |
 | Grok | 你是 Grok，在 Codex 工作区里用本地工具。 |
-| deepseek | 你是 deepseek，在 Codex 工作区里用本地工具。 |
+| DeepSeek | 你是 DeepSeek，在 Codex 工作区里用本地工具。 |
+| GLM | 你是 GLM，在 Codex 工作区里用本地工具。 |
+| Qwen | 你是 Qwen，在 Codex 工作区里用本地工具。 |
 | Claude | 你是 Claude，在 Codex 工作区里用本地工具。 |
 | 未知族 | 你是 {上游模型族名}，在 Codex 工作区里用本地工具。 |
 
@@ -169,8 +186,8 @@ Use only the local workspace tools provided in this session.
 
 - `context_window`：UI 覆盖 → family 默认 → 仍无则从克隆条目 **删除** `context_window` / `max_context_window` / `auto_compact_token_limit`。有值时目录写入该数，并把 `max_context_window` 写成同一数字（避免 500k 窗配 872k max）。
 - `auto_compact_token_limit`：UI 有则用 UI；否则 family 显式值（仅当 family compact ≤ 已解析窗，否则丢弃以免 `CapabilitySet.validate()` 拒绝更小的 UI 窗）；否则 `context_window × 95%`（对齐本次 258400 = 272000 × 95% 的 Codex 行为）。无窗口则不写阈值。
-- 校验：`None` 或 `1..=999_999`；拒绝 `0` 和 `≥ 1_000_000`；两值都有时 compact ≤ window。
-- Grok 族本轮默认 500000 / 475000（[xAI grok-4.6](https://docs.x.ai/developers/models/grok-4.6)）。DeepSeek / Claude / 未知族为 `None`。未探针不写 1000k。
+- 校验：`None` 或 `1..=1_000_000`；拒绝 `0` 和大于 1,000,000；两值都有时 compact ≤ window。2026-10-13 起正好 1,000,000 可以保存，因为当前 DeepSeek、GLM-5.2/5.3 和 Qwen 卡片写的就是这个数。
+- Grok 族本轮默认 500000 / 475000（[xAI grok-4.6](https://docs.x.ai/developers/models/grok-4.6)）。上表里的 DeepSeek、GLM、Qwen 用各自卡片上的窗口，压缩阈值仍是窗口的 95%。Claude、对不上卡片的旧模型名，以及 qwen-long 这种超过客户端上限的窗口，保持 `None`，不把 GPT 骨架上的数字抄过来。
 - 只写每模型目录字段，不写进程级 `model_context_window` / `model_auto_compact_token_limit`。兼容目录里的原生 GPT 行不走三方 overlay。
 - UI 覆盖落在工作区选择行（`launch_preset_model_selections`），不是全局身份表。空 = family 默认。保存工作区并应用配置 / 重启默认 App 后才生效。
 
@@ -182,7 +199,9 @@ Use only the local workspace tools provided in this session.
 4. 每个 Responses 第三方条目把 `auto_review_model_override` 写成自身公共模型 ID。隔离 Profile 写入 `approval_policy = "on-request"`，不写 `approvals_reviewer`，合并时删掉旧的 `auto_review`。Codex 0.162 终端界面在策略缺省时会直接拒绝沙箱提权，所以显式要求询问；前端不再提供第二个审核模型选择。
 5. 发现页继续只展示 id/name/ownedBy；用户不需要手工编辑推理档。
 5. 不要把 `xhigh` 映射成 `high`。
-6. Chat Completions 适配器当前丢弃 `reasoning`；走 Chat 的路由不得在目录里广告推理档，除非适配器先能转发。
+6. Chat Completions 把 Codex 的 `reasoning.effort` 写成顶层 `reasoning_effort`。`none` 不写入这个字段，改为 `thinking.type = disabled`。其余档位原样传递，不在网关里折成 high 或 max。目录继续按模型族广告这些档。
+
+硅基流动的 `enable_thinking` 先不做。CC Switch 在 `src-tauri/src/proxy/providers/codex.rs` 里按平台单独处理，记录于 2026-10-13，文件 blob `d23f41fe6274a0504aba8ed87535f1c4b5c9524d`。`infer_codex_chat_reasoning_config` 先调用 `infer_aggregator_platform_config`（约第 689 行），只看渠道名和 `base_url`，不看模型名。名字或地址里有 `siliconflow` 时（约第 826 行）写成布尔 `enable_thinking`，`supports_effort` 为 false，`effort_param` 为 `none`，思考文本从 `reasoning_content` 读回。同文件约第 2190 行的测试写明：挂在硅基流动上的 MiniMax、GLM 也走这个开关，不走厂商自己的 `reasoning_split` 或 `thinking`。R Codex 继续只做 Chat 标准字段，不按渠道名改参数。
 
 未知 family：仍可用 GPT 骨架，但必须写入保守 overlay（第 5 节身份句 + 只声明文本、不声明 GPT 推理阶梯），或在 UI 强制用户选择档位后再生成目录。空 overlay 不是合法默认。
 
@@ -224,7 +243,7 @@ Use only the local workspace tools provided in this session.
 - 非 GPT 系列不得留下 `supports_image_detail_original`，包括已打开看图的 Grok；`gpt-` / `openai` 系列保留该开关，即使它走的是 API 渠道；不支持搜索时不得留下 `web_search_tool_type`；
 - 未验证的 GPT 子 agent 推理档与 Node REPL 能力不出现在第三方条目；Codex 通用多 agent 合同、`code_mode_only` 与 `apply_patch` 继续保留；
 - 用户选 Extra high 时 session 仍为 `xhigh`；
-- Chat 渠道不广告未实现的推理档；
+- Chat 渠道转发 `reasoning_effort`；`none` 写成 `thinking.type = disabled`；
 - `/v1/models` 探测行为不变（仍只点名）；
 - 仍只有一个目录生成器，新增模型族只加 profile 数据。
 - 自动审核字段按当前目录条目指向自身；Chat-only 路由不启用审核覆盖，只有 Responses 路由自动启用审核角色。

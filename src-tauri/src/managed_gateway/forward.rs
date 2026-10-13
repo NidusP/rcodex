@@ -21,6 +21,7 @@ use crate::conversation_archive::RequestCapture;
 use crate::diagnostics::RequestDiagnosticOutcome;
 use crate::routing::{GatewayTimeoutSnapshot, ModelRoute, WireApi};
 
+use super::chat_bridge::{output_items_from_chat_message, prepare_chat_outbound};
 use super::diagnostics::RequestMeta;
 use super::diagnostics::{
     record_request_best_effort, request_event, request_event_without_status, request_metadata,
@@ -34,9 +35,10 @@ use super::helpers::{
     auth_kind, gateway_trace, is_loopback_url, route_kind, route_provider_id, safe_upstream_url,
     upstream_request_url,
 };
+use super::image_fallback::{replace_unsupported_images, upstream_rejected_image};
 use super::protocol::{
-    is_event_stream_content_type, response_json, response_request_to_chat, rewrite_model_fields,
-    usage_from_event_value, validate_response,
+    is_event_stream_content_type, response_json, rewrite_model_fields, usage_from_event_value,
+    validate_response,
 };
 use super::runtime_types::ProviderUpstreamRuntime;
 use super::stream::{chat_sse_to_responses, rewrite_sse_response, synchronous_response_as_sse};
@@ -67,15 +69,7 @@ pub(super) async fn forward_provider(
                 .get("stream")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            let body = match serde_json::to_vec(&Value::Object(request.clone())) {
-                Ok(body) => body,
-                Err(_) => {
-                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed")
-                }
-            };
-            if let Some(capture) = recorder.as_ref().and_then(|r| r.archive.as_ref()) {
-                capture.stage("upstream-request", &body);
-            }
+            let mut payload = Value::Object(request.clone());
             let url = upstream_request_url(&upstream.base_url, WireApi::Responses);
             let safe_url = safe_upstream_url(&url);
             let instance = instance_id.clone().unwrap_or_default();
@@ -91,63 +85,24 @@ pub(super) async fn forward_provider(
                 ("loopback", if is_loopback_url(&url) { "1" } else { "0" }),
                 ("stream", if stream { "1" } else { "0" }),
             ]);
-            let outbound = apply_upstream_auth(
-                upstream
-                    .client
-                    .post(&url)
-                    .header(CONTENT_TYPE, "application/json"),
+            let input_meta = request_metadata(&payload);
+            let response = match send_model_request(
                 upstream,
+                route,
+                &url,
+                &mut payload,
+                "responses",
+                stream,
+                instance_id.clone(),
+                &recorder,
+                &input_meta,
                 forwarded_auth,
-            )
-            .body(body);
-            let input_meta = request_metadata(&Value::Object(request.clone()));
-            let response = match timeout(
-                Duration::from_secs(upstream.timeouts.first_byte_seconds),
-                outbound.send(),
+                started,
             )
             .await
             {
-                Err(_) => {
-                    return transport_failure(
-                        &recorder,
-                        &input_meta,
-                        instance_id,
-                        route,
-                        "responses",
-                        stream,
-                        RequestDiagnosticOutcome::Timeout,
-                        "upstream_first_byte_timeout",
-                        StatusCode::GATEWAY_TIMEOUT,
-                        &url,
-                        None,
-                        started,
-                    );
-                }
-                Ok(Err(error)) => {
-                    let (code, status) = classify_upstream_send(&error);
-                    let kind = if error.is_timeout() {
-                        "timeout"
-                    } else if error.is_connect() {
-                        "connect"
-                    } else {
-                        "send"
-                    };
-                    return transport_failure(
-                        &recorder,
-                        &input_meta,
-                        instance_id,
-                        route,
-                        "responses",
-                        stream,
-                        RequestDiagnosticOutcome::Failed,
-                        code,
-                        status,
-                        &url,
-                        Some(kind),
-                        started,
-                    );
-                }
-                Ok(Ok(response)) => response,
+                Ok(response) => response,
+                Err(response) => return response,
             };
             forward_responses_response(
                 response,
@@ -484,17 +439,11 @@ pub(super) async fn forward_chat_completions(
 ) -> Response {
     let started = Instant::now();
     let input_meta = request_metadata(&request);
-    let chat = match response_request_to_chat(&request) {
-        Ok(chat) => chat,
+    let chat_request = match prepare_chat_outbound(&request) {
+        Ok(chat_request) => chat_request,
         Err(code) => return api_error(StatusCode::BAD_REQUEST, code),
     };
-    let chat_body = match serde_json::to_vec(&chat) {
-        Ok(body) => body,
-        Err(_) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, "serialization_failed"),
-    };
-    if let Some(capture) = recorder.as_ref().and_then(|r| r.archive.as_ref()) {
-        capture.stage("upstream-request", &chat_body);
-    }
+    let mut chat = chat_request.body;
     let stream = chat.get("stream").and_then(Value::as_bool).unwrap_or(false);
     let url = upstream_request_url(&upstream.base_url, WireApi::ChatCompletions);
     let safe_url = safe_upstream_url(&url);
@@ -512,62 +461,23 @@ pub(super) async fn forward_chat_completions(
         ("stream", if stream { "1" } else { "0" }),
         ("wire", "chat_completions"),
     ]);
-    let outbound = apply_upstream_auth(
-        upstream
-            .client
-            .post(&url)
-            .header(CONTENT_TYPE, "application/json"),
+    let response = match send_model_request(
         upstream,
+        route,
+        &url,
+        &mut chat,
+        "chat_completions",
+        stream,
+        instance_id.clone(),
+        &recorder,
+        &input_meta,
         forwarded_auth,
-    )
-    .body(chat_body);
-    let response = match timeout(
-        Duration::from_secs(upstream.timeouts.first_byte_seconds),
-        outbound.send(),
+        started,
     )
     .await
     {
-        Err(_) => {
-            return transport_failure(
-                &recorder,
-                &input_meta,
-                instance_id,
-                route,
-                "chat_completions",
-                stream,
-                RequestDiagnosticOutcome::Timeout,
-                "upstream_first_byte_timeout",
-                StatusCode::GATEWAY_TIMEOUT,
-                &url,
-                None,
-                started,
-            );
-        }
-        Ok(Err(error)) => {
-            let (code, status) = classify_upstream_send(&error);
-            let kind = if error.is_timeout() {
-                "timeout"
-            } else if error.is_connect() {
-                "connect"
-            } else {
-                "send"
-            };
-            return transport_failure(
-                &recorder,
-                &input_meta,
-                instance_id,
-                route,
-                "chat_completions",
-                stream,
-                RequestDiagnosticOutcome::Failed,
-                code,
-                status,
-                &url,
-                Some(kind),
-                started,
-            );
-        }
-        Ok(Ok(response)) => response,
+        Ok(response) => response,
+        Err(response) => return response,
     };
     let status =
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -624,6 +534,7 @@ pub(super) async fn forward_chat_completions(
             status.as_u16(),
             content_type,
             started,
+            chat_request.tools.clone(),
         );
     }
     let bytes = match timeout(
@@ -698,13 +609,15 @@ pub(super) async fn forward_chat_completions(
             return api_error(StatusCode::BAD_GATEWAY, "invalid_upstream_response");
         }
     };
-    let text = chat
-        .pointer("/choices/0/message/content")
-        .and_then(Value::as_str)
-        .or_else(|| chat.pointer("/choices/0/text").and_then(Value::as_str));
     let usage = usage_from_event_value(&chat);
-    match text {
-        Some(text) => {
+    let message = chat
+        .pointer("/choices/0/message")
+        .cloned()
+        .unwrap_or(Value::Null);
+    match output_items_from_chat_message(&message, &chat_request.tools) {
+        Ok(items) => {
+            let mut value = response_json("", "msg_chat", &route.public_model_id, "");
+            value["output"] = Value::Array(items);
             let elapsed = started.elapsed().as_millis() as i64;
             let mut event = request_event(
                 &input_meta,
@@ -717,7 +630,7 @@ pub(super) async fn forward_chat_completions(
                 Some(elapsed),
                 RequestDiagnosticOutcome::Success,
                 None,
-                text.len(),
+                bytes.len(),
                 Some(&bytes),
             );
             event.stream = stream;
@@ -727,9 +640,9 @@ pub(super) async fn forward_chat_completions(
                 event.total_tokens = usage.total_tokens;
             }
             record_request_best_effort(&recorder, event);
-            Json(response_json("", "", &route.public_model_id, text)).into_response()
+            Json(value).into_response()
         }
-        None => {
+        Err(code) => {
             let mut event = request_event(
                 &input_meta,
                 instance_id,
@@ -740,13 +653,155 @@ pub(super) async fn forward_chat_completions(
                 None,
                 Some(started.elapsed().as_millis() as i64),
                 RequestDiagnosticOutcome::FormatError,
-                Some("invalid_upstream_response"),
+                Some(code),
                 bytes.len(),
                 Some(&bytes),
             );
             event.stream = stream;
             record_request_best_effort(&recorder, event);
-            api_error(StatusCode::BAD_GATEWAY, "invalid_upstream_response")
+            api_error(StatusCode::BAD_GATEWAY, code)
         }
+    }
+}
+
+async fn send_model_request(
+    upstream: &ProviderUpstreamRuntime,
+    route: &ModelRoute,
+    url: &str,
+    payload: &mut Value,
+    wire: &'static str,
+    stream: bool,
+    instance_id: Option<String>,
+    recorder: &Option<RequestRecorder>,
+    input_meta: &RequestMeta,
+    forwarded_auth: Option<&HeaderMap>,
+    started: Instant,
+) -> Result<UpstreamResponse, Response> {
+    let mut image_retry_used = false;
+    loop {
+        let body = match serde_json::to_vec(&*payload) {
+            Ok(body) => body,
+            Err(_) => {
+                return Err(api_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "serialization_failed",
+                ))
+            }
+        };
+        if let Some(capture) = recorder.as_ref().and_then(|r| r.archive.as_ref()) {
+            capture.stage("upstream-request", &body);
+        }
+        let outbound = apply_upstream_auth(
+            upstream
+                .client
+                .post(url)
+                .header(CONTENT_TYPE, "application/json"),
+            upstream,
+            forwarded_auth,
+        )
+        .body(body);
+        let response = match timeout(
+            Duration::from_secs(upstream.timeouts.first_byte_seconds),
+            outbound.send(),
+        )
+        .await
+        {
+            Err(_) => {
+                return Err(transport_failure(
+                    recorder,
+                    input_meta,
+                    instance_id,
+                    route,
+                    wire,
+                    stream,
+                    RequestDiagnosticOutcome::Timeout,
+                    "upstream_first_byte_timeout",
+                    StatusCode::GATEWAY_TIMEOUT,
+                    url,
+                    None,
+                    started,
+                ));
+            }
+            Ok(Err(error)) => {
+                let (code, status) = classify_upstream_send(&error);
+                let kind = if error.is_timeout() {
+                    "timeout"
+                } else if error.is_connect() {
+                    "connect"
+                } else {
+                    "send"
+                };
+                return Err(transport_failure(
+                    recorder,
+                    input_meta,
+                    instance_id,
+                    route,
+                    wire,
+                    stream,
+                    RequestDiagnosticOutcome::Failed,
+                    code,
+                    status,
+                    url,
+                    Some(kind),
+                    started,
+                ));
+            }
+            Ok(Ok(response)) => response,
+        };
+        if response.status().as_u16() != 400 || image_retry_used {
+            return Ok(response);
+        }
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let detail = upstream_error_detail(
+            response,
+            recorder
+                .as_ref()
+                .and_then(|recorder| recorder.archive.as_ref()),
+        )
+        .await;
+        if upstream_rejected_image(400, detail.as_deref())
+            && replace_unsupported_images(payload) > 0
+        {
+            image_retry_used = true;
+            let instance = instance_id.clone().unwrap_or_default();
+            gateway_trace(&[
+                ("event", "image_retry"),
+                ("instance", &instance),
+                ("public_model", &route.public_model_id),
+                ("upstream_model", &route.upstream_model_id),
+                ("provider", route_provider_id(route)),
+                ("wire", wire),
+            ]);
+            continue;
+        }
+        let status = StatusCode::BAD_REQUEST;
+        let annotated = annotate_upstream_detail(url, detail.clone());
+        let mut event = request_event(
+            input_meta,
+            instance_id,
+            route,
+            wire,
+            status.as_u16(),
+            content_type.as_deref(),
+            None,
+            Some(started.elapsed().as_millis() as i64),
+            RequestDiagnosticOutcome::Failed,
+            Some("upstream_error"),
+            0,
+            None,
+        );
+        event.stream = stream;
+        event.error_detail = annotated;
+        record_request_best_effort(recorder, event);
+        return Err(api_error_with_detail(
+            status,
+            "upstream_error",
+            Some(url),
+            detail,
+        ));
     }
 }

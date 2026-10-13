@@ -18,7 +18,8 @@ use super::models::{
 };
 use super::persistence::query_strings;
 use super::preset_validation::{
-    normalize_public_model_ids, upsert_identity, validate_model, validate_sources,
+    assert_providers_have_confirmed_protocol, normalize_public_model_ids, upsert_identity,
+    validate_model, validate_sources,
 };
 use super::validation::{normalize_optional_path, validate_name};
 
@@ -195,6 +196,7 @@ impl ManagedLaunchStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| format!("managed_preset_transaction_failed:{error}"))?;
 
+        assert_providers_have_confirmed_protocol(&transaction, &provider_ids)?;
         let public_id_remaps = normalize_public_model_ids(&transaction, &mut input.models)?;
         if let Some(public_model_id) = auto_review_public_model_id.as_mut() {
             if let Some(remapped_id) = public_id_remaps.get(public_model_id) {

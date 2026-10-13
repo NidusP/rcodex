@@ -98,16 +98,16 @@ Codex
 
 主要实现是 [`response_request_to_chat`](../src-tauri/src/managed_gateway.rs)、[`forward_chat_completions`](../src-tauri/src/managed_gateway.rs) 和 [`chat_sse_to_responses`](../src-tauri/src/managed_gateway.rs)。
 
-这不是“本地 Chat 请求转 Responses 请求”的入口适配，而是“Codex Responses 请求适配到 Chat-only Provider”的上游适配。当前实现只保证受限文本场景：
+这不是“本地 Chat 请求转 Responses 请求”的入口适配，而是“Codex Responses 请求适配到 Chat-only Provider”的上游适配。2026-10-13 起，工具按协议映射，不按模型名分支。细则见 [Chat Completions 函数工具](designs/2026-10-12-chat-completions-function-tools.md)。
 
 - 支持字符串输入和多消息文本输入；
 - `developer` 可映射为 `system`；
 - 可映射 `max_output_tokens`、`temperature` 和 `stream`；
-- `reasoning` 不会发送到 Chat 上游；
-- tools、MCP、图片和 `previous_response_id` 等能力被拒绝或不支持；
-- 非流式响应只读取第一个文本结果；
-- 流式响应只读取 `choices[0].delta.content`；
-- 工具调用、多个 choice、复杂 finish reason 和完整输出结构不会保留。
+- `reasoning` 不会发送到 Chat 上游，也不补 `reasoning_content`；
+- function、custom、namespace 和 tool_search 按 Chat tools / tool_calls 互转；web_search 仍不转发；
+- `previous_response_id` 和压缩触发器仍拒绝；
+- 非流式响应读取第一条 choice 的文本和 tool_calls；
+- 流式响应读取 `delta.content`，并按 index 拼装 `delta.tool_calls`。
 
 历史版本的嵌入式单 Provider Gateway 曾有一套相似转换逻辑。它已经不再是运行时入口；协议适配以 Managed Gateway 为唯一实现，避免两条数据面长期产生行为漂移。
 

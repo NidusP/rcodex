@@ -1,6 +1,6 @@
 [package]
 name = "r-codex"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local routing gateway that aggregates multiple model providers for Codex"
 keywords = ["codex", "gateway", "llm", "routing", "tauri"]
 repository = "https://github.com/NidusP/rcodex"

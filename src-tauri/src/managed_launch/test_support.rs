@@ -156,6 +156,14 @@ pub(super) fn seed_provider(database: &Database, id: &str, revision: &str, wire_
             params![id, revision],
         )
         .unwrap();
+    connection
+        .execute(
+            "INSERT INTO provider_connectivity_reports (
+                provider_id, checked_at, status, models_check, text_check, wire_api
+             ) VALUES (?1, 1, 'ready', 'ready', 'ready', ?2)",
+            params![id, wire_api],
+        )
+        .unwrap();
 }
 
 pub(super) fn seed_direct_provider(database: &Database, id: &str, revision: &str) {

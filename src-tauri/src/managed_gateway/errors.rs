@@ -290,6 +290,7 @@ pub(super) fn codex_visible_error_message(
         "unsupported_chat_input" => "无法把该 Responses 请求适配为 chat/completions。",
         "unsupported_chat_history_item" => "无法把该历史项适配为 chat/completions。",
         "unsupported_chat_output" => "上游 chat 响应含有无法用于压缩摘要的输出。",
+        "chat_tool_call_not_structured" => "上游把工具调用写进了正文，而不是标准 tool_calls。这一轮没有执行。",
         "serialization_failed" => "无法序列化发往上游的请求。",
         "not_found" => "没有匹配的 Gateway 路径。",
         "upstream_connect_timeout" => "连接上游超时。",

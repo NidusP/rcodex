@@ -505,7 +505,7 @@ export function ProviderList({
                 <StatusBadge provider={provider} report={report} />
                 <strong>{provider.name}</strong>
               </div>
-              <code title="上游 API 的访问根地址。">{provider.baseUrl}</code>
+              <code>{provider.baseUrl}</code>
               <div className="provider-meta">
                 <span title="API Key 只显示遮罩状态，原文保存在系统凭据库。">
                   {maskKey(provider.configured)}

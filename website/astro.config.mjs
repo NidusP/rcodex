@@ -19,9 +19,10 @@ export default defineConfig({
         root: { label: "简体中文", lang: "zh-CN" },
       },
       logo: {
-        src: "./src/assets/mark.svg",
-        alt: "R Codex",
+        src: "./src/assets/app-icon.png",
+        alt: "",
       },
+      favicon: "/favicon.png",
       customCss: ["./src/styles/site.css"],
       sidebar: [
         {
@@ -38,6 +39,7 @@ export default defineConfig({
             { label: "默认 App", slug: "guides/default-app" },
             { label: "隔离环境配置", slug: "guides/isolated-config" },
             { label: "模型渠道与模型", slug: "guides/providers" },
+            { label: "一次桌面文件测试", slug: "guides/field-note" },
             { label: "Gateway 与 502", slug: "guides/gateway-502" },
           ],
         },

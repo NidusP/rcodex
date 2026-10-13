@@ -29,6 +29,7 @@ use super::helpers::*;
 use super::http::*;
 use super::lifecycle::*;
 use super::protocol::*;
+use super::responses_compat::*;
 use super::runtime::*;
 use super::runtime_types;
 use super::runtime_types::*;
@@ -253,7 +254,7 @@ async fn remote_v2_summarizer_strips_trigger_and_returns_one_envelope() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(mock_upstream))
+        .route("/responses", post(mock_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -325,7 +326,7 @@ async fn remote_v2_summarizer_collects_upstream_sse_into_one_envelope() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(mock_grok_responses_stream))
+        .route("/responses", post(mock_grok_responses_stream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -411,7 +412,7 @@ async fn remote_v2_chat_summarizer_expands_envelope_before_chat_adapter() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/chat/completions", post(mock_chat_upstream))
+        .route("/chat/completions", post(mock_chat_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -523,7 +524,7 @@ async fn remote_v2_ordinary_chat_turn_expands_envelope_before_adapter() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/chat/completions", post(mock_chat_upstream))
+        .route("/chat/completions", post(mock_chat_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -591,7 +592,7 @@ async fn remote_v2_ordinary_responses_turn_expands_envelope() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(mock_upstream))
+        .route("/responses", post(mock_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -672,7 +673,7 @@ async fn remote_v2_empty_summary_fails_closed_without_retry() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(empty_summary))
+        .route("/responses", post(empty_summary))
         .with_state(hits.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -843,7 +844,7 @@ async fn remote_v2_summarizer_folds_reasoning_ciphertext_before_upstream() {
     let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let app = Router::new()
-        .route("/v1/responses", post(mock_upstream))
+        .route("/responses", post(mock_upstream))
         .with_state(observed.clone());
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();

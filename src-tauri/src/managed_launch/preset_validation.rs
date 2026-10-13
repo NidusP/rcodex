@@ -37,6 +37,26 @@ pub(super) fn validate_sources(
     Ok(provider_ids)
 }
 
+pub(super) fn assert_providers_have_confirmed_protocol(
+    transaction: &rusqlite::Transaction<'_>,
+    provider_ids: &[String],
+) -> Result<(), String> {
+    for provider_id in provider_ids {
+        let wire_api: Option<String> = transaction
+            .query_row(
+                "SELECT wire_api FROM provider_connectivity_reports WHERE provider_id=?1",
+                [provider_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| format!("provider_protocol_lookup_failed:{error}"))?
+            .flatten();
+        if !matches!(wire_api.as_deref(), Some("responses" | "chat_completions")) {
+            return Err("protocol_unconfirmed".to_string());
+        }
+    }
+    Ok(())
+}
 pub(super) fn validate_model(model: &ManagedModelSelectionInput) -> Result<(), String> {
     validate_public_model_id(&model.public_model_id).map_err(|error| error.to_string())?;
     for value in [

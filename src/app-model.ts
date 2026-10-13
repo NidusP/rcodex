@@ -193,7 +193,15 @@ export function reasoningLevelsForModel(modelId: string): string[] {
       return ["low", "medium", "high"];
     return ["low", "medium", "high", "xhigh"];
   }
-  if (model.includes("deepseek")) return ["high"];
+  if (model.includes("deepseek")) return ["none", "low", "high", "max"];
+  if (model.includes("glm")) {
+    if (model.includes("5.3") || model.includes("5-3"))
+      return ["low", "high", "max"];
+    if (model.includes("5.2") || model.includes("5-2"))
+      return ["none", "high", "max"];
+    return [];
+  }
+  if (model.includes("qwen")) return [];
   if (model.includes("gpt-") || model.includes("openai"))
     return ["low", "medium", "high", "xhigh", "max", "ultra"];
   return ["low", "medium", "high", "xhigh"];

@@ -16,9 +16,9 @@ use crate::launcher_protocol::LaunchTarget;
 use crate::managed_codex_config::materialize_isolated_computer_use_mcp;
 use crate::managed_codex_config::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility,
-    keep_managed_permission_selector_available, materialize_managed_app_config,
-    materialize_managed_codex_config_with_auto_review, read_bundled_catalog,
-    seed_default_codex_preferences, verify_catalog_models_with_codex,
+    keep_catalog_reasoning_efforts_selectable, keep_managed_permission_selector_available,
+    materialize_managed_app_config, materialize_managed_codex_config_with_auto_review,
+    read_bundled_catalog, seed_default_codex_preferences, verify_catalog_models_with_codex,
     verify_managed_profile_with_codex,
 };
 use crate::model_family_profile::{
@@ -336,11 +336,9 @@ impl ManagedLaunchStore {
                 adapter_version: "1".to_string(),
                 capabilities: CapabilitySet {
                     input_modalities: vec!["text".to_string()],
-                    // The Responses path preserves Codex tool semantics.  The
-                    // Chat adapter currently guarantees text conversations only;
-                    // advertising tools there would cause Codex to send custom
-                    // grammar tools that Chat Completions cannot represent.
-                    supports_tools: wire_api == WireApi::Responses,
+                    // Responses keeps Codex tool calls. Chat converts function
+                    // and custom tools in chat_bridge; web_search stays off.
+                    supports_tools: true,
                     ..CapabilitySet::default()
                 },
                 position: position as u32,
@@ -350,7 +348,9 @@ impl ManagedLaunchStore {
             // launch cannot accidentally restore GPT-only `max` or `ultra`.
             let official_family_levels =
                 allowed_reasoning_levels_for_model(&route.upstream_model_id);
-            route.capabilities.reasoning_levels = if !selection.reasoning_levels.is_empty() {
+            route.capabilities.reasoning_levels = if official_family_levels.is_empty() {
+                Vec::new()
+            } else if !selection.reasoning_levels.is_empty() {
                 selection.reasoning_levels
             } else {
                 family_reasoning_levels_for_route(&route)
@@ -428,6 +428,7 @@ impl ManagedLaunchStore {
             #[cfg(all(not(test), target_os = "macos"))]
             materialize_isolated_computer_use_mcp(&managed_codex_home)?;
             keep_managed_permission_selector_available(&managed_codex_home)?;
+            keep_catalog_reasoning_efforts_selectable(&managed_codex_home)?;
         }
         // verify_catalog_models_with_codex performs the parser check and the
         // expected-model check in one Codex invocation; avoid starting the
@@ -618,6 +619,20 @@ impl ManagedLaunchStore {
             .map_err(|error| format!("provider_snapshot_read_failed:{error}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| "credential_missing".to_string())?;
+        for row in &rows {
+            let wire_api: Option<String> = connection
+                .query_row(
+                    "SELECT wire_api FROM provider_connectivity_reports WHERE provider_id=?1",
+                    [row.provider_id.as_str()],
+                    |report| report.get(0),
+                )
+                .optional()
+                .map_err(|error| format!("provider_protocol_lookup_failed:{error}"))?
+                .flatten();
+            if !matches!(wire_api.as_deref(), Some("responses" | "chat_completions")) {
+                return Err("protocol_unconfirmed".to_string());
+            }
+        }
         Ok(rows)
     }
 }

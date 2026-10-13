@@ -23,14 +23,17 @@ use uuid::Uuid;
 use crate::diagnostics::RequestDiagnosticOutcome;
 use crate::routing::{GatewayTimeoutSnapshot, ModelRoute};
 
+use super::chat_bridge::{
+    chat_finish_reason, chat_usage_as_responses, looks_like_unstructured_tool_text,
+    response_tool_call, ChatToolMap,
+};
 use super::diagnostics::{
     digest_hasher, record_request_best_effort, request_event, RequestMeta, RequestRecorder,
 };
 use super::errors::{api_error, bounded_response_bytes};
 use super::protocol::{
-    chat_finish_reason, chat_usage_as_responses, response_in_progress_json, response_json,
-    response_value_as_sse, rewrite_model_fields, sse_event, usage_from_event_value,
-    validate_response, ProtocolTerminal,
+    response_in_progress_json, response_json, response_value_as_sse, rewrite_model_fields,
+    sse_event, usage_from_event_value, validate_response, ProtocolTerminal,
 };
 use super::sse::SseDecoder;
 use super::{MAX_RESPONSE_BYTES, MAX_SSE_FRAME_BYTES};
@@ -450,6 +453,7 @@ pub(super) fn chat_sse_to_responses(
     status: u16,
     content_type: Option<String>,
     started: Instant,
+    tools: ChatToolMap,
 ) -> Response {
     let response_id = format!("resp_{}", Uuid::new_v4().simple());
     let item_id = format!("msg_{}", Uuid::new_v4().simple());
@@ -496,6 +500,8 @@ pub(super) fn chat_sse_to_responses(
         public_model,
         text: String::new(),
         sequence_number: 3,
+        tool_calls: Vec::new(),
+        tools,
         idle_timeout,
         finished: false,
         recorder,
@@ -618,6 +624,12 @@ pub(super) fn chat_sse_to_responses(
     response
 }
 
+struct PartialToolCall {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
 pub(super) struct ChatSseState {
     upstream: Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
     decoder: SseDecoder,
@@ -631,6 +643,8 @@ pub(super) struct ChatSseState {
     public_model: String,
     text: String,
     sequence_number: u64,
+    tool_calls: Vec<PartialToolCall>,
+    tools: ChatToolMap,
     idle_timeout: Duration,
     finished: bool,
     recorder: Option<RequestRecorder>,
@@ -721,12 +735,15 @@ impl ChatSseState {
                 self.stream_error = error.clone();
                 continue;
             }
-            if value
+            if let Some(calls) = value
                 .pointer("/choices/0/delta/tool_calls")
+                .and_then(Value::as_array)
+            {
+                self.accumulate_tool_calls(calls)?;
+            }
+            if value
+                .pointer("/choices/0/delta/function_call")
                 .is_some_and(|value| !value.is_null())
-                || value
-                    .pointer("/choices/0/delta/function_call")
-                    .is_some_and(|value| !value.is_null())
             {
                 return Err("unsupported_chat_output");
             }
@@ -756,6 +773,43 @@ impl ChatSseState {
             self.text.push_str(delta);
             self.pending.push_back(sse_event("response.output_text.delta", json!({"type":"response.output_text.delta","sequence_number":self.sequence_number,"response_id":self.response_id,"item_id":self.item_id,"output_index":0,"content_index":0,"delta":delta})));
             self.sequence_number += 1;
+        }
+        Ok(())
+    }
+
+    fn accumulate_tool_calls(&mut self, calls: &[Value]) -> Result<(), &'static str> {
+        for call in calls {
+            let index = call.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+            if self.tool_calls.len() <= index {
+                self.tool_calls.resize_with(index + 1, || PartialToolCall {
+                    id: String::new(),
+                    name: String::new(),
+                    arguments: String::new(),
+                });
+            }
+            let partial = &mut self.tool_calls[index];
+            if let Some(id) = call.get("id").and_then(Value::as_str) {
+                if !id.is_empty() {
+                    partial.id = id.to_string();
+                }
+            }
+            if let Some(name) = call.pointer("/function/name").and_then(Value::as_str) {
+                partial.name.push_str(name);
+            }
+            if let Some(arguments) = call.pointer("/function/arguments") {
+                let arguments = match arguments {
+                    Value::String(text) => text.clone(),
+                    other if partial.arguments.is_empty() => other.to_string(),
+                    _ => String::new(),
+                };
+                if arguments.is_empty() {
+                    continue;
+                }
+                if partial.arguments.len().saturating_add(arguments.len()) > MAX_RESPONSE_BYTES {
+                    return Err("upstream_response_too_large");
+                }
+                partial.arguments.push_str(&arguments);
+            }
         }
         Ok(())
     }
@@ -802,6 +856,10 @@ impl ChatSseState {
             }),
         ));
         self.sequence_number += 1;
+        if self.tool_calls.is_empty() && looks_like_unstructured_tool_text(&self.text) {
+            self.protocol_terminal = Some(ProtocolTerminal::Failed);
+            self.stream_error = serde_json::json!({"code": "chat_tool_call_not_structured"});
+        }
         let terminal = self.protocol_terminal.unwrap();
         let mut response = response_json(
             &self.response_id,
@@ -809,6 +867,37 @@ impl ChatSseState {
             &self.public_model,
             &self.text,
         );
+        if !self.tool_calls.is_empty() {
+            let mut output = response["output"].as_array().cloned().unwrap_or_default();
+            let calls = self
+                .tool_calls
+                .iter()
+                .enumerate()
+                .filter_map(|(offset, partial)| {
+                    let call = serde_json::json!({
+                        "id": if partial.id.is_empty() { format!("call_{offset}") } else { partial.id.clone() },
+                        "type": "function",
+                        "function": {"name": partial.name, "arguments": partial.arguments}
+                    });
+                    response_tool_call(&call, &self.tools).ok()
+                })
+                .collect::<Vec<_>>();
+            for item in calls {
+                let output_index = output.len();
+                self.pending.push_back(sse_event(
+                    "response.output_item.done",
+                    serde_json::json!({
+                        "type": "response.output_item.done",
+                        "sequence_number": self.sequence_number,
+                        "output_index": output_index,
+                        "item": item.clone()
+                    }),
+                ));
+                self.sequence_number += 1;
+                output.push(item);
+            }
+            response["output"] = serde_json::Value::Array(output);
+        }
         response["status"] = json!(terminal.status());
         response["usage"] = self.raw_usage.clone();
         if terminal == ProtocolTerminal::Failed {

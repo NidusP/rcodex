@@ -53,11 +53,17 @@ fn model_window_overrides_reject_zero_million_and_compact_above_window() {
         default_reasoning_level: None,
     };
     assert!(validate_model(&valid).is_ok());
+    let million = ManagedModelSelectionInput {
+        context_window: Some(1_000_000),
+        auto_compact_token_limit: Some(950_000),
+        ..valid.clone()
+    };
+    assert!(validate_model(&million).is_ok());
     for (context_window, auto_compact_token_limit) in [
         (Some(0), None),
-        (Some(1_000_000), None),
+        (Some(1_000_001), None),
         (None, Some(0)),
-        (None, Some(1_000_000)),
+        (None, Some(1_000_001)),
         (Some(100_000), Some(100_001)),
     ] {
         let model = ManagedModelSelectionInput {
@@ -171,9 +177,9 @@ fn create_preset_rejects_invalid_window_overrides() {
     );
     for (context_window, auto_compact_token_limit) in [
         (Some(0), None),
-        (Some(1_000_000), None),
+        (Some(1_000_001), None),
         (None, Some(0)),
-        (None, Some(1_000_000)),
+        (None, Some(1_000_001)),
         (Some(100_000), Some(100_001)),
     ] {
         assert_eq!(
@@ -239,7 +245,34 @@ fn initial_workspace_seed_is_idempotent_and_preserves_configured_workspace() {
     assert_eq!(after_repeat[0].launch_preset_id, configured.id);
     assert_eq!(after_repeat[0].state, "ready");
     assert_eq!(after_repeat[0].api_key_provider_ids, vec!["relay"]);
+
     assert_eq!(after_repeat[0].models[0].public_model_id, "deepseek-chat");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn unconfirmed_provider_cannot_join_workspace() {
+    let database = Database::in_memory();
+    seed_provider(&database, "relay", "relay-r1", "responses");
+    database
+        .connection()
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE provider_connectivity_reports SET wire_api=NULL WHERE provider_id='relay'",
+            [],
+        )
+        .unwrap();
+    let root = std::env::temp_dir().join(format!("rcodex-unconfirmed-{}", Uuid::new_v4()));
+    let store = ManagedLaunchStore::for_test(
+        database,
+        root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    let error = store
+        .create_preset(single_model_preset("relay", "deepseek-chat", None))
+        .unwrap_err();
+    assert_eq!(error, "protocol_unconfirmed");
     let _ = std::fs::remove_dir_all(root);
 }
 

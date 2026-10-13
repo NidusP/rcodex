@@ -20,6 +20,7 @@ use serde_json::{json, Map, Value};
 use tokio::time::timeout;
 use uuid::Uuid;
 
+use super::chat_bridge::response_request_to_chat;
 use super::diagnostics::{
     record_request_best_effort, request_event, request_metadata, RequestRecorder,
 };
@@ -33,8 +34,8 @@ use super::helpers::{
     upstream_request_url,
 };
 use super::protocol::{
-    is_event_stream_content_type, request_contains_compaction_trigger, response_request_to_chat,
-    sse_event, usage_from_event_value,
+    is_event_stream_content_type, request_contains_compaction_trigger, sse_event,
+    usage_from_event_value,
 };
 use super::runtime_types::ProviderUpstreamRuntime;
 use super::MAX_RESPONSE_BYTES;

@@ -259,6 +259,8 @@ pub struct ProviderConnectivityReport {
 pub struct ProbeSnapshot {
     pub status: ConnectivityStatus,
     pub wire_api: Option<String>,
+    /// Prefix that answered the text probe. Forwarding stores this as base_url.
+    pub confirmed_base_url: Option<String>,
     pub model: Option<String>,
     pub models: Vec<ProviderModelOption>,
     pub models_check: CheckStatus,

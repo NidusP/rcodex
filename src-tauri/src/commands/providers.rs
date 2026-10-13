@@ -150,6 +150,9 @@ pub async fn create_api_key_provider(
         let api_key = secrets::validate_api_key(input.api_key.clone())?;
         match tickets.take_matching(&ticket_id, &base_url, api_key.expose()) {
             TicketMatch::Matched(execution) => {
+                if let Some(base_url) = execution.snapshot.confirmed_base_url.clone() {
+                    input.base_url = base_url;
+                }
                 if let Some(mode) = execution
                     .snapshot
                     .wire_api

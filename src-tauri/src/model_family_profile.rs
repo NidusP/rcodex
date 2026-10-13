@@ -19,8 +19,12 @@ use crate::routing::{
 pub const GROK_CONTEXT_WINDOW: u64 = 500_000;
 /// Default compact threshold: 95% of [`GROK_CONTEXT_WINDOW`].
 pub const GROK_AUTO_COMPACT_TOKEN_LIMIT: u64 = 475_000;
-/// Inclusive client maximum. `1_000_000` is reserved for a future probed 1000k window.
-pub const MAX_CLIENT_CONTEXT_WINDOW: u64 = 999_999;
+/// Inclusive client maximum. Official 1M windows may be stored; larger numbers stay rejected.
+pub const MAX_CLIENT_CONTEXT_WINDOW: u64 = 1_000_000;
+/// Published 1,000,000-token context used by current DeepSeek, GLM 5.2/5.3, and Qwen 3.7/3.8 cards.
+pub const OFFICIAL_MILLION_CONTEXT_WINDOW: u64 = 1_000_000;
+/// 95% of the official 1M window, matching the family compact rule.
+pub const OFFICIAL_MILLION_AUTO_COMPACT_TOKEN_LIMIT: u64 = 950_000;
 
 /// Semantic overlay applied on top of a cloned Codex catalog skeleton.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,7 +47,7 @@ pub struct ModelFamilyProfile {
     pub auto_compact_token_limit: Option<u64>,
     /// Responses image-input for this family. Grok 4.x is true after a 2026-09-21
     /// 3rxai probe using the standard Responses `input_image.image_url` data URL.
-    /// Chat Completions routes still force this off at launch.
+    /// Chat Completions uses the same flag and converts input_image to image_url.
     pub supports_images: bool,
 }
 
@@ -69,11 +73,13 @@ pub fn resolve_model_family(upstream_model_id: &str) -> ModelFamilyProfile {
         return grok_profile(&normalized);
     }
     if normalized.contains("deepseek") {
-        return named_profile(
-            "deepseek",
-            vec!["high".to_string()],
-            Some("high".to_string()),
-        );
+        return deepseek_profile(&normalized);
+    }
+    if normalized.contains("glm") {
+        return glm_profile(&normalized);
+    }
+    if normalized.contains("qwen") {
+        return qwen_profile(&normalized);
     }
     if normalized.contains("claude") || normalized.contains("anthropic") {
         return fallback_reasoning_profile("Claude");
@@ -140,6 +146,166 @@ fn grok_profile(normalized: &str) -> ModelFamilyProfile {
     // Grok 4.x understands images on official xAI and on 3rxai Responses when
     // the body is the Codex/OpenAI `input_image` + string `image_url` form.
     profile.supports_images = grok_version_is_4x(normalized);
+    profile
+}
+
+fn deepseek_profile(normalized: &str) -> ModelFamilyProfile {
+    // DeepSeek API docs, retrieved 2026-10-13:
+    // https://api-docs.deepseek.com/guides/thinking_mode
+    // https://api-docs.deepseek.com/quick_start/pricing
+    // Responses reasoning.effort accepts none, low, high, and max. Default high.
+    // minimal maps to low, medium and xhigh map to high, and ultra maps to max.
+    // Those are aliases, not extra catalog levels.
+    // The pricing table gives both current models a 1M context. Vision is listed
+    // for deepseek-flash only. Legacy flash names are still served by Flash.
+    // Retired ids such as deepseek-chat are not on that card, so they keep the
+    // effort ladder and do not inherit the 1M window.
+    let mut profile = named_profile(
+        "DeepSeek",
+        vec![
+            "none".to_string(),
+            "low".to_string(),
+            "high".to_string(),
+            "max".to_string(),
+        ],
+        Some("high".to_string()),
+    );
+    if deepseek_publishes_million_context(normalized) {
+        profile = with_official_window(profile, OFFICIAL_MILLION_CONTEXT_WINDOW);
+    }
+    profile.supports_images = deepseek_publishes_vision(normalized);
+    profile
+}
+
+fn deepseek_publishes_million_context(normalized: &str) -> bool {
+    normalized.contains("flash") || normalized.contains("v4-pro") || normalized.contains("v4.1")
+}
+
+fn deepseek_publishes_vision(normalized: &str) -> bool {
+    !normalized.contains("v4-pro")
+        && (normalized.contains("flash") || normalized.contains("vision"))
+}
+
+fn glm_profile(normalized: &str) -> ModelFamilyProfile {
+    // Z.AI docs, retrieved 2026-10-13:
+    // https://docs.z.ai/guides/llm/glm-5.3.md
+    // https://docs.z.ai/guides/llm/glm-5.2.md
+    // https://docs.z.ai/guides/vlm/glm-5.3-flash.md
+    // https://docs.z.ai/guides/overview/concept-param.md
+    // GLM-5.3 and GLM-5.3-Flash only accept low, high, and max, default max.
+    // Thinking cannot be turned off. GLM-5.3 is text; Flash accepts images.
+    // Both publish a 1M context. GLM-5.2 also publishes 1M and is text-only.
+    // Its extra names collapse: none/minimal skip thinking, low/medium become
+    // high, and xhigh becomes max. The catalog keeps only the distinct names.
+    // reasoning_effort is documented from GLM-5.2 upward, so older GLM ids do
+    // not get a ladder or an invented window.
+    let five_three = normalized.contains("5.3") || normalized.contains("5-3");
+    let five_two = normalized.contains("5.2") || normalized.contains("5-2");
+    let flash = normalized.contains("flash");
+    let mut profile = if five_three {
+        named_profile(
+            "GLM",
+            vec!["low".to_string(), "high".to_string(), "max".to_string()],
+            Some("max".to_string()),
+        )
+    } else if five_two {
+        named_profile(
+            "GLM",
+            vec!["none".to_string(), "high".to_string(), "max".to_string()],
+            Some("max".to_string()),
+        )
+    } else {
+        named_profile("GLM", Vec::new(), None)
+    };
+    if five_three || five_two {
+        profile = with_official_window(profile, OFFICIAL_MILLION_CONTEXT_WINDOW);
+    }
+    profile.supports_images = (five_three && flash)
+        || normalized.contains("4.6v")
+        || normalized.contains("4.5v")
+        || normalized.contains("-vl")
+        || normalized.contains("glm-ocr");
+    profile
+}
+
+fn qwen_profile(normalized: &str) -> ModelFamilyProfile {
+    // Alibaba Model Studio, retrieved 2026-10-13:
+    // text-generation-model and vision-model were updated 2026-10-11;
+    // deep-thinking describes enable_thinking, not a Codex effort enum.
+    // Omni mentions reasoning_effort without listing the allowed names.
+    // An empty ladder means the catalog must not invent low/medium/high/xhigh.
+    // qwen-long publishes 10M, which is above the client maximum, so it stays unset.
+    let mut profile = named_profile("Qwen", Vec::new(), None);
+    if let Some(context_window) = qwen_official_context_window(normalized) {
+        profile = with_official_window(profile, context_window);
+    }
+    profile.supports_images = qwen_official_vision(normalized);
+    profile
+}
+
+fn qwen_official_context_window(normalized: &str) -> Option<u64> {
+    if normalized.contains("qwen-long") {
+        return None;
+    }
+    if normalized.contains("3.5-397b")
+        || normalized.contains("3.5-122b")
+        || normalized.contains("3.5-27b")
+        || normalized.contains("3.5-35b")
+        || normalized.contains("3.5-omni")
+        || normalized.contains("qwen3-4b")
+        || normalized.contains("qwen3-1.7b")
+        || normalized.contains("qwen3-0.6b")
+    {
+        return Some(256_000);
+    }
+    if normalized.contains("qwen3.8-max")
+        || normalized.contains("qwen3.8-flash")
+        || normalized.contains("qwen3.8-omni")
+        || normalized.contains("qwen3.7-plus")
+        || normalized.contains("qwen3.7-flash")
+        || normalized.contains("qwen3.7-max")
+        || normalized.contains("qwen3.6-plus")
+        || normalized.contains("qwen3.6-flash")
+        || normalized.contains("qwen3.5-plus")
+        || normalized.contains("qwen3.5-flash")
+        || normalized.contains("qwen3-coder")
+        || normalized.contains("qwen2.5-vl")
+    {
+        return Some(OFFICIAL_MILLION_CONTEXT_WINDOW);
+    }
+    None
+}
+
+fn qwen_official_vision(normalized: &str) -> bool {
+    // The text-generation API guide says qwen3.7-max and the 2026-05-20
+    // snapshot are text-only. The 2026-06-08 snapshot is multimodal.
+    // Preview and 2026-05-17 are not listed as image models.
+    if normalized.contains("qwen3.7-max-2026-05-20")
+        || normalized.contains("qwen3.7-max-2026-05-17")
+        || normalized.contains("qwen3.7-max-preview")
+        || normalized.ends_with("qwen3.7-max")
+    {
+        return false;
+    }
+    normalized.contains("qwen3.7-max-2026-06-08")
+        || normalized.contains("qwen3.8-max")
+        || normalized.contains("qwen3.8-flash")
+        || normalized.contains("qwen3.8-omni")
+        || normalized.contains("qwen3.7-plus")
+        || normalized.contains("qwen3.7-flash")
+        || normalized.contains("qwen3.6-plus")
+        || normalized.contains("qwen3.6-flash")
+        || normalized.contains("omni")
+        || normalized.contains("qwen2.5-vl")
+        || normalized.contains("-vl")
+}
+
+fn with_official_window(
+    mut profile: ModelFamilyProfile,
+    context_window: u64,
+) -> ModelFamilyProfile {
+    profile.context_window = Some(context_window);
+    profile.auto_compact_token_limit = Some(default_auto_compact_token_limit(context_window));
     profile
 }
 
@@ -234,8 +400,7 @@ pub fn allowed_reasoning_levels_for_model(upstream_model_id: &str) -> Vec<String
 
 /// Responses image input for this route. Chat adapters stay text-only.
 pub fn family_image_support_for_route(route: &ModelRoute) -> bool {
-    route.wire_api == WireApi::Responses
-        && !is_internal_codex_model_id(&route.upstream_model_id)
+    !is_internal_codex_model_id(&route.upstream_model_id)
         && !is_internal_codex_model_id(&route.public_model_id)
         && resolve_model_family(&route.upstream_model_id).supports_images
 }
@@ -298,6 +463,7 @@ fn reasoning_description(effort: &str) -> String {
         "medium" => "Balances speed and reasoning depth for everyday tasks".to_string(),
         "high" => "Greater reasoning depth for complex problems".to_string(),
         "xhigh" => "Extra high reasoning depth for complex problems".to_string(),
+        "max" => "Deepest reasoning effort published for this model".to_string(),
         other => format!("{other} reasoning"),
     }
 }
@@ -307,16 +473,11 @@ fn advertised_reasoning(
     profile: &ModelFamilyProfile,
 ) -> Option<(String, Vec<String>)> {
     // A persisted route may predate this overlay and still contain GPT-only
-    // values. Known families are filtered through their own ladder so an old
-    // `max`/`ultra` snapshot cannot leak back into the generated catalog.
+    // values. A family with no published effort enum advertises nothing, so a
+    // saved generic ladder cannot leak back. Known ladders are filtered so an
+    // old max or ultra snapshot cannot leak into another family.
     let levels = if profile.reasoning_levels.is_empty() {
-        route
-            .capabilities
-            .reasoning_levels
-            .iter()
-            .filter(|level| *level != "max" && *level != "ultra")
-            .cloned()
-            .collect::<Vec<_>>()
+        Vec::new()
     } else if route.capabilities.reasoning_levels.is_empty() {
         profile.reasoning_levels.clone()
     } else {
@@ -820,9 +981,85 @@ mod tests {
         let responses = sample_route("grok-4.6", "3r-grok", WireApi::Responses);
         assert!(family_image_support_for_route(&responses));
         let chat = sample_route("grok-4.6", "3r-grok", WireApi::ChatCompletions);
-        assert!(!family_image_support_for_route(&chat));
+        assert!(family_image_support_for_route(&chat));
         assert!(resolve_model_family("grok-4.5").supports_images);
         assert!(!resolve_model_family("grok-3-mini").supports_images);
         assert!(!resolve_model_family("deepseek-chat").supports_images);
+    }
+
+    #[test]
+    fn official_family_cards_do_not_use_the_generic_ladder() {
+        let flash = resolve_model_family("deepseek-flash");
+        assert_eq!(flash.family_name, "DeepSeek");
+        assert_eq!(flash.reasoning_levels, ["none", "low", "high", "max"]);
+        assert_eq!(flash.default_reasoning_level.as_deref(), Some("high"));
+        assert_eq!(flash.context_window, Some(OFFICIAL_MILLION_CONTEXT_WINDOW));
+        assert_eq!(
+            flash.auto_compact_token_limit,
+            Some(OFFICIAL_MILLION_AUTO_COMPACT_TOKEN_LIMIT)
+        );
+        assert!(flash.supports_images);
+
+        let pro = resolve_model_family("deepseek-v4-pro");
+        assert_eq!(pro.context_window, Some(OFFICIAL_MILLION_CONTEXT_WINDOW));
+        assert!(!pro.supports_images);
+        let retired = resolve_model_family("deepseek-chat");
+        assert_eq!(retired.reasoning_levels, flash.reasoning_levels);
+        assert_eq!(retired.context_window, None);
+        assert!(!retired.supports_images);
+
+        let glm53 = resolve_model_family("glm-5.3");
+        assert_eq!(glm53.reasoning_levels, ["low", "high", "max"]);
+        assert_eq!(glm53.default_reasoning_level.as_deref(), Some("max"));
+        assert_eq!(glm53.context_window, Some(OFFICIAL_MILLION_CONTEXT_WINDOW));
+        assert!(!glm53.supports_images);
+        let glm_flash = resolve_model_family("glm-5.3-flash");
+        assert_eq!(glm_flash.reasoning_levels, glm53.reasoning_levels);
+        assert!(glm_flash.supports_images);
+        let glm52 = resolve_model_family("glm-5.2");
+        assert_eq!(glm52.reasoning_levels, ["none", "high", "max"]);
+        assert_eq!(glm52.default_reasoning_level.as_deref(), Some("max"));
+        assert!(!glm52.supports_images);
+        let glm46 = resolve_model_family("glm-4.6");
+        assert!(glm46.reasoning_levels.is_empty());
+        assert_eq!(glm46.context_window, None);
+        assert!(!glm46.supports_images);
+
+        let qwen = resolve_model_family("qwen3.8-max");
+        assert_eq!(qwen.family_name, "Qwen");
+        assert!(qwen.reasoning_levels.is_empty());
+        assert_eq!(qwen.context_window, Some(OFFICIAL_MILLION_CONTEXT_WINDOW));
+        assert!(qwen.supports_images);
+        assert!(!resolve_model_family("qwen3.7-max").supports_images);
+        assert!(resolve_model_family("qwen3.7-max-2026-06-08").supports_images);
+        assert!(!resolve_model_family("qwen3.7-max-2026-05-20").supports_images);
+        assert_eq!(
+            resolve_model_family("qwen3.5-27b").context_window,
+            Some(256_000)
+        );
+        assert_eq!(resolve_model_family("qwen-long").context_window, None);
+        assert_eq!(
+            resolve_model_family("claude-sonnet").reasoning_levels,
+            ["low", "medium", "high", "xhigh"]
+        );
+    }
+
+    #[test]
+    fn qwen_overlay_drops_a_stale_generic_ladder() {
+        let mut route = sample_route("qwen3.8-max", "3r-qwen", WireApi::Responses);
+        route.capabilities.reasoning_levels = ["low", "medium", "high", "xhigh"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let mut entry = serde_json::json!({
+            "default_reasoning_level": "xhigh",
+            "supported_reasoning_levels": [{"effort": "xhigh"}]
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        overlay_third_party_catalog_entry(&mut entry, &route, false);
+        assert!(!entry.contains_key("default_reasoning_level"));
+        assert_eq!(entry["supported_reasoning_levels"], serde_json::json!([]));
     }
 }

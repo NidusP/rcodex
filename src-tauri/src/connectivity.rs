@@ -28,18 +28,25 @@ pub async fn test_provider(
     let execution =
         crate::channel_probe::execute(&client, &upstream.base_url, upstream.api_key.expose()).await;
     let mut revision_id = upstream.provider_revision_id.clone();
-    if let Some(desired) = crate::channel_probe::desired_transport(
-        upstream.transport_mode,
-        execution.snapshot.wire_api.as_deref(),
-    ) {
-        if mutable {
+    if let Some(transport_mode) = execution
+        .snapshot
+        .wire_api
+        .as_deref()
+        .and_then(crate::channel_probe::transport_for_wire)
+    {
+        let base_url = execution
+            .snapshot
+            .confirmed_base_url
+            .clone()
+            .unwrap_or_else(|| upstream.base_url.clone());
+        if mutable && (transport_mode != upstream.transport_mode || base_url != upstream.base_url) {
             let _ = provider_store.update(
                 provider_id,
                 crate::providers::UpdateProviderInput {
                     name: upstream.provider_name.clone(),
-                    base_url: upstream.base_url.clone(),
+                    base_url,
                     api_key: None,
-                    transport_mode: desired,
+                    transport_mode,
                     gateway_timeout_settings: None,
                 },
             );
@@ -208,7 +215,8 @@ mod tests {
 
         assert!(matches!(report.status, ConnectivityStatus::Unauthorized));
         assert!(matches!(report.text_check, CheckStatus::NotRun));
-        assert_eq!(diagnostics.recent(Some("provider-test")).unwrap().len(), 1);
+        assert!(report.wire_api.is_none());
+        assert_eq!(diagnostics.recent(Some("provider-test")).unwrap().len(), 2);
     }
 
     async fn models_response() -> Json<Value> {

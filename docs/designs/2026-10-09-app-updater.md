@@ -46,6 +46,8 @@ pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action
 
 2026-10-11：v0.1.1 用来验证已安装的 0.1.0 能否在线更新。版本写在 package.json、src-tauri/Cargo.toml、src-tauri/tauri.conf.json 和 website/package.json。打 tag 后 CI 仍出草稿 Release；必须人工发布，0.1.0 才会从 /releases/latest 看到 0.1.1。私钥不变。客户端先请求 latest-darwin.json（当前没有这份附件），再回落到 latest.json。
 
+2026-10-14：v0.1.2 带上 Chat 工具转换、空前缀不再自动补 /v1，以及 DeepSeek、GLM、Qwen 的官方档位。版本仍写在上述四个文件。tag v0.1.2 出草稿 Release，人工发布后已安装的 0.1.1 才会看到更新。私钥不变。
+
 ## 验收
 
 - `pnpm run check` 通过。

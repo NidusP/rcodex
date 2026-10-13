@@ -395,7 +395,7 @@ pub(super) fn validate_name(value: String) -> Result<String, String> {
     Ok(value.to_string())
 }
 /// Canonical API prefix shared by channel probes and both Gateway sources.
-/// A nonempty custom prefix is authoritative; never retry inference elsewhere.
+/// An empty path stays empty. The probe ladder, not this function, decides whether to append /v1.
 pub(crate) fn normalize_api_base_url(value: &str) -> Result<String, String> {
     let mut url = Url::parse(value.trim()).map_err(|_| "upstream_base_url_invalid".to_string())?;
     if !matches!(url.scheme(), "http" | "https")
@@ -408,7 +408,22 @@ pub(crate) fn normalize_api_base_url(value: &str) -> Result<String, String> {
         return Err("upstream_base_url_invalid".to_string());
     }
     let path = url.path().trim_end_matches('/').to_string();
-    url.set_path(if path.is_empty() { "/v1" } else { &path });
+    if path == "/responses"
+        || path.ends_with("/responses")
+        || path == "/chat/completions"
+        || path.ends_with("/chat/completions")
+    {
+        return Err("upstream_base_url_invalid".to_string());
+    }
+    if path.is_empty() {
+        url.set_path("");
+        let mut text = url.to_string();
+        if text.ends_with('/') {
+            text.pop();
+        }
+        return Ok(text);
+    }
+    url.set_path(&path);
     Ok(url.to_string())
 }
 
@@ -424,6 +439,12 @@ pub(crate) fn validate_base_url(value: String) -> Result<String, String> {
     );
     if url.scheme() != "https" && !(url.scheme() == "http" && loopback) {
         return Err("Provider 必须使用 HTTPS；仅回环地址可使用 HTTP。".to_string());
+    }
+    let path = url.path().trim_end_matches('/');
+    if path.ends_with("/responses") || path.ends_with("/chat/completions") {
+        return Err(
+            "Base URL 应是接口前缀，不要包含 /responses 或 /chat/completions。".to_string(),
+        );
     }
     normalize_api_base_url(url.as_str())
 }

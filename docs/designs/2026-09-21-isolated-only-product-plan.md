@@ -54,7 +54,8 @@ R Codex 只管理自己的一套 Codex 环境。用户配置多个模型渠道�
 ## Contract
 
 - 本地 Browser/Computer Use 是一个例外 MCP：只允许生成固定的、同一隔离 `CODEX_HOME` 内的 `node_repl`/`cua_repl` 服务环境，并把 `SKY_CUA_SERVICE_PATH` 和 `CODEX_HOME` 指向隔离目录；`notify` 也必须指向隔离 `SkyComputerUseClient`。不导入默认 `[mcp_servers]`，不启用 `openaiDeveloperDocs` 或任何远程/用户自定义 MCP。若隔离 helper 缺失，启动前从已解析的桌面应用包（`ChatGPT.app` / `Codex.app`）把签名 `Codex Computer Use.app` 复制到隔离 `computer-use/`；复制源不得为 `~/.codex/computer-use`。已有隔离 helper 不覆盖。复制后仍找不到隔离 helper 则返回明确错误，不回退默认目录。
-- `launch_preset_model_selections` 新增可空 `reasoning_levels_json` 与 `default_reasoning_level`。空值沿用模型族默认；非空值仅可用于 Responses 路由，必须去重、是已知 effort 标签，且默认值必须属于所选数组。Chat Completions 仍写空数组，因为适配器不转发 `reasoning`。
+- `launch_preset_model_selections` 的 `reasoning_levels_json` 与 `default_reasoning_level` 可空。空值沿用模型族默认，Responses 和 Chat 都写入目录。用户保存的非空档必须去重、是已知 effort 标签，且默认值属于所选数组。Chat 转发把 `reasoning.effort` 写成 `reasoning_effort`；`none` 写成 `thinking.type = disabled`。
+- Codex 桌面模型控件的默认允许名单是 low、medium、high、xhigh、ultra、persistent，会把目录里的 none 和 max 藏起来。隔离 App 每次启动只在已有 `.codex-global-state.json` 的 `enabled-reasoning-efforts` 中补上 none、minimal、max，不新建该文件，也不删除用户已经打开的档。
 - 写入只发生在现有工作区保存事务；启动时把持久选择解析进不可变 RouteSet，再由目录生成器物化。Provider 发现 `/v1/models` 不获得写入权，也不推断档位。
 
 ## Acceptance And Verification

@@ -848,16 +848,16 @@ fn deleting_provider_keeps_the_current_key_when_sqlite_rejects_tombstone() {
 #[test]
 fn api_base_url_normalizes_root_without_changing_custom_prefixes() {
     for (input, expected) in [
-        ("https://api.example", "https://api.example/v1"),
-        (" https://api.example/ ", "https://api.example/v1"),
+        ("https://api.example", "https://api.example"),
+        (" https://api.example/ ", "https://api.example"),
         ("https://api.example/v1/", "https://api.example/v1"),
         (
             "https://api.example/proxy/v1/",
             "https://api.example/proxy/v1",
         ),
         ("https://api.example/custom/", "https://api.example/custom"),
-        ("http://127.0.0.1:8080", "http://127.0.0.1:8080/v1"),
-        ("http://[::1]:8080/", "http://[::1]:8080/v1"),
+        ("http://127.0.0.1:8080", "http://127.0.0.1:8080"),
+        ("http://[::1]:8080/", "http://[::1]:8080"),
     ] {
         let normalized = normalize_api_base_url(input).unwrap();
         assert_eq!(normalized, expected);
@@ -869,6 +869,8 @@ fn api_base_url_normalizes_root_without_changing_custom_prefixes() {
         "https://api.example?key=secret",
         "https://api.example/#fragment",
         "https://user:secret@api.example",
+        "https://api.example/v1/responses",
+        "https://api.example/chat/completions",
     ] {
         assert_eq!(
             normalize_api_base_url(input).unwrap_err(),

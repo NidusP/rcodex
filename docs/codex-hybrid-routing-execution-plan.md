@@ -2,6 +2,38 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-14：发布 0.1.2
+
+- 变更目的：把当前工作区的 Chat 工具转换、空前缀探针和厂商推理档发给已安装的 0.1.1。
+- 合同：package.json、Cargo.toml、tauri.conf.json、website/package.json 版本为 0.1.2。空 Base URL 不再自动补 /v1；探针自己决定是否再试 /v1。打 tag v0.1.2 触发草稿 Release，人工发布后 /releases/latest 指向 0.1.2。签名私钥不变。
+- 验证：cargo fmt --check 通过。cargo test --lib 为 348 passed。9 个原先因空前缀打到 /v1/responses 而 404 的夹具已改到 /responses 或 /chat/completions。本机不打包。推送 tag v0.1.2 后由 CI 生成草稿 Release，需人工发布。
+- 回滚：不要把 0.1.2 发成 latest；保留 0.1.1 为 latest 即可。已安装 0.1.2 的机器只能手动重装 0.1.1。
+
+
+### 2026-10-13：Chat 按三方 Responses 标准转换工具
+
+- 变更目的：Chat Completions 不再只转发纯文本。函数工具、apply_patch 式 custom 工具和 namespace 里的 function 子工具可以往返。
+- 合同：web_search 与 tool_search 删除；点名它们则本机 unsupported_tools。previous_response_id 仍拒绝。正文里的 DSML 且没有 tool_calls 时失败，不执行。看图按模型族合同，Chat 不再因为协议被强制成纯文本。supports_tools 在下次启动时写入。Responses 的 namespace 原样转发和 previous_response_id 原样转发不变。
+- 修改文件：managed_gateway/chat_bridge.rs、forward.rs、stream.rs、errors.rs，managed_launch/prepare.rs，model_family_profile.rs，tests_forward.rs，docs/designs/2026-10-12-chat-completions-function-tools.md。
+- 验证：cargo fmt --check 通过。chat_adapter_accepts、chat_adapter_maps_function_custom_and_namespace_tools、chat_completion_tool_call_round_trip_and_dsml_failure、grok_4x 看图合同、压缩历史转 Chat 通过。未打真实 Chat 上游。
+- 回滚：Chat 路由 supports_tools 改回 false，chat_bridge 恢复只复制文本。
+
+### 2026-10-13：三方 Responses 改写收成管道
+
+- 变更目的：非 GPT 的 Responses 改写不再散落在 http 的两处调用里，也和 Chat 文本转换分开。
+- 合同：prepare_responses_relay 一次完成删可选工具、删 metadata、能力预检和 agent_message 归一。发给上游的 JSON 与整理前一致。GPT 不进入删改。Chat Completions 仍只走 chat_bridge 的文本转换；函数工具和 apply_patch 转换留在该文件，这次不实现。换渠道的 previous_response_id 本机失败和 namespace 摊平不做。
+- 修改文件：managed_gateway 的 responses_compat.rs、chat_bridge.rs、protocol.rs、http.rs、forward.rs、stream.rs、compaction.rs，以及对应测试。设计见 docs/designs/2026-10-13-responses-third-party-contract.md。
+- 验证：cargo fmt 通过。responses_relay_pipeline_keeps_current_non_gpt_body、relay_compat、搜索工具删除和 agent_message 形状测试通过。两条真实转发测试因当前工作区不再给空 Base URL 自动加 /v1，打到 /responses 得到 404，与这次管道无关。
+- 回滚：把准备逻辑移回 http 的两处调用，并把 chat_bridge 的函数移回 protocol.rs。
+
+### 2026-10-13：按厂商卡片补 DeepSeek、GLM、Qwen 模型族
+
+- 变更目的：常见三方模型不再套未知族的 low / medium / high / xhigh。档位、窗口和看图以厂商公开卡片为准，不探针，也不读中继的模型列表。
+- 合同：DeepSeek 当前模型用 none / low / high / max，默认 high；flash 可看图，v4-pro 不可，二者窗口 1,000,000。不在价目卡上的旧名不写窗口。GLM-5.3 与 5.3-Flash 用 low / high / max，默认 max，窗口 1,000,000，只有 Flash 看图。GLM-5.2 只保留折完后仍有区别的 none / high / max，默认 max。更早的 GLM 不写档位和窗口。Qwen 页面没有公布 effort 名单，目录留空；卡片上的 1,000,000 或 256,000 才写入。qwen-long 的 10,000,000 超过客户端上限，不写。客户端窗口上限从 999,999 放宽到正好 1,000,000。
+- 修改文件：src-tauri/src/model_family_profile.rs、managed_launch/prepare.rs、managed_launch/tests_workspace.rs、src/app-model.ts、src/codex-control.ts、docs/third-party-model-reasoning-levels.md、docs/designs/2026-10-13-responses-third-party-contract.md。
+- 验证：cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check 通过。cargo test --manifest-path src-tauri/Cargo.toml --lib -- model_family_profile:: 为 18 passed。窗口 1,000,000 可保存、1,000,001 被拒绝的两条测试通过。未启动 Tauri，未打真实 Provider。
+- 回滚：恢复未知族兜底，并把窗口上限改回拒绝 1,000,000。
+
 ### 2026-10-11：发布 0.1.1 以验证在线更新
 
 - 变更目的：已安装的 0.1.0 需要一个更高版本的 GitHub Release 才会提示更新。

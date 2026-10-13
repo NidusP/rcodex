@@ -572,12 +572,25 @@ export function useAppController() {
     };
   }
   async function saveWorkspace(preset: LaunchPresetSummary, changes: Parameters<typeof workspaceInput>[1], success: string) {
+    const requested = changes ?? {};
+    const requestedIds = requested.providerIds ?? preset.providerIds;
+    const providerIds = requestedIds.filter((id) => providerProtocolConfirmed(id));
+    const droppedProvider = providerIds.length !== requestedIds.length;
+    const requestedModels = requested.models ?? preset.models;
+    const models = requestedModels.filter(
+      (model) => model.sourceKind !== "api_provider" || providerProtocolConfirmed(model.sourceId),
+    );
+    const nextChanges = { ...requested, providerIds, models };
     const key = `preset:${preset.id}`;
     beginPending(key);
     try {
-      await invokeControl("create_managed_launch_preset", { input: workspaceInput(preset, changes) });
+      await invokeControl("create_managed_launch_preset", { input: workspaceInput(preset, nextChanges) });
       await refresh();
-      showInfo(runningWorkspaceRestartNotice(instances, preset.id) ?? success);
+      showInfo(
+        droppedProvider
+          ? "协议未确认的渠道已移出隔离工作区。"
+          : (runningWorkspaceRestartNotice(instances, preset.id) ?? success),
+      );
     } catch (error) {
       showCommandError(error, "无法更新隔离工作区");
     } finally {
@@ -590,7 +603,15 @@ export function useAppController() {
       models: preset.models.filter((model) => model.sourceId !== providerId),
     }, "模型渠道已移出隔离工作区。");
   }
+  function providerProtocolConfirmed(providerId: string) {
+    const wireApi = connectivityByProvider[providerId]?.wireApi;
+    return wireApi === "responses" || wireApi === "chat_completions";
+  }
   function addProviderToWorkspace(preset: LaunchPresetSummary, providerId: string) {
+    if (!providerProtocolConfirmed(providerId)) {
+      showInfo("协议未确认，不能加入隔离工作区。");
+      return;
+    }
     if (!preset.providerIds.includes(providerId)) {
       void saveWorkspace(preset, { providerIds: [providerId, ...preset.providerIds] }, "模型渠道已加入隔离工作区。");
     }
@@ -613,6 +634,9 @@ export function useAppController() {
     }
     if (isInternalCodexModelId(upstreamModelId)) {
       return showInfo("这个模型是 Codex 系统角色，用于自动审核或子代理等特殊调用，不能作为普通模型加入工作区。");
+    }
+    if (!providerProtocolConfirmed(providerId)) {
+      return showInfo("协议未确认，不能把这个渠道的模型加入隔离工作区。");
     }
     const provider = providers.find((item) => item.id === providerId);
     const option = buildDiscoveredModelOptions([{ providerId, providerName: provider?.name ?? "模型渠道", models: selectableProviderModels(connectivityByProvider[providerId]?.models ?? []) }])

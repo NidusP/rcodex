@@ -190,7 +190,6 @@ export function AddChannelDialog({
           <TextInput
             label="Base URL"
             placeholder="https://api.openai.com/v1"
-            title="上游 API 的访问根地址。"
             disabled={locked}
             {...form.getInputProps("baseUrl")}
           />

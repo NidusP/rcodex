@@ -23,7 +23,7 @@ use crate::conversation_archive::RequestCapture;
 use crate::managed_codex_config::{INSTANCE_GATEWAY_HEADER, LEGACY_INSTANCE_GATEWAY_HEADER};
 use crate::routing::{
     is_ephemeral_family_alias, is_internal_codex_model_id, CompactMode, CompactionSupport,
-    RouteSource, WireApi,
+    RouteSource,
 };
 use crate::secrets::instance_gateway_key_matches;
 
@@ -32,10 +32,7 @@ use super::diagnostics::RequestRecorder;
 use super::errors::{api_error, not_found, reject_local};
 use super::forward::forward_provider;
 use super::helpers::{ephemeral_family_alias_route, gateway_trace};
-use super::protocol::{
-    filter_relay_incompatible_fields, filter_unsupported_optional_tools, needs_relay_compat,
-    normalize_routed_agent_messages, preflight_capabilities, request_contains_compaction_trigger,
-};
+use super::responses_compat::prepare_responses_relay;
 use super::runtime_types::{BindingRuntime, ManagedGatewayAppState};
 use super::{LOOPBACK_HOST, MAX_REQUEST_BYTES};
 
@@ -189,15 +186,9 @@ pub(super) async fn responses(
                 StatusCode::NOT_FOUND,
             );
         };
-        if needs_relay_compat(&route) {
-            filter_unsupported_optional_tools(&route, &mut request);
-            filter_relay_incompatible_fields(&mut request);
-        }
         let compact_mode =
             CompactMode::from_gateway_snapshot(&binding.route_set.gateway_service.config_snapshot);
-        if let Err(code) =
-            preflight_capabilities(&route, compact_mode, &Value::Object(request.clone()))
-        {
+        if let Err(code) = prepare_responses_relay(&route, compact_mode, &mut request) {
             return reject_local(
                 &recorder,
                 &binding.binding_id,
@@ -255,25 +246,6 @@ pub(super) async fn responses(
                         "provider_revision_mismatch",
                         StatusCode::SERVICE_UNAVAILABLE,
                     );
-                }
-                // agent_message is a Codex collaboration-private input item.
-                // Non-GPT OpenAI-compatible relays reject it before inference,
-                // so normalize only ordinary third-party turns. GPT-family
-                // Responses keep the body. Compaction owns its own input
-                // transformation and must remain fail-closed.
-                if needs_relay_compat(&route)
-                    && route.wire_api == WireApi::Responses
-                    && !request_contains_compaction_trigger(&Value::Object(request.clone()))
-                {
-                    if let Err(code) = normalize_routed_agent_messages(&mut request) {
-                        return reject_local(
-                            &recorder,
-                            &binding.binding_id,
-                            &public_model,
-                            code,
-                            StatusCode::BAD_REQUEST,
-                        );
-                    }
                 }
                 if summarize {
                     in_flight_guard =

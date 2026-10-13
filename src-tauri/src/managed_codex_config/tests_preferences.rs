@@ -276,6 +276,64 @@ fn managed_home_keeps_permission_selector_visible_without_creating_state() {
 }
 
 #[test]
+fn managed_home_adds_hidden_catalog_efforts_without_creating_state() {
+    let root = std::env::temp_dir().join(format!("3r-reasoning-allowlist-{}", Uuid::new_v4()));
+    fs::create_dir(&root).unwrap();
+    keep_catalog_reasoning_efforts_selectable(&root).unwrap();
+    assert!(!root.join(".codex-global-state.json").exists());
+
+    let state = serde_json::json!({
+        "selected-project": "kept",
+        "electron-persisted-atom-state": {
+            "enabled-reasoning-efforts": ["low", "high"],
+            "home-composer-mode-v1": "work"
+        }
+    });
+    fs::write(
+        root.join(".codex-global-state.json"),
+        serde_json::to_vec_pretty(&state).unwrap(),
+    )
+    .unwrap();
+    keep_catalog_reasoning_efforts_selectable(&root).unwrap();
+    let saved: JsonValue =
+        serde_json::from_slice(&fs::read(root.join(".codex-global-state.json")).unwrap()).unwrap();
+    assert_eq!(saved["selected-project"], "kept");
+    assert_eq!(
+        saved["electron-persisted-atom-state"]["home-composer-mode-v1"],
+        "work"
+    );
+    assert_eq!(
+        saved["electron-persisted-atom-state"]["enabled-reasoning-efforts"],
+        serde_json::json!(["low", "high", "none", "minimal", "max"])
+    );
+
+    let missing = serde_json::json!({"electron-persisted-atom-state": {}});
+    fs::write(
+        root.join(".codex-global-state.json"),
+        serde_json::to_vec_pretty(&missing).unwrap(),
+    )
+    .unwrap();
+    keep_catalog_reasoning_efforts_selectable(&root).unwrap();
+    let filled: JsonValue =
+        serde_json::from_slice(&fs::read(root.join(".codex-global-state.json")).unwrap()).unwrap();
+    assert_eq!(
+        filled["electron-persisted-atom-state"]["enabled-reasoning-efforts"],
+        serde_json::json!([
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "ultra",
+            "persistent",
+            "none",
+            "minimal",
+            "max"
+        ])
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn launch_replaces_collaboration_table_with_boolean() {
     let root = std::env::temp_dir().join(format!("3r-collab-feature-{}", Uuid::new_v4()));
     fs::create_dir(&root).unwrap();

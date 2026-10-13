@@ -387,30 +387,37 @@ function IsolatedAppBody({
           label: model.displayName || model.upstreamModelId,
         })),
       probed: Boolean(report),
-      modelChoices: discoveredOptions
-        .filter((option) => option.providerId === providerId)
-        .map((option) => ({
-          upstreamModelId: option.upstreamModelId,
-          label: option.displayLabel,
-          detail: [
-            option.upstreamModelId,
-            option.ownedBy,
-            option.duplicate ? "同名模型已按渠道区分" : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          selected: preset.models.some(
-            (model) =>
-              model.sourceKind === "api_provider" &&
-              model.sourceId === providerId &&
-              model.upstreamModelId === option.upstreamModelId,
-          ),
-        })),
+      modelChoices:
+        report?.wireApi === "responses" || report?.wireApi === "chat_completions"
+          ? discoveredOptions
+              .filter((option) => option.providerId === providerId)
+              .map((option) => ({
+                upstreamModelId: option.upstreamModelId,
+                label: option.displayLabel,
+                detail: [
+                  option.upstreamModelId,
+                  option.ownedBy,
+                  option.duplicate ? "同名模型已按渠道区分" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+                selected: preset.models.some(
+                  (model) =>
+                    model.sourceKind === "api_provider" &&
+                    model.sourceId === providerId &&
+                    model.upstreamModelId === option.upstreamModelId,
+                ),
+              }))
+          : [],
       recover: health.recover,
     };
   });
   const choices: WorkspaceChannelChoice[] = providers
     .filter((provider) => !preset.providerIds.includes(provider.id))
+    .filter((provider) => {
+      const wireApi = connectivityByProvider[provider.id]?.wireApi;
+      return wireApi === "responses" || wireApi === "chat_completions";
+    })
     .sort((left, right) => compareModelSortText(left.name, right.name))
     .map((provider) => {
       const report = connectivityByProvider[provider.id];

@@ -193,7 +193,7 @@ export function sortedManagedModels(
 
 export const connectivityLabels = {
   ready: "可用",
-  degraded: "部分可用",
+  degraded: "不可用",
   unreachable: "无法连接",
   unauthorized: "认证失败",
 } as const;

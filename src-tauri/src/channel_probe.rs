@@ -107,87 +107,207 @@ pub fn transport_for_wire(wire_api: &str) -> Option<TransportMode> {
     }
 }
 
-pub fn desired_transport(current: TransportMode, wire_api: Option<&str>) -> Option<TransportMode> {
-    let desired = transport_for_wire(wire_api?)?;
-    if current == desired {
-        return None;
-    }
-    Some(desired)
-}
-
-pub async fn execute(client: &Client, base_url: &str, api_key: &str) -> ProbeExecution {
-    let started = Instant::now();
-    let models_url = format!("{}/models", base_url.trim_end_matches('/'));
-    match client.get(&models_url).bearer_auth(api_key).send().await {
-        Ok(response) if response.status().is_success() => {
-            let status = response.status().as_u16();
-            match response.bytes().await {
-                Ok(body) => match serde_json::from_slice::<Value>(&body) {
-                    Ok(value) => {
-                        let models = parse_models(&value);
-                        let mut calls = vec![call(
-                            "/v1/models",
-                            None,
-                            true,
-                            Some(status),
-                            None,
-                            started.elapsed(),
-                            TransportMode::GatewayPassthrough,
-                        )];
-                        if models.is_empty() {
-                            return finish(
-                                ConnectivityStatus::Degraded,
-                                None,
-                                None,
-                                models,
-                                CheckStatus::Ready,
-                                CheckStatus::NotRun,
-                                Some("models_empty".to_string()),
-                                calls,
-                            );
-                        }
-                        let model = models[0].upstream_model_id.clone();
-                        classify_text(client, base_url, api_key, model, models, &mut calls).await
-                    }
-                    Err(_) => failed_models(
-                        started.elapsed(),
-                        Some(status),
-                        ConnectivityStatus::Degraded,
-                        "invalid_models_response",
-                    ),
-                },
-                Err(_) => failed_models(
-                    started.elapsed(),
-                    Some(status),
-                    ConnectivityStatus::Degraded,
-                    "models_body_unavailable",
-                ),
-            }
-        }
-        Ok(response) => {
-            let status = response.status().as_u16();
-            let body = response.bytes().await.unwrap_or_default();
-            let code = upstream_error_code(status, &body);
-            failed_models(
-                started.elapsed(),
-                Some(status),
-                connectivity_from_error(status, &body),
-                code,
-            )
-        }
-        Err(error) => failed_models(
-            started.elapsed(),
-            None,
-            connectivity_from_transport(&error),
-            transport_error_code(&error),
-        ),
-    }
-}
-
 pub fn validate_draft(base_url: String, api_key: String) -> Result<(String, String), String> {
     let base_url = crate::providers::validate_base_url(base_url)?;
     let api_key = validate_api_key(api_key)?;
     Ok((base_url, api_key.expose().to_string()))
+}
+
+pub async fn execute(client: &Client, base_url: &str, api_key: &str) -> ProbeExecution {
+    let mut calls = Vec::new();
+    let models = match load_models(client, base_url, api_key, &mut calls).await {
+        Ok(models) => models,
+        Err(execution) => return execution,
+    };
+    let model = models[0].upstream_model_id.clone();
+    classify_text(client, base_url, api_key, model, models, calls).await
+}
+
+async fn load_models(
+    client: &Client,
+    base_url: &str,
+    api_key: &str,
+    calls: &mut Vec<ProbeCall>,
+) -> Result<Vec<ProviderModelOption>, ProbeExecution> {
+    let mut routes = vec!["/models"];
+    if !prefix_ends_with_v1(base_url) {
+        routes.push("/v1/models");
+    }
+    let mut last_empty = None;
+    for route in routes {
+        let started = Instant::now();
+        let url = join_probe_url(base_url, route);
+        match client.get(&url).bearer_auth(api_key).send().await {
+            Ok(response) if response.status().is_success() => {
+                let status = response.status().as_u16();
+                match response.bytes().await {
+                    Ok(body) => match serde_json::from_slice::<Value>(&body) {
+                        Ok(value) => {
+                            let models = parse_models(&value);
+                            if models.is_empty() {
+                                let call = call(
+                                    route,
+                                    None,
+                                    false,
+                                    Some(status),
+                                    Some("models_empty".to_string()),
+                                    started.elapsed(),
+                                    TransportMode::GatewayPassthrough,
+                                );
+                                calls.push(call.clone());
+                                last_empty = Some(call);
+                            } else {
+                                calls.push(call(
+                                    route,
+                                    None,
+                                    true,
+                                    Some(status),
+                                    None,
+                                    started.elapsed(),
+                                    TransportMode::GatewayPassthrough,
+                                ));
+                                return Ok(models);
+                            }
+                        }
+                        Err(_) => calls.push(call(
+                            route,
+                            None,
+                            false,
+                            Some(status),
+                            Some("invalid_models_response".to_string()),
+                            started.elapsed(),
+                            TransportMode::GatewayPassthrough,
+                        )),
+                    },
+                    Err(_) => calls.push(call(
+                        route,
+                        None,
+                        false,
+                        Some(status),
+                        Some("models_body_unavailable".to_string()),
+                        started.elapsed(),
+                        TransportMode::GatewayPassthrough,
+                    )),
+                }
+            }
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let body = response.bytes().await.unwrap_or_default();
+                let code = upstream_error_code(status, &body);
+                calls.push(call(
+                    route,
+                    None,
+                    false,
+                    Some(status),
+                    Some(code.to_string()),
+                    started.elapsed(),
+                    TransportMode::GatewayPassthrough,
+                ));
+            }
+            Err(error) => calls.push(call(
+                route,
+                None,
+                false,
+                None,
+                Some(transport_error_code(&error).to_string()),
+                started.elapsed(),
+                TransportMode::GatewayPassthrough,
+            )),
+        }
+    }
+    if let Some(empty) = last_empty {
+        return Err(finish(
+            ConnectivityStatus::Degraded,
+            None,
+            None,
+            None,
+            Vec::new(),
+            CheckStatus::Ready,
+            CheckStatus::NotRun,
+            empty.error_code,
+            calls.clone(),
+        ));
+    }
+    let status = if calls
+        .iter()
+        .any(|call| matches!(call.http_status, Some(401 | 403)))
+    {
+        ConnectivityStatus::Unauthorized
+    } else {
+        calls
+            .last()
+            .map(call_status)
+            .unwrap_or(ConnectivityStatus::Degraded)
+    };
+    let error_code = calls.last().and_then(|call| call.error_code.clone());
+    Err(finish(
+        status,
+        None,
+        None,
+        None,
+        Vec::new(),
+        CheckStatus::Failed,
+        CheckStatus::NotRun,
+        error_code.or_else(|| Some("models_empty".to_string())),
+        calls.clone(),
+    ))
+}
+
+struct TextTarget {
+    route: &'static str,
+    wire_api: &'static str,
+    transport_mode: TransportMode,
+}
+
+fn text_targets(base_url: &str) -> Vec<TextTarget> {
+    let mut targets = vec![TextTarget {
+        route: "/responses",
+        wire_api: "responses",
+        transport_mode: TransportMode::GatewayPassthrough,
+    }];
+    if !prefix_ends_with_v1(base_url) {
+        targets.push(TextTarget {
+            route: "/v1/responses",
+            wire_api: "responses",
+            transport_mode: TransportMode::GatewayPassthrough,
+        });
+    }
+    targets.push(TextTarget {
+        route: "/chat/completions",
+        wire_api: "chat_completions",
+        transport_mode: TransportMode::GatewayChatCompletions,
+    });
+    if !prefix_ends_with_v1(base_url) {
+        targets.push(TextTarget {
+            route: "/v1/chat/completions",
+            wire_api: "chat_completions",
+            transport_mode: TransportMode::GatewayChatCompletions,
+        });
+    }
+    targets
+}
+
+fn prefix_ends_with_v1(base_url: &str) -> bool {
+    let Some(scheme) = base_url.find("://") else {
+        return false;
+    };
+    let after = &base_url[scheme + 3..];
+    let path = after.find('/').map(|index| &after[index..]).unwrap_or("");
+    let path = path.trim_end_matches('/');
+    path == "/v1" || path.ends_with("/v1")
+}
+
+fn join_probe_url(base_url: &str, route: &str) -> String {
+    format!("{}{}", base_url.trim_end_matches('/'), route)
+}
+
+pub(crate) fn confirmed_base_for_route(base_url: &str, route: &str) -> String {
+    let base = base_url.trim_end_matches('/');
+    if route.starts_with("/v1/") {
+        format!("{base}/v1")
+    } else {
+        base.to_string()
+    }
 }
 
 async fn classify_text(
@@ -196,97 +316,63 @@ async fn classify_text(
     api_key: &str,
     model: String,
     models: Vec<ProviderModelOption>,
-    calls: &mut Vec<ProbeCall>,
+    mut calls: Vec<ProbeCall>,
 ) -> ProbeExecution {
-    match post_text(
-        client,
-        base_url,
-        api_key,
-        &model,
-        "/v1/responses",
-        responses_body(&model),
-        TransportMode::GatewayPassthrough,
-    )
-    .await
-    {
-        TextAttempt::Ready(call) => {
-            calls.push(call);
-            finish(
-                ConnectivityStatus::Ready,
-                Some("responses".to_string()),
-                Some(model),
-                models,
-                CheckStatus::Ready,
-                CheckStatus::Ready,
-                None,
-                calls.clone(),
-            )
-        }
-        TextAttempt::RouteMissing(call) => {
-            calls.push(call);
-            match post_text(
-                client,
-                base_url,
-                api_key,
-                &model,
-                "/v1/chat/completions",
-                chat_body(&model),
-                TransportMode::GatewayChatCompletions,
-            )
-            .await
-            {
-                TextAttempt::Ready(call) => {
-                    calls.push(call);
-                    finish(
-                        ConnectivityStatus::Ready,
-                        Some("chat_completions".to_string()),
-                        Some(model),
-                        models,
-                        CheckStatus::Ready,
-                        CheckStatus::Ready,
-                        None,
-                        calls.clone(),
-                    )
-                }
-                TextAttempt::RouteMissing(call) | TextAttempt::Stop(call) => {
-                    let error_code = call.error_code.clone();
-                    let status = call_status(&call);
-                    calls.push(call);
-                    finish(
-                        status,
-                        None,
-                        Some(model),
-                        models,
-                        CheckStatus::Ready,
-                        CheckStatus::Failed,
-                        error_code,
-                        calls.clone(),
-                    )
-                }
+    for target in text_targets(base_url) {
+        match post_text(
+            client,
+            base_url,
+            api_key,
+            &model,
+            target.route,
+            if target.wire_api == "responses" {
+                responses_body(&model)
+            } else {
+                chat_body(&model)
+            },
+            target.transport_mode,
+        )
+        .await
+        {
+            TextAttempt::Ready(call) => {
+                let confirmed = confirmed_base_for_route(base_url, target.route);
+                calls.push(call);
+                return finish(
+                    ConnectivityStatus::Ready,
+                    Some(target.wire_api.to_string()),
+                    Some(confirmed),
+                    Some(model),
+                    models,
+                    CheckStatus::Ready,
+                    CheckStatus::Ready,
+                    None,
+                    calls,
+                );
             }
-        }
-        TextAttempt::Stop(call) => {
-            let error_code = call.error_code.clone();
-            let status = call_status(&call);
-            calls.push(call);
-            finish(
-                status,
-                None,
-                Some(model),
-                models,
-                CheckStatus::Ready,
-                CheckStatus::Failed,
-                error_code,
-                calls.clone(),
-            )
+            TextAttempt::Failed(call) => calls.push(call),
         }
     }
+    let error_code = calls.last().and_then(|call| call.error_code.clone());
+    let status = calls
+        .last()
+        .map(call_status)
+        .unwrap_or(ConnectivityStatus::Degraded);
+    finish(
+        status,
+        None,
+        None,
+        Some(model),
+        models,
+        CheckStatus::Ready,
+        CheckStatus::Failed,
+        error_code,
+        calls,
+    )
 }
 
 enum TextAttempt {
     Ready(ProbeCall),
-    RouteMissing(ProbeCall),
-    Stop(ProbeCall),
+    Failed(ProbeCall),
 }
 
 async fn post_text(
@@ -299,11 +385,18 @@ async fn post_text(
     transport_mode: TransportMode,
 ) -> TextAttempt {
     let started = Instant::now();
-    let url = format!(
-        "{}{}",
-        base_url.trim_end_matches('/'),
-        route.trim_start_matches("/v1")
-    );
+    let url = join_probe_url(base_url, route);
+    let failed = |http_status, error_code, elapsed| {
+        TextAttempt::Failed(call(
+            route,
+            Some(model.to_string()),
+            false,
+            http_status,
+            error_code,
+            elapsed,
+            transport_mode,
+        ))
+    };
     match client
         .post(url)
         .bearer_auth(api_key)
@@ -320,55 +413,35 @@ async fn post_text(
                 .ok()
                 .and_then(|body| serde_json::from_slice::<Value>(&body).ok())
                 .is_some();
-            let call = call(
-                route,
-                Some(model.to_string()),
-                valid,
-                Some(status),
-                (!valid).then(|| "invalid_text_response".to_string()),
-                started.elapsed(),
-                transport_mode,
-            );
             if valid {
-                TextAttempt::Ready(call)
+                TextAttempt::Ready(call(
+                    route,
+                    Some(model.to_string()),
+                    true,
+                    Some(status),
+                    None,
+                    started.elapsed(),
+                    transport_mode,
+                ))
             } else {
-                TextAttempt::Stop(call)
+                failed(
+                    Some(status),
+                    Some("invalid_text_response".to_string()),
+                    started.elapsed(),
+                )
             }
         }
         Ok(response) => {
             let status = response.status().as_u16();
             let body = response.bytes().await.unwrap_or_default();
             let code = upstream_error_code(status, &body).to_string();
-            let call = call(
-                route,
-                Some(model.to_string()),
-                false,
-                Some(status),
-                Some(code),
-                started.elapsed(),
-                transport_mode,
-            );
-            if matches!(status, 401 | 403)
-                || body_indicates_auth_failure(&body)
-                || matches!(status, 429)
-                || (500..600).contains(&status)
-            {
-                TextAttempt::Stop(call)
-            } else if route_is_missing(status, &body) {
-                TextAttempt::RouteMissing(call)
-            } else {
-                TextAttempt::Stop(call)
-            }
+            failed(Some(status), Some(code), started.elapsed())
         }
-        Err(error) => TextAttempt::Stop(call(
-            route,
-            Some(model.to_string()),
-            false,
+        Err(error) => failed(
             None,
             Some(transport_error_code(&error).to_string()),
             started.elapsed(),
-            transport_mode,
-        )),
+        ),
     }
 }
 
@@ -390,35 +463,10 @@ fn chat_body(model: &str) -> Value {
     })
 }
 
-fn failed_models(
-    elapsed: Duration,
-    http_status: Option<u16>,
-    status: ConnectivityStatus,
-    error_code: &str,
-) -> ProbeExecution {
-    finish(
-        status,
-        None,
-        None,
-        Vec::new(),
-        CheckStatus::Failed,
-        CheckStatus::NotRun,
-        Some(error_code.to_string()),
-        vec![call(
-            "/v1/models",
-            None,
-            false,
-            http_status,
-            Some(error_code.to_string()),
-            elapsed,
-            TransportMode::GatewayPassthrough,
-        )],
-    )
-}
-
 fn finish(
     status: ConnectivityStatus,
     wire_api: Option<String>,
+    confirmed_base_url: Option<String>,
     model: Option<String>,
     models: Vec<ProviderModelOption>,
     models_check: CheckStatus,
@@ -426,11 +474,16 @@ fn finish(
     error_code: Option<String>,
     calls: Vec<ProbeCall>,
 ) -> ProbeExecution {
-    let wire_api = if matches!(status, ConnectivityStatus::Ready)
+    let confirmed = matches!(status, ConnectivityStatus::Ready)
         && matches!(models_check, CheckStatus::Ready)
-        && matches!(text_check, CheckStatus::Ready)
-    {
+        && matches!(text_check, CheckStatus::Ready);
+    let wire_api = if confirmed {
         wire_api.filter(|value| matches!(value.as_str(), "responses" | "chat_completions"))
+    } else {
+        None
+    };
+    let confirmed_base_url = if wire_api.is_some() {
+        confirmed_base_url
     } else {
         None
     };
@@ -438,6 +491,7 @@ fn finish(
         snapshot: ProbeSnapshot {
             status,
             wire_api,
+            confirmed_base_url,
             model,
             models,
             models_check,
@@ -684,6 +738,10 @@ mod tests {
         let client = probe_client().unwrap();
         let execution = execute(&client, &base_url, "sk-test").await;
         assert_eq!(execution.snapshot.wire_api.as_deref(), Some("responses"));
+        assert_eq!(
+            execution.snapshot.confirmed_base_url.as_deref(),
+            Some(base_url.as_str())
+        );
         assert!(matches!(
             execution.snapshot.status,
             ConnectivityStatus::Ready
@@ -691,6 +749,7 @@ mod tests {
         assert_eq!(execution.snapshot.models.len(), 1);
         assert_eq!(chat_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
         assert_eq!(execution.calls.len(), 2);
+        assert_eq!(execution.calls[1].route, "/responses");
     }
 
     #[tokio::test]
@@ -711,13 +770,28 @@ mod tests {
             execution.snapshot.wire_api.as_deref(),
             Some("chat_completions")
         );
-        assert_eq!(execution.calls.len(), 3);
+        assert_eq!(
+            execution.snapshot.confirmed_base_url.as_deref(),
+            Some(base_url.as_str())
+        );
+        assert_eq!(execution.calls.len(), 4);
+        assert_eq!(
+            execution
+                .calls
+                .iter()
+                .map(|call| call.route)
+                .collect::<Vec<_>>(),
+            vec![
+                "/models",
+                "/responses",
+                "/v1/responses",
+                "/chat/completions"
+            ]
+        );
     }
 
     #[tokio::test]
-    async fn unauthorized_text_does_not_try_chat() {
-        let chat_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let hits = chat_hits.clone();
+    async fn unauthorized_responses_continues_to_a_later_target() {
         let router = Router::new()
             .route("/models", get(|| async { models() }))
             .route(
@@ -726,30 +800,33 @@ mod tests {
             )
             .route(
                 "/chat/completions",
-                post(move || {
-                    hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    async { StatusCode::OK.into_response() }
-                }),
+                post(|| async { Json(serde_json::json!({"ok": true})) }),
             );
         let base_url = serve(router).await;
         let execution = execute(&probe_client().unwrap(), &base_url, "sk-test").await;
-        assert!(execution.snapshot.wire_api.is_none());
-        assert!(matches!(
-            execution.snapshot.status,
-            ConnectivityStatus::Unauthorized
-        ));
-        assert_eq!(chat_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(
+            execution.snapshot.wire_api.as_deref(),
+            Some("chat_completions")
+        );
+        assert_eq!(
+            execution.calls.last().map(|call| call.route),
+            Some("/chat/completions")
+        );
     }
 
     #[tokio::test]
-    async fn upstream_failure_does_not_try_chat() {
+    async fn payment_required_tries_v1_responses_before_chat() {
         let chat_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let hits = chat_hits.clone();
         let router = Router::new()
             .route("/models", get(|| async { models() }))
             .route(
                 "/responses",
-                post(|| async { StatusCode::BAD_GATEWAY.into_response() }),
+                post(|| async { StatusCode::PAYMENT_REQUIRED.into_response() }),
+            )
+            .route(
+                "/v1/responses",
+                post(|| async { Json(serde_json::json!({"ok": true})) }),
             )
             .route(
                 "/chat/completions",
@@ -760,9 +837,73 @@ mod tests {
             );
         let base_url = serve(router).await;
         let execution = execute(&probe_client().unwrap(), &base_url, "sk-test").await;
-        assert!(execution.snapshot.wire_api.is_none());
+        assert_eq!(execution.snapshot.wire_api.as_deref(), Some("responses"));
+        assert_eq!(
+            execution.snapshot.confirmed_base_url.as_deref(),
+            Some(format!("{base_url}/v1").as_str())
+        );
         assert_eq!(chat_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
-        assert_eq!(execution.calls.len(), 2);
+        assert_eq!(
+            execution.calls.last().map(|call| call.route),
+            Some("/v1/responses")
+        );
+    }
+
+    #[tokio::test]
+    async fn only_v1_chat_confirms_chat_prefix() {
+        let router = Router::new()
+            .route("/models", get(|| async { models() }))
+            .route(
+                "/v1/chat/completions",
+                post(|| async { Json(serde_json::json!({"ok": true})) }),
+            );
+        let base_url = serve(router).await;
+        let execution = execute(&probe_client().unwrap(), &base_url, "sk-test").await;
+        assert_eq!(
+            execution.snapshot.wire_api.as_deref(),
+            Some("chat_completions")
+        );
+        assert_eq!(
+            execution.snapshot.confirmed_base_url.as_deref(),
+            Some(format!("{base_url}/v1").as_str())
+        );
+        assert_eq!(execution.calls.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn all_text_targets_fail_leave_protocol_unconfirmed() {
+        let router = Router::new().route("/models", get(|| async { models() }));
+        let base_url = serve(router).await;
+        let execution = execute(&probe_client().unwrap(), &base_url, "sk-test").await;
+        assert!(execution.snapshot.wire_api.is_none());
+        assert!(execution.snapshot.confirmed_base_url.is_none());
+        assert_eq!(execution.calls.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn prefix_already_v1_does_not_append_v1_again() {
+        let router = Router::new()
+            .route("/v1/models", get(|| async { models() }))
+            .route(
+                "/v1/responses",
+                post(|| async { Json(serde_json::json!({"ok": true})) }),
+            );
+        let root = serve(router).await;
+        let base_url = format!("{root}/v1");
+        let execution = execute(&probe_client().unwrap(), &base_url, "sk-test").await;
+        assert_eq!(execution.snapshot.wire_api.as_deref(), Some("responses"));
+        assert_eq!(
+            execution.snapshot.confirmed_base_url.as_deref(),
+            Some(base_url.as_str())
+        );
+        assert_eq!(
+            execution
+                .calls
+                .iter()
+                .map(|call| call.route)
+                .collect::<Vec<_>>(),
+            vec!["/models", "/responses"]
+        );
     }
 
     #[test]
@@ -771,6 +912,7 @@ mod tests {
         let execution = finish(
             ConnectivityStatus::Ready,
             Some("responses".to_string()),
+            Some("https://example.com/v1".to_string()),
             None,
             Vec::new(),
             CheckStatus::Ready,
