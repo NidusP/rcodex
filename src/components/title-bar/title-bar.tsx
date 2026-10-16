@@ -60,19 +60,19 @@ export function desktopChrome(): "mac" | "windows" | "web" {
  * @description 有新版本时显示的安装入口。
  */
 export function AppUpdateButton() {
-  const { appUpdate, appUpdateBusy, installAppUpdate } = useAppState();
+  const { appUpdate, appUpdateBusy, openAppUpdateDialog } = useAppState();
   if (!appUpdate) return null;
   return (
-        <HintedButton
-          className="icon-button"
-          type="button"
-      title={appUpdateBusy ? "正在安装更新" : "安装 R Codex " + appUpdate.version}
-          aria-label="安装更新"
+    <HintedButton
+      className="icon-button"
+      type="button"
+      title={appUpdateBusy ? "正在下载更新" : "下载更新"}
+      aria-label="下载更新"
       disabled={appUpdateBusy}
-      onClick={() => void installAppUpdate()}
-        >
-          <Download size={16} aria-hidden="true" />
-        </HintedButton>
+      onClick={openAppUpdateDialog}
+    >
+      <Download size={16} aria-hidden="true" />
+    </HintedButton>
   );
 }
 

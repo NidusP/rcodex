@@ -67,6 +67,8 @@ R Codex 不导入默认目录里的 MCP。它只在隔离目录里启用两个�
 
 它们指向这个隔离目录自己的 Computer Use，不指向 `~/.codex`。
 
+模型目录里的 `node_repl_disabled` 决定 Codex 会不会把本机 Node REPL 交给当前模型。源码对三方条目写 false；已安装的 0.1.2 仍写 true。这个开关不在系统设置里。换上带这份源码的构建并重新启动隔离实例后，新对话回合才会放开内嵌浏览器。
+
 ## 同一份启动配置里的模型目录
 
 模型目录和上面的 `config.toml` 一起生成。对非 GPT 系列，目录里不写 Codex 自己的图片档 `supports_image_detail_original`。GPT 系列，也就是上游模型名以 `gpt-` 开头或包含 `openai` 的系列，保留这个字段。某条渠道偶尔接受 `original` 这个字符串，也不据此给非 GPT 系列加上它。

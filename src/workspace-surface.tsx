@@ -306,6 +306,7 @@ export function ChannelWorkspaceCard({
         <div className="space-brand-row">
           <div className="space-brand-cluster">
             <strong className="space-brand">R Codex</strong>
+            {import.meta.env.DEV ? <span className="space-brand-dev">dev</span> : null}
             <GatewayRestartButton />
           </div>
           <div className="space-brand-tools">

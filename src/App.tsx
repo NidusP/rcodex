@@ -11,6 +11,7 @@ import {
   AppStateProvider,
 } from "./components/app-state";
 import { WorkspaceOverlays } from "./components/model-utility";
+import { AppUpdateDialog } from "./components/app-update";
 import { RuntimeOverlays } from "./components/runtime-panels";
 import { HintedButton } from "./components/hinted-button";
 import "./App.css";
@@ -153,6 +154,7 @@ function AppView() {
         )}
         <WorkspaceOverlays />
         <RuntimeOverlays />
+        <AppUpdateDialog />
       </div>
     </div>
   );

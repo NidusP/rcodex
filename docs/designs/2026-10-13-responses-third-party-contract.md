@@ -1,6 +1,6 @@
 # 三方 Responses 的目录、模型族与网关合同
 
-> 状态：2026-10-13。模型族合同已按厂商卡片写入。Responses 改写已收成 responses_compat 的一次管道；Chat 文本桥在 chat_bridge，函数工具转换还没做。换渠道续接和 namespace 摊平仍未做。
+> 状态：2026-10-16。三方目录开放本机 node_repl（node_repl_disabled=false），官方 JS 自动审核仍不要求。这份改动还没进 0.1.2。Chat 自动审核不指向自己。模型族合同已按厂商卡片写入。换渠道续接和 namespace 摊平仍未做。
 >
 > 对外清单见文末。网站发布前以本文和当时代码为准，不要把「尚未单独剔除」写成已经关闭。
 
@@ -28,7 +28,7 @@ GPT 族请求体保持原样，只替换公共模型 ID、注入渠道 Key、去
 
 ### 模型族
 
-`model_family_profile` 只回答「这个上游 ID 属于哪一族，以及这一族声明了什么」：推理档、默认档、上下文窗口、压缩阈值、是否看图、是否去掉官方速度档和 Node REPL。
+`model_family_profile` 只回答「这个上游 ID 属于哪一族，以及这一族声明了什么」：推理档、默认档、上下文窗口、压缩阈值、是否看图、是否去掉官方速度档。本机 `node_repl` 对三方模型保持开放；官方 ChatGPT 自动审核不要求。
 
 没有官方数字或探针的项保持空或 false。禁止把 Grok 的窗口或看图抄给其他族。
 
@@ -77,7 +77,7 @@ Chat 文本转换搬到 chat_bridge。转发只在渠道协议是 Chat Completio
 
 搜索和图片继续读 `CapabilitySet`。namespace 增加一个能力位，默认是原样转发。没有任何模型族在这一步把它改成拒绝。模型族只负责写出能力，网关只负责执行。
 
-目录继续关闭网页搜索、WebSocket、Responses Lite 和模型条目上的官方 Node REPL。隔离实例的本机 node_repl 与 cua_repl 不动。工具开关为开时，骨架残留的实验工具、skills 和插件说明改为显式删除或显式保留，不再无声继承。
+目录继续关闭网页搜索、WebSocket 和 Responses Lite。本机 `node_repl` 对三方模型保持开放：目录 `node_repl_disabled` 为 false。Codex 会把这个开关写进回合元数据，本机 `node_repl` 读到 true 就会返回 `node_repl is unavailable for this model`，Browser、Computer Use 和其它依赖它的插件都会在开场失败。官方 ChatGPT 自动审核仍不要求，`node_repl_auto_review_required` 为 false。隔离实例继续写入本机 `node_repl` 与 `cua_repl`。工具开关为开时，骨架残留的实验工具、skills 和插件说明改为显式删除或显式保留，不再无声继承。
 
 ### 第三步：换渠道的续接编号在本机失败
 
@@ -96,7 +96,7 @@ Chat 文本转换搬到 chat_bridge。转发只在渠道协议是 Chat Completio
 
 - 不实现 Chat 的函数工具和 `apply_patch` 包装。
 - 不把 `namespace` 摊平。未知模型继续原样转发。
-- 不打开网页搜索、WebSocket、Responses Lite、Node REPL 或官方远程压缩。
+- 不打开网页搜索、WebSocket、Responses Lite 或官方远程压缩。
 - 不自动清除 `previous_response_id`。
 
 ## 验收
@@ -115,7 +115,8 @@ Chat 文本转换搬到 chat_bridge。转发只在渠道协议是 Chat Completio
 - 网页搜索。目录不声明搜索，请求里的搜索工具会在转发前去掉。
 - Fast 和 priority 速度档。
 - 官方模型才有的 max、ultra 推理档。每个模型族用自己的档；没有档的族不凭空添加。
-- 模型目录上的官方 Node REPL。目录里若有这个开关，会关掉，也不再要求先走官方自动审核。隔离实例仍会单独启用本机的 node_repl 和 cua_repl，Browser 和 Computer Use 因此还能作为本地工具使用。
+- 官方 ChatGPT 对 Node REPL 的自动审核。本机 JavaScript 仍走 Codex 自己的批准/elicitation，不把官方审核模型当成前提。
+- Chat 路由的自动审核覆盖。Responses 条目指向当前对话模型自己；Chat 不写。审核回合常带 previous_response_id 和 Responses 专用 item，chat_bridge 会失败。
 - 实验性上下文管理。
 - WebSocket 优先，以及 Responses Lite。客户端按普通 HTTP 的 Responses 请求发送。
 - 非 GPT 系列的图片 original 精度。Grok 4.x 可以看图，但只使用普通精度。
@@ -129,6 +130,7 @@ Chat 文本转换搬到 chat_bridge。转发只在渠道协议是 Chat Completio
 
 ### 保留
 
+- 本机 Node REPL。目录不把三方模型标成禁用；Browser、Computer Use 和其它走 `node_repl` 的本地插件可以调用。
 - 本地函数工具，包括 shell 和子任务。
 - apply_patch 这种自由文本补丁工具。语法不拆开，原文转发。
 - 插件和 MCP 的 namespace 外壳，以及 tool_search。Codex 发出就会原样转发。

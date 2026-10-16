@@ -432,6 +432,10 @@ display: flex; align-items: center; gap: 8px; min-width: 0;
 color: var(--mantine-color-text); font-size: 1.05rem; font-weight: 650; line-height: 1.2;
 }
 
+.space-brand-dev {
+padding: 0 5px; border-radius: 4px; color: var(--mantine-color-cyan-8); background: color-mix(in srgb, var(--mantine-color-cyan-5) 18%, transparent); font-size: .68rem; font-weight: 700; letter-spacing: .04em; line-height: 1.5;
+}
+
 .dashboard-home .runtime-target-card,
 .dashboard-home .runtime-target-card:first-child {
 display: grid;

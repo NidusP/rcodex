@@ -211,13 +211,13 @@ Gateway 可以为明确支持的 Provider 执行 Chat Completions 到 Responses 
 - 工具、搜索、图像和 WebSocket 能力；
 - 对应转换器版本和兼容状态。
 
-推理档位不得从 Provider `GET /v1/models` 推断，也不得在 overlay 为空时继承 GPT 模板的 `max`/`ultra` 与错误默认档。第三方 `base_instructions` 和 `model_messages.instructions_template` 开场不得保留 GPT-6 自称；未验证的 GPT 子 agent 推理档、速度档与 Node REPL 能力也不得随骨架泄漏。Codex 通用多 agent 合同与本地代码工具继续保留。发现接口只负责模型 ID；Codex 目录的身份、档位合同来自用户勾选或模型族 profile。完整合同见[第三方模型目录 overlay](third-party-model-reasoning-levels.md)。
+推理档位不得从 Provider `GET /v1/models` 推断，也不得在 overlay 为空时把 GPT 模板的 `max`/`ultra` 抄给非 GPT 族。第三方 `base_instructions` 和 `model_messages.instructions_template` 开场不得保留 GPT-6 自称；未验证的 GPT 子 agent 推理档和速度档不得随骨架泄漏。本机 Node REPL 对三方模型保持开放，官方 JS 自动审核不要求。Codex 通用多 agent 合同与本地代码工具继续保留。发现接口只负责模型 ID；Codex 目录的身份、档位合同来自用户勾选或模型族 profile。完整合同见[第三方模型目录 overlay](third-party-model-reasoning-levels.md)。
 
 本代工作区的 compactMode 为 local_client，客户端摘要作为普通模型请求转发。GatewaySummarizer 和 NativeRemote 的历史实现不参与新工作区选择；不从模型名或目录字段推断官方压缩能力。若 Codex 的官方配置合同改变，先验证再调整物化规则，不能恢复旧默认 App 兼容入口。
 
 运行中的 Codex 和 app-server 可能缓存模型目录，因此修改 Provider 模型列表只影响下一次显式启动。R Codex 不对活动实例热刷新目录。
 
-Codex 的审核、子代理或其他特殊任务模型不视为普通上游目录项。当前本机 bundled Codex 暴露的隐藏审核模型是 `codex-auto-review`；公开讨论中的 `gpt-code-review` 未作为稳定公开模型确认。API Key 受管理 Profile 会移除继承的 `review_model`、`agents.default_subagent_model` 和其推理档位。对第三方 Responses 路由，每个目录条目的 `auto_review_model_override` 仍指向自身公共模型 ID，供该版本在真正进入自动审核时使用。隔离 Profile 写入 `approval_policy = "on-request"`，并且不写 `approvals_reviewer`。合并进 `config.toml` 时会删掉以前的 `auto_review`。Codex 0.162 的终端界面在策略缺省时使用 `granular` 且 `sandbox_approval = false`，沙箱提权会被直接拒绝；`on-request` 保持工作区沙箱，离开沙箱前询问用户。Chat-only 路由不启用审核覆盖。
+Codex 的审核、子代理或其他特殊任务模型不视为普通上游目录项。当前本机 bundled Codex 暴露的隐藏审核模型是 `codex-auto-review`；公开讨论中的 `gpt-code-review` 未作为稳定公开模型确认。API Key 受管理 Profile 会移除继承的 `review_model`、`agents.default_subagent_model` 和其推理档位。对第三方 Responses 路由，每个目录条目的 `auto_review_model_override` 仍指向自身公共模型 ID，供该版本在真正进入自动审核时使用。隔离 Profile 写入 `approval_policy = "on-request"`，并且不写 `approvals_reviewer`。合并进 `config.toml` 时会删掉以前的 `auto_review`。Codex 0.162 的终端界面在策略缺省时使用 `granular` 且 `sandbox_approval = false`，沙箱提权会被直接拒绝；`on-request` 保持工作区沙箱，离开沙箱前询问用户。Chat-only 路由不写审核覆盖：目录字段可以指向自己，但审核回合常带 previous_response_id 和 Responses 专用 item，Chat 桥会失败。没有真实审核请求证据前不打开。
 
 运行方案通过普通 Responses API 模型的目录条目提供角色替代路由。它是对普通公共路由的角色引用，不是新增模型：Codex 通过目标版本要求的角色覆盖字段（自动审核当前为 `auto_review_model_override`）请求该条目的自身公共 ID，Gateway 按原有 Provider 与凭据精确转发。特殊模型始终隐藏，只在控制面显示“由自动审核/子代理调用”等说明。前端不提供第二个审核模型选择；用户切换当前对话模型时，审核随同系列条目自动变化。角色请求失败时失败关闭并记录诊断，不自动回退。
 

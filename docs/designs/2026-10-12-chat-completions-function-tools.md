@@ -77,7 +77,7 @@ Chat Completions 渠道可以支持 Codex 的函数工具，包括 spawn_agent �
 | apply_patch 等 custom / grammar | 保留 freeform | 原样转发 | 包成 function，唯一字符串参数 input 放补丁原文；返回后还原成 custom_tool_call。grammar 不拆成 JSON 字段 | 借鉴 CC Switch 的包装 |
 | 插件、skills、MCP namespace | 保留 | 原样转发 | 子 function 摊平为 namespace__name，回流还原 namespace | 协议映射 |
 | tool_search | 保留 | 原样转发 | 写成 function，回流还原 tool_search_call | 协议映射 |
-| 自动审核跟随当前模型 | 官方审核 | 指向该 Responses 模型自己 | 审核回合依赖 Responses 工具 | Chat 不设置 |
+| 自动审核跟随当前模型 | 官方审核 | 指向该 Responses 模型自己 | 审核回合常带 previous_response_id 和 Responses 专用 item | Chat 不设置，待抓真实审核请求后再开 |
 | 看图 input_image | 保留，含 detail=original | Grok 4.x 开，DeepSeek 和未知族关；去掉 original | 同样按模型族；input_image 写成 image_url | 按族映射 |
 | 图像生成工具、code interpreter | 保留 | 无服务端实现 | 无服务端实现 | 剔除 |
 | web_search | 保留 | 目录不广告 | 目录不广告，请求里也不转发 | 剔除 |
@@ -87,8 +87,8 @@ Chat Completions 渠道可以支持 Codex 的函数工具，包括 spawn_agent �
 | 远程压缩 /responses/compact | 官方远程压缩 | 不走官方远程压缩，用 Gateway 摘要 | Chat 没有这条路径 | 三方改本地摘要 |
 | supports_experimental_context | 保留 | 删除 | 删除 | 剔除 |
 | previous_response_id 云端续接 | 保留 | 中继不一定接受，失败不换协议 | 必须把历史放进 messages | Chat 不使用 |
-| Node REPL、Browser、Computer Use 运行时 | 保留 | 三方条目关闭 Node REPL | 同 Responses | 剔除 |
+| Node REPL、Browser、Computer Use 运行时 | 保留 | 目录 node_repl_disabled=false，本机 MCP 可用；官方 JS 自动审核不要求 | 同 Responses。审核回合仍不指向 Chat 自己 | 本机运行时，不经 Chat 上游 |
 | WebSocket 优先、Responses lite | 按官方 | 目录写 false | 目录写 false | 剔除 |
 | 并行工具调用广告 | 保留 | 跟 supports_tools，Responses 为开 | 函数工具接上之前为关 | Responses 映射，Chat 先关 |
 
-函数工具、apply_patch 的包装和按族看图，是 Chat 要对齐三方 Responses 的部分。web_search、远端生图、code interpreter、Node REPL 和官方远程压缩，两条三方路径都不承诺。
+函数工具、apply_patch 的包装和按族看图，是 Chat 要对齐三方 Responses 的部分。web_search、远端生图、code interpreter 和官方远程压缩，两条三方路径都不承诺。本机 node_repl 由目录开关和隔离 MCP 提供，不经上游 Chat 或 Responses 实现。

@@ -260,7 +260,7 @@ v6 采用新增规范化覆盖层，保留 v5 的互斥 `credential_kind`、单 
 
 v6 当前交付支持 Provider `/models` 完整目录发现；检测结果按 Provider 修订保存为只读候选快照，只有用户勾选并提交的模型才进入预设和下一次不可变 RouteSet。发现结果不能直接改变已保存预设，未勾选模型不会暴露给受管理 Codex。
 
-Codex 的 `model_catalog_json` 结构不是稳定的跨版本产品协议。物化器必须先对目标 executable 执行 `codex debug models --bundled`，从同版本条目克隆未知必需字段，再替换公共 ID、显示名和受支持能力；不得长期硬编码一份 OpenCodex 或旧 Codex 的 JSON 模板。每次启动还要用同一 executable 验证生成目录和命名 Profile 能被加载。克隆只提供 Codex 未知骨架；`base_instructions` 与 `model_messages.instructions_template` 的身份开场、推理档位、速度档、强制子 agent 推理档、Node REPL 默认值和 GPT-6 专属能力广告由族 profile 与 RouteSet `CapabilitySet` overlay 覆盖。第三方条目还必须删除从 GPT-6 Astra 骨架继承的 `supports_experimental_context`，因为它是 Codex 客户端的实验性上下文资格，不是 Provider 的远程压缩合同。Codex 通用多 agent 合同与本地代码工具继续保留。`GET /v1/models` 不是档位或身份来源。当前实现还把每个第三方 Responses 条目的 `auto_review_model_override` 指向自身，并自动启用审核角色；见[第三方模型目录 overlay](third-party-model-reasoning-levels.md)。
+Codex 的 `model_catalog_json` 结构不是稳定的跨版本产品协议。物化器必须先对目标 executable 执行 `codex debug models --bundled`，从同版本条目克隆未知必需字段，再替换公共 ID、显示名和受支持能力；不得长期硬编码一份 OpenCodex 或旧 Codex 的 JSON 模板。每次启动还要用同一 executable 验证生成目录和命名 Profile 能被加载。克隆只提供 Codex 未知骨架；`base_instructions` 与 `model_messages.instructions_template` 的身份开场、推理档位、速度档、强制子 agent 推理档和 GPT-6 专属能力广告由族 profile 与 RouteSet `CapabilitySet` overlay 覆盖。本机 Node REPL 对三方模型保持开放（目录 node_repl_disabled 为 false）；官方 JS 自动审核不要求。第三方条目还必须删除从 GPT-6 Astra 骨架继承的 `supports_experimental_context`，因为它是 Codex 客户端的实验性上下文资格，不是 Provider 的远程压缩合同。Codex 通用多 agent 合同与本地代码工具继续保留。`GET /v1/models` 不是档位或身份来源。当前实现还把每个第三方 Responses 条目的 `auto_review_model_override` 指向自身。Chat 路由不写这个字段：审核回合常带 previous_response_id 和 Responses 专用 item。见[第三方模型目录 overlay](third-party-model-reasoning-levels.md)。
 
 实现维护一份小型、版本化的 `CodexCatalogCompatibility` 能力配置，仅描述字段规则（例如隐藏枚举和可选字段），不维护完整模型目录。已知版本使用对应配置；未知版本从其 bundled catalog 推断可选字段并采用保守默认值。目录生成后仍必须通过同一 executable 的真实解析探针，因此版本字典不是放行凭据，而是生成策略的提示。版本或 schema 指纹变化时重新生成目录；基础探针失败则阻止受管理启动。
 
@@ -535,7 +535,7 @@ API-only home 为实例独立目录；含官方账户的启动在该官方凭据
 
 该快照只以 `sha256` 摘要进入启动审计，不保存原始配置正文。当前配置不存在或为空时仍可创建纯 API Key 启动；配置语法损坏会明确报 `codex_current_config_invalid`，不会带着不确定配置继续启动。直接打开 Codex 不经过此流程，因此仍使用默认配置。
 
-`review_model`、`[agents].default_subagent_model` 等审核/子代理角色不随 API Key 预设继承。当前本机 Codex bundled catalog 中可见的隐藏审核模型为 `codex-auto-review`，不是已确认的公开 `gpt-code-review`；第三方 Responses 目录把每个条目的 `auto_review_model_override` 指向自身公共模型 ID。隔离 Profile 写入 `approval_policy = "on-request"`，不写 `approvals_reviewer`，合并时删掉旧的 `auto_review`。Codex 0.162 终端界面在策略缺省时会直接拒绝沙箱提权，所以这里显式要求询问。Chat-only 路由不启用审核覆盖，受管理 API Key 目录仍只包含用户选择的普通路由。
+`review_model`、`[agents].default_subagent_model` 等审核/子代理角色不随 API Key 预设继承。当前本机 Codex bundled catalog 中可见的隐藏审核模型为 `codex-auto-review`，不是已确认的公开 `gpt-code-review`；第三方 Responses 目录把每个条目的 `auto_review_model_override` 指向自身公共模型 ID。隔离 Profile 写入 `approval_policy = "on-request"`，不写 `approvals_reviewer`，合并时删掉旧的 `auto_review`。Codex 0.162 终端界面在策略缺省时会直接拒绝沙箱提权，所以这里显式要求询问。Chat-only 路由不写审核覆盖；没有真实自动审核请求证据前，不把 Chat 条目指向自己。受管理 API Key 目录仍只包含用户选择的普通路由。
 
 运行方案自动把每个 Responses API 普通模型绑定到可替代的审核角色。物化器把该条目的自身公共路由 ID 写入目标 Codex 版本要求的 `auto_review_model_override`，但不把 `approvals_reviewer` 写成 `auto_review`。该目录字段只在 Codex 真正进入自动审核时使用。隔离环境写入 `approval_policy = "on-request"`，沙箱提权询问用户。角色模型仍可作为普通主模型选择，但任何内部角色 ID 本身始终不进入用户目录或第三方请求。启用角色时强制使用 Gateway；目标版本不接受角色合同、模型不可用或能力不满足时启动失败，不回退到当前主模型。
 

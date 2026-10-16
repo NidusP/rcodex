@@ -1,10 +1,17 @@
 import { APP_RELEASE_PAGE } from "../../app-release";
+import type { DownloadEvent } from "@tauri-apps/plugin-updater";
 
 export type AppReleaseUpdate = {
   version: string;
   body?: string | null;
   date?: string | null;
-  install: () => Promise<void>;
+  install: (onProgress?: (progress: AppUpdateProgress) => void) => Promise<void>;
+};
+
+export type AppUpdateProgress = {
+  receivedBytes: number;
+  totalBytes: number | null;
+  phase: "downloading" | "installing";
 };
 
 export async function checkAppRelease(): Promise<AppReleaseUpdate | null> {
@@ -16,8 +23,27 @@ export async function checkAppRelease(): Promise<AppReleaseUpdate | null> {
       version: update.version,
       body: update.body,
       date: update.date,
-      install: async () => {
-        await update.downloadAndInstall();
+      install: async (onProgress) => {
+        let receivedBytes = 0;
+        let totalBytes: number | null = null;
+        await update.downloadAndInstall((event: DownloadEvent) => {
+          if (event.event === "Started") {
+            totalBytes = event.data.contentLength ?? null;
+            receivedBytes = 0;
+            onProgress?.({ receivedBytes, totalBytes, phase: "downloading" });
+            return;
+          }
+          if (event.event === "Progress") {
+            receivedBytes += event.data.chunkLength;
+            onProgress?.({ receivedBytes, totalBytes, phase: "downloading" });
+            return;
+          }
+          onProgress?.({
+            receivedBytes: totalBytes ?? receivedBytes,
+            totalBytes,
+            phase: "installing",
+          });
+        });
         const process = await import("@tauri-apps/plugin-process");
         await process.relaunch();
       },

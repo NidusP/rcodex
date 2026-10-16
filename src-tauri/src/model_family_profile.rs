@@ -39,8 +39,6 @@ pub struct ModelFamilyProfile {
     pub strip_openai_speed_tiers: bool,
     /// Drop the cloned model's forced sub-agent effort until it is verified.
     pub strip_unverified_multi_agent_effort: bool,
-    /// Prevent a cloned GPT row from enabling the ChatGPT-specific Node REPL.
-    pub disable_openai_node_repl: bool,
     /// Official recommended client context window. `None` means do not invent a number.
     pub context_window: Option<u64>,
     /// Official recommended auto-compact threshold. `None` means `context_window × 95%`.
@@ -339,7 +337,6 @@ fn named_profile(
         default_reasoning_level,
         strip_openai_speed_tiers: true,
         strip_unverified_multi_agent_effort: true,
-        disable_openai_node_repl: true,
         context_window: None,
         auto_compact_token_limit: None,
         supports_images: false,
@@ -521,8 +518,9 @@ fn default_reasoning_level(levels: &[String], profile: &ModelFamilyProfile) -> S
 /// Codex reads `auto_review_model_override` from the active catalog row. Writing
 /// this row's own public id means Grok reviews Grok work and DeepSeek reviews
 /// DeepSeek work. Native GPT rows in a merged compatibility catalog never enter
-/// this function, so they keep official review. Chat-only rows cannot represent
-/// review tool turns, so they stay unset.
+/// this function, so they keep official review. Chat-only rows stay unset:
+/// review turns commonly carry previous_response_id and Responses-only items
+/// that chat_bridge still rejects. Function tools are not enough to open this.
 pub fn auto_review_override_for_route(route: &ModelRoute) -> Option<String> {
     if is_internal_codex_model_id(&route.upstream_model_id)
         || is_internal_codex_model_id(&route.public_model_id)
@@ -629,13 +627,20 @@ pub fn overlay_third_party_catalog_entry(
     if profile.strip_unverified_multi_agent_effort {
         entry.remove("multi_agent_reasoning_effort");
     }
-    if profile.disable_openai_node_repl {
-        // Preserve the installed Codex field shape when present, but force the
-        // capability off for third-party rows that did not declare it.
-        if entry.contains_key("node_repl_disabled") {
-            entry.insert("node_repl_disabled".to_string(), JsonValue::Bool(true));
-        }
-        entry.remove("node_repl_auto_review_required");
+    // Local node_repl is the runtime for Browser, Computer Use, and other
+    // plugins. Codex copies node_repl_disabled into turn metadata; the
+    // node_repl binary then returns "node_repl is unavailable for this model".
+    // Third-party rows keep the field shape and leave the capability on.
+    if entry.contains_key("node_repl_disabled") {
+        entry.insert("node_repl_disabled".to_string(), JsonValue::Bool(false));
+    }
+    // Official ChatGPT auto-review for JS is not a third-party contract.
+    // Keep the boolean so Codex still sees a value, but do not require it.
+    if entry.contains_key("node_repl_auto_review_required") {
+        entry.insert(
+            "node_repl_auto_review_required".to_string(),
+            JsonValue::Bool(false),
+        );
     }
 
     // `supports_experimental_context` is inherited from the GPT-6 Astra
@@ -841,8 +846,8 @@ mod tests {
         assert!(!entry.contains_key("additional_speed_tiers"));
         assert!(!entry.contains_key("multi_agent_reasoning_effort"));
         assert_eq!(entry["multi_agent_version"], "v2");
-        assert_eq!(entry["node_repl_disabled"], true);
-        assert!(!entry.contains_key("node_repl_auto_review_required"));
+        assert_eq!(entry["node_repl_disabled"], false);
+        assert_eq!(entry["node_repl_auto_review_required"], false);
         assert!(!entry.contains_key("supports_experimental_context"));
         assert!(!entry.contains_key("context_window"));
         assert!(!entry.contains_key("max_context_window"));
@@ -851,6 +856,21 @@ mod tests {
         assert!(!entry.contains_key("web_search_tool_type"));
         assert_eq!(entry["tool_mode"], "code_mode_only");
         assert_eq!(entry["apply_patch_tool_type"], "freeform");
+    }
+
+    #[test]
+    fn third_party_overlay_keeps_local_node_repl_available() {
+        let route = sample_route("grok-4.6", "3r-grok", WireApi::Responses);
+        let mut entry = serde_json::json!({
+            "node_repl_disabled": true,
+            "node_repl_auto_review_required": true
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        overlay_third_party_catalog_entry(&mut entry, &route, false);
+        assert_eq!(entry["node_repl_disabled"], false);
+        assert_eq!(entry["node_repl_auto_review_required"], false);
     }
 
     #[test]

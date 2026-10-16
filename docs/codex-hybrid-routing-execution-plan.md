@@ -2,6 +2,35 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-16：三方 Node REPL 与 Chat 审核合同落地
+
+- 变更目的：把 10 月 15 日的本机 node_repl 开放、Chat 自动审核暂不指向自己、以及 GPT 5.6/6 官方 max 档写进专项文档，方便 commander 用 tauri:dev 隔离实例接着试。
+- 合同：三方目录 node_repl_disabled=false，node_repl_auto_review_required=false。这不是系统设置，也还没进 0.1.2；已安装 0.1.2 仍会把开关写成 true。Responses 的 auto_review_model_override 指向当前对话模型自己。Chat 不写：审核回合常带 previous_response_id 和 Responses 专用 item，chat_bridge 会失败。函数工具接上仍不够开 Chat 自审。官方 bundled 里 gpt-5.6-sol / terra、gpt-6-astra、gpt-6.1-sol 本来就有 max 和 ultra，不是 0.1.2 把 DeepSeek 档抄给 GPT。
+- 修改文件：model_family_profile.rs 注释，third-party-model-reasoning-levels.md，3rcodex-product-principles.md，codex-hybrid-routing-design.md，2026-10-12/13 专项，AGENTS.md，website isolated-config.md，本计划。源码 overlay 仍是 10 月 15 日那次。
+- 验证：文档与当前源码对照。cargo fmt 与 model_family_profile 19 passed 仍以 10 月 15 日记录为准。未启动 Tauri。
+- 未完成项：dev 隔离实例验收见下一节。Chat 自审要先抓一条真实自动审核请求再改 auto_review_override_for_route。
+- 回滚：文档回到三方关闭 Node REPL、Chat 因无工具而不写审核覆盖。
+- 下一步：若要开 Chat 自审，保存审核请求 JSON 后再改代码。0.1.2 已安装包仍写 node_repl_disabled=true，要等下一次发版。
+
+### 2026-10-16：dev 隔离实例验收本机 node_repl
+
+- 变更目的：用当前源码启动的 dev 隔离实例确认三方目录不再禁用本机 Node REPL，开场不再报 node_repl is unavailable for this model，内嵌浏览器可以打开。
+- 合同：不改 GPT 推理档，不在没有真实自动审核请求 JSON 之前把 Chat 自审指向自己。
+- 修改文件：只更新本计划。未改 model_family_profile.rs，未改目录生成代码。
+- 验证：commander 已在 19:26 用当前源码跑起 pnpm run tauri:dev。src-tauri/target/debug/r-codex 的时间是 19:26:26，晚于 model_family_profile.rs 的 19:22:41。dev 隔离实例 e3824fcc 在 19:28 重新启动，config.toml 指向 managed_e3824fcccb8b40fe8f5ae807fd4bbb8f_6d8f4a403fc9.models.json。13 条模型的 node_repl_disabled 和 node_repl_auto_review_required 都是 false。Responses 行的 auto_review_model_override 指向自己；deepseek-ai-deepseek-v4-flash 与 zai-org-glm-5.3-flash 为 null。gpt-5.6-sol、gpt-5.6-terra、gpt-6-astra 仍是 low/medium/high/xhigh/max/ultra。本次 grok-4.7 会话 19:29:40 的 rollout 没有把 node_repl is unavailable for this model 当作工具结果；logs_2.sqlite 里唯一命中是这条用户说明本身。node_repl 执行 nodeRepl.write('node_repl ok') 返回原文且 isError=false。内嵌浏览器打开 https://example.com/，标题为 Example Domain。已安装 0.1.2 实例 9d6280eb 的 19:27 目录仍是 10 条 node_repl_disabled=true，该进程未停。
+- 未完成项：Chat 自审仍关闭。改动未进 0.1.2。
+- 回滚：不涉及代码。若要回到关闭本机 Node REPL，按 10 月 15 日记录把 overlay 写回 true。
+- 下一步：要开 Chat 自审时，先保存一条真实自动审核请求 JSON。
+
+### 2026-10-15：三方目录开放本机 node_repl
+
+- 变更目的：跨境电商等三方模型会话开场大量出现 node_repl is unavailable for this model，Browser、Computer Use 和其它依赖本机 Node REPL 的插件无法使用。
+- 合同：目录 overlay 不再把三方条目的 node_repl_disabled 写成 true。该开关会被 Codex 写进回合元数据，本机 node_repl 读到 true 就拒绝。三方条目保持 node_repl_disabled=false，官方 ChatGPT 自动审核仍不要求（node_repl_auto_review_required=false）。隔离实例继续写入本机 node_repl/cua_repl。已启动实例要重新启动后才生成新目录。这份改动未进 0.1.2。
+- 修改文件：src-tauri/src/model_family_profile.rs，docs/designs/2026-10-13-responses-third-party-contract.md，本计划。
+- 验证：cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check 通过。cargo test --manifest-path src-tauri/Cargo.toml --lib -- model_family_profile:: 为 19 passed。未启动 Tauri，未打真实 Provider。
+- 回滚：恢复 overlay 把 node_repl_disabled 写成 true，并删除 node_repl_auto_review_required。
+- 下一步：用当前源码跑 tauri:dev，退出隔离实例再启动。
+
 ### 2026-10-14：发布 0.1.2
 
 - 变更目的：把当前工作区的 Chat 工具转换、空前缀探针和厂商推理档发给已安装的 0.1.1。

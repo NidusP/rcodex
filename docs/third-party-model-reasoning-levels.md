@@ -110,7 +110,7 @@ OpenAI 兼容合同的标准形状是 `id`、`object`、`created`、`owned_by`�
 | grok-4.5 | `low` `medium` `high` | `high` | `xhigh` 视为 `high` |
 | grok-4.3 | `none` `low` `medium` `high` `xhigh` | `high` | R Codex 工作区统一默认档；以模型卡为准确认可选档位 |
 
-GPT 模板里的 `max` / `ultra` 不是 Grok 档位，不得随克隆泄漏到第三方条目。
+GPT 模板里的 `max` / `ultra` 不是 Grok 档位，不得随克隆泄漏到第三方条目。官方 Codex bundled（本机 ChatGPT.app，2026-10-16）里：gpt-5.6-sol / gpt-5.6-terra / gpt-6-astra / gpt-6.1-sol 有 max 和 ultra；gpt-5.6-luna 有 max 无 ultra；gpt-5.5 只到 xhigh。R Codex 的 GPT 族目前按一整条梯子写 low/medium/high/xhigh/max/ultra，不按 slug 逐条抄。这不是 0.1.2 把 DeepSeek 的 max 抄给 GPT。
 
 2026-10-13：DeepSeek、GLM、Qwen 改读厂商公开模型卡，不探针，也不读中继 /v1/models。别名如果会被厂商折成另一个档，目录只保留折完后仍有区别的名字。厂商没公布 Codex 档位名单的族，目录留空，不再套未知族的 low / medium / high / xhigh。Claude 还没有按同一轮卡片誊写，暂时仍用这套未知族兜底。
 
@@ -160,7 +160,7 @@ Use only the local workspace tools provided in this session.
 - GPT 才有的推理档 `max` / `ultra`；
 - OpenAI Fast / `priority` 等 `service_tiers`、`additional_speed_tiers`（除非该族自己有同等合同）；
 - GPT 模板强制的 `multi_agent_reasoning_effort`；第三方族验证前不继承模型专属子 agent 档位，Codex 本地的 `model_messages.multi_agent` 合同与版本字段继续保留；
-- ChatGPT 专用 Node REPL 开关；第三方条目写为 disabled，并删除其自动审核要求字段；
+- 官方 ChatGPT 对 Node REPL 的自动审核。目录 node_repl_disabled 对三方模型为 false，本机 Browser / Computer Use 才能用；node_repl_auto_review_required 为 false，不把官方审核模型当成前提；
 - 把官方 MCP（如 `openaiDeveloperDocs`）暗示成这个模型拥有的能力。
 
 本地工具不是 GPT-6 专属功能，Responses 透传下继续保留。
@@ -195,8 +195,8 @@ Use only the local workspace tools provided in this session.
 
 1. 内置 family profile（数据，不是新生成器）：按 `upstream_model_id` 匹配 Grok / deepseek / Claude / 保守未知族。profile 含身份句、推理档与默认档、官方推荐窗、是否剥除 OpenAI 速度档。
 2. 物化路由时按 profile 填 `CapabilitySet.reasoning_levels`（Grok 4.6 → `low/medium/high/xhigh`，默认 `high`），并按 UI/family 填 `context_window` / `auto_compact_token_limit`。
-3. `model_entry_from_template` 同时替换 `base_instructions` 和 `model_messages.instructions_template` 的开场身份，覆盖推理档与窗口，删除 GPT 的 `max`/`ultra`、`default=low`、强制子 agent 推理档以及未声明的 Fast / priority 档，并禁用第三方未声明的 Node REPL；Codex 通用多 agent 合同继续保留。无 CapabilitySet 窗口时剥掉克隆来的窗口三键。
-4. 每个 Responses 第三方条目把 `auto_review_model_override` 写成自身公共模型 ID。隔离 Profile 写入 `approval_policy = "on-request"`，不写 `approvals_reviewer`，合并时删掉旧的 `auto_review`。Codex 0.162 终端界面在策略缺省时会直接拒绝沙箱提权，所以显式要求询问；前端不再提供第二个审核模型选择。
+3. `model_entry_from_template` 同时替换 `base_instructions` 和 `model_messages.instructions_template` 的开场身份，覆盖推理档与窗口，删除非 GPT 族的 `max`/`ultra`、`default=low`、强制子 agent 推理档以及未声明的 Fast / priority 档。本机 node_repl 保持开放（node_repl_disabled=false），官方 JS 自动审核不要求。Codex 通用多 agent 合同继续保留。无 CapabilitySet 窗口时剥掉克隆来的窗口三键。
+4. 每个 Responses 第三方条目把 `auto_review_model_override` 写成自身公共模型 ID。隔离 Profile 写入 `approval_policy = "on-request"`，不写 `approvals_reviewer`，合并时删掉旧的 `auto_review`。Codex 0.162 终端界面在策略缺省时会直接拒绝沙箱提权，所以显式要求询问；前端不再提供第二个审核模型选择。Chat 路由不写这个覆盖：审核回合常带 previous_response_id 和 Responses 专用 item，chat_bridge 会失败。函数工具已经接上，仍不够开 Chat 自审；要先抓一条真实自动审核请求再改。
 5. 发现页继续只展示 id/name/ownedBy；用户不需要手工编辑推理档。
 5. 不要把 `xhigh` 映射成 `high`。
 6. Chat Completions 把 Codex 的 `reasoning.effort` 写成顶层 `reasoning_effort`。`none` 不写入这个字段，改为 `thinking.type = disabled`。其余档位原样传递，不在网关里折成 high 或 max。目录继续按模型族广告这些档。
@@ -241,9 +241,9 @@ Use only the local workspace tools provided in this session.
 - 兼容目录里的原生 GPT 行不被三方 overlay 改窗；
 - 未声明的 Fast / priority 速度档不出现在第三方条目；
 - 非 GPT 系列不得留下 `supports_image_detail_original`，包括已打开看图的 Grok；`gpt-` / `openai` 系列保留该开关，即使它走的是 API 渠道；不支持搜索时不得留下 `web_search_tool_type`；
-- 未验证的 GPT 子 agent 推理档与 Node REPL 能力不出现在第三方条目；Codex 通用多 agent 合同、`code_mode_only` 与 `apply_patch` 继续保留；
+- 未验证的 GPT 子 agent 推理档不出现在第三方条目；本机 Node REPL 保持开放，官方 JS 自动审核不要求。Codex 通用多 agent 合同、`code_mode_only` 与 `apply_patch` 继续保留；
 - 用户选 Extra high 时 session 仍为 `xhigh`；
 - Chat 渠道转发 `reasoning_effort`；`none` 写成 `thinking.type = disabled`；
 - `/v1/models` 探测行为不变（仍只点名）；
 - 仍只有一个目录生成器，新增模型族只加 profile 数据。
-- 自动审核字段按当前目录条目指向自身；Chat-only 路由不启用审核覆盖，只有 Responses 路由自动启用审核角色。
+- Responses 自动审核字段按当前目录条目指向自身；Chat-only 路由不写覆盖。缺口是审核回合的 previous_response_id 和专用 item，不是普通函数工具。

@@ -27,7 +27,7 @@ import {
   type RuntimeInstanceSummary,
 } from "./codex-control";
 import { desktopChrome } from "./components/title-bar";
-import { checkAppRelease, openAppReleasePage, type AppReleaseUpdate } from "./components/app-update";
+import { checkAppRelease, openAppReleasePage, type AppReleaseUpdate, type AppUpdateProgress } from "./components/app-update";
 
 import {
   buildDiscoveredModelOptions,
@@ -154,8 +154,9 @@ export function useAppController() {
   const [codexUpdate, setCodexUpdate] = useState<CodexUpdateStatus | null>(null);
   const [appUpdate, setAppUpdate] = useState<AppReleaseUpdate | null>(null);
   const [appUpdateBusy, setAppUpdateBusy] = useState(false);
+  const [appUpdateOpen, setAppUpdateOpen] = useState(false);
+  const [appUpdateProgress, setAppUpdateProgress] = useState<AppUpdateProgress | null>(null);
   const appUpdateCheckedRef = useRef(false);
-  const installAppUpdateRef = useRef<() => Promise<void>>(async () => {});
   const [usageByProvider, setUsageByProvider] = useState<Record<string, ProviderUsageSummary>>({});
   const [connectivityByProvider, setConnectivityByProvider] = useState<Record<string, ProviderConnectivityReport>>({});
   const [specialModelRoles, setSpecialModelRoles] = useState<SpecialModelRoleSummary[]>([]);
@@ -299,27 +300,35 @@ export function useAppController() {
 
 
   const installAppUpdate = async () => {
-    if (!appUpdate) return;
+    if (!appUpdate || appUpdateBusy) return;
     const active = instances.some((instance) => isActiveInstanceState(instance.state));
     if (active) {
-      showAppNotice("隔离实例正在运行，请先停止后再安装更新。", { error: true });
+      showInfo("隔离实例正在运行，请先停止后再安装更新。");
       return;
     }
     setAppUpdateBusy(true);
+    setAppUpdateProgress({ receivedBytes: 0, totalBytes: null, phase: "downloading" });
     try {
-      showInfo("正在下载并安装 R Codex 更新…");
-      await appUpdate.install();
+      await appUpdate.install((progress) => setAppUpdateProgress(progress));
     } catch (error: unknown) {
       setAppUpdateBusy(false);
+      setAppUpdateProgress(null);
       showCommandError(error, "安装更新失败");
     }
+  };
+  const openAppUpdateDialog = () => {
+    if (!appUpdate) return;
+    setAppUpdateOpen(true);
+  };
+  const closeAppUpdateDialog = () => {
+    if (appUpdateBusy) return;
+    setAppUpdateOpen(false);
+    setAppUpdateProgress(null);
   };
 
   const openReleasePage = () => {
     void openAppReleasePage().catch((error: unknown) => showCommandError(error, "无法打开发布页"));
   };
-  installAppUpdateRef.current = installAppUpdate;
-
   useEffect(() => {
     void refresh().catch((error: unknown) => showCommandError(error, "无法读取应用状态"));
   }, []);
@@ -331,9 +340,6 @@ export function useAppController() {
       .then((update) => {
         if (!update) return;
         setAppUpdate(update);
-        showAppNotice("R Codex " + update.version + " 可用", {
-          action: { label: "安装并重启", onClick: () => { void installAppUpdateRef.current(); } },
-        });
       })
       .catch(() => undefined);
   }, [booting]);
@@ -952,7 +958,7 @@ export function useAppController() {
     utilityDrawer, setUtilityDrawer, scopedPresetId, openUtility, themeMode, setThemeMode, accent, setAccent, systemDark, setSystemDark,
     dismissedIncidentAt, setDismissedIncidentAt, gateway, setGateway, providers, setProviders,
     accounts, setAccounts, presets, setPresets, instances, setInstances, compatibility,
-    setCompatibility, codexInstallation, setCodexInstallation, codexUpdate, setCodexUpdate, appUpdate, appUpdateBusy, installAppUpdate, openReleasePage,
+    setCompatibility, codexInstallation, setCodexInstallation, codexUpdate, setCodexUpdate, appUpdate, appUpdateBusy, appUpdateOpen, appUpdateProgress, openAppUpdateDialog, closeAppUpdateDialog, installAppUpdate, openReleasePage,
     usageByProvider, setUsageByProvider, connectivityByProvider, setConnectivityByProvider,
     specialModelRoles, setSpecialModelRoles, diagnostics, setDiagnostics, requestDiagnostics,
     setRequestDiagnostics, notice, setNotice, booting, setBooting, noticeError, setNoticeError,
