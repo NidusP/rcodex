@@ -534,6 +534,7 @@ fn call_status(call: &ProbeCall) -> ConnectivityStatus {
     }
 }
 
+#[cfg(test)]
 fn route_is_missing(status: u16, body: &[u8]) -> bool {
     if matches!(status, 404 | 405) {
         return true;
@@ -602,22 +603,6 @@ fn parse_models(value: &Value) -> Vec<ProviderModelOption> {
         })
         .take(1024)
         .collect()
-}
-
-fn connectivity_from_error(status: u16, body: &[u8]) -> ConnectivityStatus {
-    if matches!(status, 401 | 403) || body_indicates_auth_failure(body) {
-        ConnectivityStatus::Unauthorized
-    } else {
-        ConnectivityStatus::Degraded
-    }
-}
-
-fn connectivity_from_transport(error: &reqwest::Error) -> ConnectivityStatus {
-    if error.is_connect() || error.is_timeout() {
-        ConnectivityStatus::Unreachable
-    } else {
-        ConnectivityStatus::Degraded
-    }
 }
 
 fn upstream_error_code(status: u16, body: &[u8]) -> &'static str {

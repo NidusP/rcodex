@@ -141,6 +141,10 @@ pub(super) fn reject_link(path: &Path) -> Result<(), String> {
                     return Err("managed_file_hardlink_rejected".to_string());
                 }
             }
+            #[cfg(not(unix))]
+            {
+                let _ = &metadata;
+            }
             Ok(())
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -148,6 +152,7 @@ pub(super) fn reject_link(path: &Path) -> Result<(), String> {
     }
 }
 
+#[cfg_attr(not(unix), allow(unused_variables))]
 pub(super) fn sync_parent_directory(path: &Path, label: &str) -> Result<(), String> {
     #[cfg(unix)]
     {

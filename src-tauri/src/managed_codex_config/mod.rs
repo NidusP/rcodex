@@ -4,6 +4,7 @@
 //! 由 managed_launch 启动准备、system command 和 isolated_auth 调用。
 
 mod catalog;
+#[cfg(any(test, target_os = "macos"))]
 mod computer_use;
 mod io;
 mod isolated_auth;
@@ -21,7 +22,6 @@ mod tests_preferences;
 pub use isolated_auth::project_isolated_auth_json;
 
 pub const MANAGED_MODEL_PROVIDER_ID: &str = "rcodex";
-pub const MANAGED_DIRECT_MODEL_PROVIDER_ID: &str = MANAGED_MODEL_PROVIDER_ID;
 pub const MANAGED_GATEWAY_DISPLAY_NAME: &str = "R Codex Gateway";
 pub const INSTANCE_GATEWAY_HEADER: &str = "X-RCodex-Instance-Key";
 pub const INSTANCE_GATEWAY_ENV: &str = "RCODEX_INSTANCE_KEY";
@@ -34,6 +34,7 @@ pub use catalog::{build_version_matched_catalog, build_version_matched_catalog_w
 pub use catalog::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility, read_bundled_catalog,
 };
+#[cfg(all(not(test), target_os = "macos"))]
 pub use computer_use::materialize_isolated_computer_use_mcp;
 #[cfg(test)]
 pub use materialize::materialize_managed_codex_config;

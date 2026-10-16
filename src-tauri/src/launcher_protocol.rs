@@ -160,6 +160,7 @@ fn unix_time_millis() -> u64 {
         .unwrap_or(u64::MAX)
 }
 
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn set_directory_permissions(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {

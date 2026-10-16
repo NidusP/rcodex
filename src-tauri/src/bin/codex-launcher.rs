@@ -767,7 +767,7 @@ fn activate_store_package(
     electron_user_data_dir: &Path,
     sqlite_home: &Path,
     instance_key: &str,
-    working_directory: Option<&str>,
+    working_directory: Option<&Path>,
     instance_id: &str,
     launch_nonce: &str,
     status_file: &str,
@@ -786,7 +786,7 @@ fn activate_store_package(
         electron_user_data_dir.display()
     )];
     if let Some(directory) = working_directory {
-        args.push(directory.to_string());
+        args.push(directory.display().to_string());
     }
     let request = PackageHelperRequest {
         executable: app_executable.display().to_string(),

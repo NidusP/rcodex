@@ -407,6 +407,7 @@ fn checked_file(root: &Path, path: &Path) -> Result<(), String> {
             return Err("session_import_source_path_rejected".to_string());
         }
     }
+    #[cfg_attr(not(unix), allow(unused_variables))]
     let metadata = fs::metadata(path).map_err(|_| "session_import_source_unreadable")?;
     #[cfg(unix)]
     {

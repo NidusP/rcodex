@@ -12,13 +12,6 @@ use super::normalize_api_base_url;
 use super::store::ProviderStore;
 
 impl ProviderStore {
-    pub fn load_secret_for_launch(&self, secret_ref: &str) -> Result<String, String> {
-        self.vault
-            .load(secret_ref)?
-            .map(|key| key.expose().to_string())
-            .ok_or_else(|| "credential_missing".to_string())
-    }
-
     /// Load the active revision key for the API login in R Codex's own Codex home.
     /// The value is never returned through IPC.
     pub fn load_current_provider_key(

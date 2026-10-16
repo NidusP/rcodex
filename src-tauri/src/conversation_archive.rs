@@ -912,6 +912,7 @@ fn valid_stage(stage: &str) -> bool {
     )
 }
 
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn set_private_file(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
@@ -919,6 +920,7 @@ fn set_private_file(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn set_private_directory(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))

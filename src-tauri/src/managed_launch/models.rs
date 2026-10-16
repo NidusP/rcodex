@@ -160,7 +160,9 @@ pub(super) struct ProviderSnapshot {
     pub(super) name: String,
     pub(super) revision_id: String,
     pub(super) wire_api: WireApi,
+    #[allow(dead_code)]
     pub(super) base_url: String,
+    #[allow(dead_code)]
     pub(super) secret_ref: String,
     pub(super) timeouts: GatewayTimeoutSnapshot,
     pub(super) position: u32,

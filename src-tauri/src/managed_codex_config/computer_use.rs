@@ -3,11 +3,12 @@
 //! 不读用户默认 ~/.codex/computer-use，不覆盖已经可用的隔离 helper。
 //! 仅 API Key 受管理 App 启动准备调用。
 
+#[cfg(target_os = "macos")]
+use std::process::Command;
 use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 use uuid::Uuid;
 

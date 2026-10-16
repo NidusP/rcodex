@@ -22,6 +22,17 @@
 - 回滚：不涉及代码。若要回到关闭本机 Node REPL，按 10 月 15 日记录把 overlay 写回 true。
 - 下一步：要开 Chat 自审时，先保存一条真实自动审核请求 JSON。
 
+### 2026-10-16：Windows 构建告警与商店启动参数类型
+
+- 变更目的：Windows NSIS 在 codex-launcher 因工作目录参数类型不匹配而编译失败，r-codex 库同时有一批只在 Windows 上出现的未使用告警。本机 macOS app 包通过后再提交，并走 Windows 安装包工作流。
+- 合同：商店包激活把工作目录当作路径传入。macOS 短路径、Computer Use 和 Unix 权限逻辑保留，非目标平台不参与编译或允许未使用。不改 GPT 推理档，不开 Chat 自审。
+- 修改文件：src-tauri/src/bin/codex-launcher.rs，以及 system、computer use、home layout、storage、channel probe、provider snapshot 等告警涉及的库文件。本计划。
+- 验证：src-tauri 下 cargo check --all-targets --offline 通过。pnpm run tauri:build -- --bundles app 通过，产物为 src-tauri/target/release/bundle/macos/R Codex.app（30.45 MiB），updater 签名已生成。Windows rust-std 下载过慢，未做交叉编译；告警是否清零以 GitHub windows-nsis 工作流为准。
+- 未完成项：商店包在虚拟机里的隔离启动仍要实机看日志。Chat 自审继续等真实审核请求 JSON。
+- 回滚：恢复 activate_store_package 的字符串工作目录参数，并去掉本次平台条件编译。
+- 下一步：提交后在 GitHub Actions 手动运行 Windows NSIS。
+
+
 ### 2026-10-15：三方目录开放本机 node_repl
 
 - 变更目的：跨境电商等三方模型会话开场大量出现 node_repl is unavailable for this model，Browser、Computer Use 和其它依赖本机 Node REPL 的插件无法使用。

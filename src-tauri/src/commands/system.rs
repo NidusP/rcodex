@@ -6,9 +6,9 @@
 
 #[cfg(target_os = "windows")]
 use crate::codex_installation::resolve_codex_app_executable;
-use crate::codex_installation::{
-    codex_app_bundle_candidates, codex_app_bundle_from_cli, resolve_codex_executable,
-};
+use crate::codex_installation::resolve_codex_executable;
+#[cfg(target_os = "macos")]
+use crate::codex_installation::{codex_app_bundle_candidates, codex_app_bundle_from_cli};
 use crate::managed_codex_config::{read_bundled_catalog, sync_default_codex_preferences};
 use crate::managed_launch::ManagedLaunchStore;
 use crate::special_models::{self, SpecialModelRoleSummary};
@@ -318,6 +318,7 @@ pub fn sync_managed_preferences(
     sync_default_codex_preferences(&home, &source, &input.sections)
 }
 
+#[cfg(target_os = "macos")]
 fn configure_default_codex_open(command: &mut std::process::Command, bundle: &std::path::Path) {
     command
         .arg("-n")
@@ -417,6 +418,7 @@ pub(crate) fn resolve_current_codex_home() -> std::path::PathBuf {
 
 pub(crate) fn codex_version(executable: &std::path::Path) -> Result<String, String> {
     let probe_home = std::env::temp_dir().join(format!("rcodex-version-{}", uuid::Uuid::new_v4()));
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut directory = std::fs::DirBuilder::new();
     #[cfg(unix)]
     {

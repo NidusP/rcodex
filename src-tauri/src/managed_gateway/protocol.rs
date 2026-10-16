@@ -5,7 +5,7 @@
 //! in this file. This module does not send upstream requests.
 
 use axum::body::Bytes;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::diagnostics::RequestDiagnosticOutcome;
 

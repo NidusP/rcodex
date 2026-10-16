@@ -5,11 +5,14 @@
 
 use std::path::{Path, PathBuf};
 
+#[cfg(any(test, target_os = "macos"))]
 use serde::{Deserialize, Serialize};
 
+#[cfg(any(test, target_os = "macos"))]
 use crate::managed_codex_config::write_private_atomically_overwrite;
 
 use super::models::ManagedLaunchStore;
+#[cfg(target_os = "macos")]
 use super::storage::rewrite_rollout_paths_in_home;
 use super::validation::{ensure_owned_path, set_private_directory};
 
@@ -30,10 +33,12 @@ pub(super) fn remove_owned_directory(
     Ok(())
 }
 
+#[cfg(any(test, target_os = "macos"))]
 pub(super) const MANAGED_HOME_LAYOUT_FILE: &str = "home-layout.json";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg(any(test, target_os = "macos"))]
 pub(super) enum ManagedHomeLayoutPhase {
     Legacy,
     Renaming,
@@ -44,6 +49,7 @@ pub(super) enum ManagedHomeLayoutPhase {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg(any(test, target_os = "macos"))]
 pub(super) struct ManagedHomeLayoutRecord {
     pub(super) instance_id: String,
     pub(super) long_home: String,
@@ -51,6 +57,7 @@ pub(super) struct ManagedHomeLayoutRecord {
     pub(super) phase: ManagedHomeLayoutPhase,
 }
 
+#[cfg(any(test, target_os = "macos"))]
 pub(super) fn read_managed_home_layout(
     path: &Path,
 ) -> Result<Option<ManagedHomeLayoutRecord>, String> {
@@ -69,6 +76,7 @@ pub(super) fn read_managed_home_layout(
         .map_err(|_| "managed_home_layout_invalid".to_string())
 }
 
+#[cfg(any(test, target_os = "macos"))]
 pub(super) fn write_managed_home_layout(
     path: &Path,
     record: &ManagedHomeLayoutRecord,
@@ -79,6 +87,7 @@ pub(super) fn write_managed_home_layout(
 }
 
 impl ManagedLaunchStore {
+    #[cfg(any(test, target_os = "macos"))]
     pub(super) fn managed_app_short_root(&self) -> Result<PathBuf, String> {
         let root = self
             .instances_root
@@ -92,6 +101,7 @@ impl ManagedLaunchStore {
         Ok(root)
     }
 
+    #[cfg(any(test, target_os = "macos"))]
     pub(super) fn short_home_name_matches_instance(instance_id: &str, name: &str) -> bool {
         let compact = instance_id.replace('-', "");
         [12, 16, 24, 32].iter().any(|length| {
@@ -101,6 +111,7 @@ impl ManagedLaunchStore {
         })
     }
 
+    #[cfg(any(test, target_os = "macos"))]
     pub(super) fn ensure_managed_app_short_home(
         &self,
         instance_id: &str,
@@ -126,6 +137,7 @@ impl ManagedLaunchStore {
         }
     }
 
+    #[cfg(any(test, target_os = "macos"))]
     pub(super) fn managed_app_short_home_candidate(
         &self,
         instance_id: &str,
@@ -342,6 +354,7 @@ impl ManagedLaunchStore {
         }
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
     pub(super) fn prepare_managed_app_home_layout(
         &self,
         instance_id: &str,
@@ -385,6 +398,7 @@ impl ManagedLaunchStore {
         Ok(())
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
     pub(super) fn remove_managed_app_home_for_delete(
         &self,
         instance_id: &str,
@@ -448,6 +462,7 @@ impl ManagedLaunchStore {
         Ok(())
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
     pub(super) fn ensure_isolated_instance_home(
         &self,
         instance_id: &str,

@@ -24,6 +24,7 @@ pub const MAX_CLIENT_CONTEXT_WINDOW: u64 = 1_000_000;
 /// Published 1,000,000-token context used by current DeepSeek, GLM 5.2/5.3, and Qwen 3.7/3.8 cards.
 pub const OFFICIAL_MILLION_CONTEXT_WINDOW: u64 = 1_000_000;
 /// 95% of the official 1M window, matching the family compact rule.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const OFFICIAL_MILLION_AUTO_COMPACT_TOKEN_LIMIT: u64 = 950_000;
 
 /// Semantic overlay applied on top of a cloned Codex catalog skeleton.

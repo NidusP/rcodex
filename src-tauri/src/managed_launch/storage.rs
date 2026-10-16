@@ -5,7 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::OptionalExtension;
+#[cfg(target_os = "macos")]
+use rusqlite::{params, Connection, TransactionBehavior};
 
 use crate::codex_control::InstanceState;
 use crate::launcher_protocol::LaunchTarget;
@@ -23,6 +25,7 @@ pub(super) const LEGACY_SQLITE_FILE_PREFIXES: [&str; 6] = [
     "thread_history_",
 ];
 
+#[cfg(target_os = "macos")]
 pub(super) fn quote_sqlite_identifier(identifier: &str) -> String {
     format!("\"{}\"", identifier.replace('"', "\"\""))
 }
@@ -30,6 +33,7 @@ pub(super) fn quote_sqlite_identifier(identifier: &str) -> String {
 /// Rewrites persisted rollout paths only when the old home is the complete
 /// path component prefix. Repeating the update after an interrupted migration
 /// is safe because rewritten rows no longer match the old prefix.
+#[cfg(target_os = "macos")]
 pub(super) fn rewrite_rollout_paths_in_home(
     old_home: &Path,
     new_home: &Path,

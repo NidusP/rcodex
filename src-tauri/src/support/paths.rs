@@ -42,6 +42,7 @@ pub fn resolve_workspace(value: Option<&str>) -> Result<Option<String>, String> 
 }
 
 /// 把目录权限设为 0o700。非 Unix 平台是空操作。
+#[cfg_attr(not(unix), allow(unused_variables))]
 pub fn set_private_directory(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
