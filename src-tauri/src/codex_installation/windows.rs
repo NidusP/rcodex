@@ -76,7 +76,32 @@ pub fn gui_candidates_from_cli(cli: &Path) -> Vec<String> {
             }
         }
     }
+    // Store CLI lives under app\resources. The desktop exe is one directory above.
+    if let Some((app_dir, _)) = normalized.rsplit_once(r"\resources\") {
+        for name in GUI_FILE_NAMES {
+            let candidate = format!(r"{app_dir}\{name}");
+            if !candidates
+                .iter()
+                .any(|current| current.eq_ignore_ascii_case(&candidate))
+            {
+                candidates.push(candidate);
+            }
+        }
+    }
     candidates
+}
+
+pub fn store_cli_candidates(install_location: &str) -> Vec<String> {
+    let root = normalized_windows_path_text(Path::new(install_location));
+    [
+        r"app\resources\codex.exe",
+        r"app\resources\codex-cli\codex.exe",
+        r"app\resources\codex-cli\bin\codex.exe",
+        r"app\codex.exe",
+    ]
+    .into_iter()
+    .map(|relative| format!(r"{root}\{relative}"))
+    .collect()
 }
 
 /// 从 CLI 或 GUI 路径推出应对接隔离环境的 Desktop exe。不访问磁盘。
@@ -99,6 +124,31 @@ pub fn resolve_gui_executable(cli: &Path) -> Result<PathBuf, String> {
         }
     }
     Err("未找到与 Codex CLI 匹配的桌面 App 可执行文件。".to_string())
+}
+
+#[cfg(target_os = "windows")]
+pub fn query_store_install_location() -> Option<String> {
+    let output = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$pkg = Get-AppxPackage -Name OpenAI.Codex; if (-not $pkg) { $pkg = Get-AppxPackage | Where-Object { $_.Name -like 'OpenAI.ChatGPT*' } | Select-Object -First 1 }; if ($pkg) { $pkg.InstallLocation }",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let line = text.lines().map(str::trim).find(|line| !line.is_empty())?;
+    if line
+        .chars()
+        .any(|character| character.is_control() || character == ';' || character == '&')
+    {
+        return None;
+    }
+    Some(line.to_string())
 }
 
 #[cfg(test)]
@@ -146,6 +196,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn store_resources_cli_also_checks_app_directory() {
+        let cli = Path::new(
+            r"C:\Program Files\WindowsApps\OpenAI.ChatGPT-Desktop_1.2026.1.0_x64__8wekyb3d8bbwe\app\resources\codex.exe",
+        );
+        let candidates = gui_candidates_from_cli(cli);
+        assert!(candidates.iter().any(|path| path.eq_ignore_ascii_case(
+            r"C:\Program Files\WindowsApps\OpenAI.ChatGPT-Desktop_1.2026.1.0_x64__8wekyb3d8bbwe\app\ChatGPT.exe"
+        )));
+    }
+
+    #[test]
+    fn store_install_location_lists_cli_candidates() {
+        let candidates = store_cli_candidates(
+            r"C:\Program Files\WindowsApps\OpenAI.ChatGPT-Desktop_1.2026.1.0_x64__8wekyb3d8bbwe",
+        );
+        assert!(candidates.contains(
+            &r"C:\Program Files\WindowsApps\OpenAI.ChatGPT-Desktop_1.2026.1.0_x64__8wekyb3d8bbwe\app\resources\codex.exe".to_string()
+        ));
+    }
     #[test]
     fn local_programs_search_covers_codex_and_chatgpt() {
         let candidates = program_cli_candidates(r"C:\Users\a\AppData\Local");

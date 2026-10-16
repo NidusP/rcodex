@@ -217,7 +217,7 @@ pub fn run() {
             // request body cannot block ordinary settings/diagnostics writes.
             app.manage(ConversationArchive::open(&app_data_dir)?);
             let managed_gateway_client =
-                ManagedGatewayClient::new(app_data_dir, database.path().to_path_buf())?;
+                ManagedGatewayClient::new(app_data_dir.clone(), database.path().to_path_buf())?;
             // The gateway waits for instance bindings. A lost control token with
             // the data port still occupied is reported later as unavailable;
             // setup must still open the window so the restart button can run.
@@ -225,6 +225,8 @@ pub fn run() {
                 tauri::async_runtime::block_on(managed_gateway_client.ensure_serving())
             {
                 eprintln!("managed gateway startup deferred: {error}");
+                let note = format!("managed gateway startup deferred: {error}\n");
+                let _ = std::fs::write(app_data_dir.join("gateway-startup.log"), note);
             }
             app.manage(managed_gateway_client);
             app.manage(ProviderStore::from_database(

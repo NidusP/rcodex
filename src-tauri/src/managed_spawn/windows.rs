@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::launcher_protocol::{append_startup_log, LaunchTarget};
 
-use super::args::{launcher_argv, launcher_sidecar_file_name, LauncherArgSpec};
+use super::args::{launcher_argv, LauncherArgSpec};
 
 const WINDOWS_LAUNCH_UNAVAILABLE: &str =
     "当前版本仅在 macOS 提供受管理终端启动。Windows 计划优先使用 Windows Terminal（wt.exe），没有时再打开 cmd.exe。";
@@ -96,12 +96,11 @@ fn launch_managed_app(
         std::env::current_exe().map_err(|error| format!("无法定位 R Codex 应用：{error}"))?;
     let helper = executable
         .parent()
-        .ok_or_else(|| "无法定位 R Codex 启动器目录。".to_string())?
-        .join(launcher_sidecar_file_name(true));
-    if !helper.is_file() {
+        .ok_or_else(|| "无法定位 R Codex 启动器目录。".to_string())?;
+    let Some(helper) = crate::support::first_existing_sidecar(helper, "codex-launcher") else {
         let _ = append_startup_log(&log_file, "launcher_binary_missing");
         return Err("未找到受管理 Codex 启动器；请重新构建 R Codex 应用。".to_string());
-    }
+    };
     let secret_file = if launch_secret.is_some() {
         Some(status_file.with_file_name("launch-secret.txt"))
     } else {

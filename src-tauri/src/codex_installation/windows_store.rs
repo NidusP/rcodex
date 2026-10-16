@@ -45,4 +45,15 @@ mod tests {
         let path = Path::new(r"C:\Users\a\AppData\Local\Programs\Codex\ChatGPT.exe");
         assert_eq!(package_family_from_path(path), None);
     }
+
+    #[test]
+    fn current_store_codex_package_keeps_codex_name() {
+        let path = Path::new(
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0\app\Codex.exe",
+        );
+        assert_eq!(
+            package_family_from_path(path).as_deref(),
+            Some("OpenAI.Codex_2p2nqsd0c76g0"),
+        );
+    }
 }

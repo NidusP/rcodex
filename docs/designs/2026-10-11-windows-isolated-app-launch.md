@@ -86,3 +86,15 @@ src-tauri/src/managed_app_launch/
 ## 执行记录
 
 - 2026-10-11：完成发现层目录拆分（`codex_installation/{mod,macos,windows,windows_store}.rs`），HOME 读取改为 HOME 或 USERPROFILE。Windows 控制面受管理 App 直接 spawn `codex-launcher.exe` 且 argv 不套 shell；CLI 仍返回原错误。商店路径无包注册时失败，不回退默认实例；helper 必须是 launcher。`managed_app_compatibility_enabled` 在 Windows 上仍为 false。商店激活、ACL、真实 ChatGPT.exe 只在 Windows 桌面记一次。
+
+- 2026-10-16：对照当前源码，普通 Win32 的受管理 App 启动已经不靠硬编码 false 挡住。managed_app_compatibility_enabled 在 Windows 上走探针：当前进程旁要有 codex-launcher.exe 和 codex-gateway.exe，能发现 CLI 与同目录桌面 GUI，且 GUI 不在 WindowsApps。环境变量 THREER_CODEX_DISABLE_MANAGED_APP=1 仍是紧急关闭。launcher 对 DirectExe 用 CreateProcess；商店包 query_registered_launch 固定返回 None，即使路由到包身份也会拒绝启动。本次未改代码，也没有 Windows 桌面验收。
+
+仍缺、不能当成正式放行的条件：
+
+- 商店包激活没有真实 Get-AppxPackage 结果，不能启动 WindowsApps 里的 ChatGPT。
+- 一次性密钥写成 launch-secret.txt，没有 Named Pipe，也没有只给当前用户的 ACL。set_private_directory 在 Windows 上仍是空操作。
+- 受管理 CLI 仍返回仅 macOS；不在这次 App 放行里。
+- 没有 Windows 桌面记录：普通安装打开隔离 App、目录不进默认窗口、Dev 与生产身份分离。
+- 2026-10-16：虚拟机安装 0.1.2 后弹出终端，打印 managed gateway startup deferred: managed_gateway_sidecar_missing，关掉终端时应用一起退出；商店版 Codex 被报未找到 CLI。原因是正式包仍是控制台子系统，伴随进程只找不带 .exe 和目标三元组的文件名，CLI 发现也不查 Appx 安装位置。源码已改为正式 Windows 包不分配控制台，按 Tauri externalBin 文件名查找 codex-gateway 与 codex-launcher，并用 Get-AppxPackage 找商店包里的 codex.exe。0.1.2 安装包本身不会变，要下一版 Windows 包才能验证。商店包激活仍不启动隔离 App。
+- 2026-10-16：虚拟机里的商店包 Name 是 OpenAI.Codex，不是 OpenAI.ChatGPT。PackageFullName 为 OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0，InstallLocation 在 WindowsApps 下同名目录。C:\Users\xxx\.codex 只是配置目录。查找改为先 Get-AppxPackage -Name OpenAI.Codex，没有再回退 OpenAI.ChatGPT*。
+- 2026-10-16：Windows 隔离 App 入口对商店包放开。开始菜单显示名是 ChatGPT，AppID 是 OpenAI.Codex_2p2nqsd0c76g0!App。探针不再因为 WindowsApps 拒绝；launcher 用 Invoke-CommandInDesktopPackage 拉起 codex-launcher，再由 helper 启动隔离桌面。本机是 macOS，没有 NSIS 和 Windows 链接器，打不出 exe 安装包。

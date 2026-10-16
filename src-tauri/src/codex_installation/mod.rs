@@ -55,6 +55,14 @@ pub fn resolve_codex_executable() -> Result<PathBuf, String> {
                 }
             }
         }
+        if let Some(install_location) = windows::query_store_install_location() {
+            for candidate in windows::store_cli_candidates(&install_location) {
+                let path = PathBuf::from(&candidate);
+                if is_executable_file(&path) {
+                    return Ok(path);
+                }
+            }
+        }
     }
 
     if let Some(home) = crate::support::user_home() {

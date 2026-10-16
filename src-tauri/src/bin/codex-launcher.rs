@@ -44,7 +44,17 @@ fn run() -> Result<(), String> {
     let mut status_file = None;
     let mut log_file = None;
     let mut secret_file = None;
-    let mut arguments = env::args().skip(1);
+    let mut arguments = env::args().skip(1).peekable();
+    #[cfg(target_os = "windows")]
+    if arguments.peek().map(String::as_str)
+        == Some(r_codex_lib::managed_app_launch::windows_package::HELPER_ARG)
+    {
+        arguments.next();
+        let payload = arguments
+            .next()
+            .ok_or_else(|| "商店激活参数缺失。".to_string())?;
+        return r_codex_lib::managed_app_launch::windows_package::run_helper(&payload);
+    }
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--target" => {
@@ -257,10 +267,22 @@ fn run() -> Result<(), String> {
                 let registered = query_registered_launch(&app_executable)?;
                 match managed_launch_route(&app_executable, registered.as_ref())? {
                     ManagedLaunchRoute::DirectExe => {}
-                    ManagedLaunchRoute::PackageIdentity(_) => {
-                        return Err(
-                            "商店包激活尚未在此 Windows 桌面验收，暂不启动隔离 App。".to_string()
+                    ManagedLaunchRoute::PackageIdentity(package) => {
+                        let result = activate_store_package(
+                            &package,
+                            &app_executable,
+                            &codex_home,
+                            &electron_user_data_dir,
+                            &sqlite_home,
+                            &instance_key,
+                            working_directory.as_deref(),
+                            &instance_id,
+                            &launch_nonce,
+                            &status_file,
+                            log_file.as_deref(),
                         );
+                        instance_key.zeroize();
+                        return result;
                     }
                 }
             }
@@ -734,5 +756,98 @@ mod tests {
         let value = read_secret_file(path.to_str().unwrap()).unwrap();
         assert_eq!(value, "secret-sentinel");
         assert!(!path.exists());
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn activate_store_package(
+    package: &r_codex_lib::managed_app_launch::windows::RegisteredLaunch,
+    app_executable: &Path,
+    codex_home: &Path,
+    electron_user_data_dir: &Path,
+    sqlite_home: &Path,
+    instance_key: &str,
+    working_directory: Option<&str>,
+    instance_id: &str,
+    launch_nonce: &str,
+    status_file: &str,
+    log_file: Option<&Path>,
+) -> Result<(), String> {
+    use r_codex_lib::managed_app_launch::merged_loopback_no_proxy;
+    use r_codex_lib::managed_app_launch::windows_package::{
+        build_package_activation_script, encode_helper_request, PackageHelperRequest,
+    };
+    let no_proxy = merged_loopback_no_proxy(
+        env::var("NO_PROXY").ok().as_deref(),
+        env::var("no_proxy").ok().as_deref(),
+    );
+    let mut args = vec![format!(
+        "--user-data-dir={}",
+        electron_user_data_dir.display()
+    )];
+    if let Some(directory) = working_directory {
+        args.push(directory.to_string());
+    }
+    let request = PackageHelperRequest {
+        executable: app_executable.display().to_string(),
+        args,
+        env: vec![
+            ("CODEX_HOME".to_string(), codex_home.display().to_string()),
+            (
+                "CODEX_SQLITE_HOME".to_string(),
+                sqlite_home.display().to_string(),
+            ),
+            (
+                "CODEX_ELECTRON_USER_DATA_PATH".to_string(),
+                electron_user_data_dir.display().to_string(),
+            ),
+            ("RCODEX_INSTANCE_KEY".to_string(), instance_key.to_string()),
+            ("NO_PROXY".to_string(), no_proxy.clone()),
+            ("no_proxy".to_string(), no_proxy),
+        ],
+        result_path: String::new(),
+        instance_id: instance_id.to_string(),
+        launch_nonce: launch_nonce.to_string(),
+        status_file: status_file.to_string(),
+        codex_home: codex_home.display().to_string(),
+    };
+    let payload = encode_helper_request(&request)?;
+    let helper = env::current_exe().map_err(|error| format!("无法定位启动器：{error}"))?;
+    let script = build_package_activation_script(package, &helper, &payload)?;
+    let script_path = Path::new(status_file).with_file_name("store-activation.ps1");
+    fs::write(&script_path, script).map_err(|error| format!("无法写入商店激活脚本：{error}"))?;
+    log_event(
+        log_file,
+        &format!("store_activation_started family={}", package.family_name),
+    );
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(&script_path)
+        .output()
+        .map_err(|error| format!("无法运行商店激活：{error}"))?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    log_event(
+        log_file,
+        &format!(
+            "store_activation_finished success={} stdout={} stderr={}",
+            output.status.success(),
+            stdout.chars().take(180).collect::<String>(),
+            stderr.chars().take(180).collect::<String>()
+        ),
+    );
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "商店包激活失败：{}",
+            stderr.chars().take(300).collect::<String>()
+        ))
     }
 }

@@ -16,6 +16,14 @@ pub struct PackageHelperRequest {
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
     pub result_path: String,
+    #[serde(default)]
+    pub instance_id: String,
+    #[serde(default)]
+    pub launch_nonce: String,
+    #[serde(default)]
+    pub status_file: String,
+    #[serde(default)]
+    pub codex_home: String,
 }
 
 pub fn escape_powershell_single_quoted(value: &str) -> String {
@@ -30,6 +38,13 @@ fn windows_file_name(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
+fn is_launcher_helper_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "codex-launcher"
+        || name == "codex-launcher.exe"
+        || (name.starts_with("codex-launcher-") && name.ends_with(".exe"))
+}
+
 pub fn build_package_activation_script(
     package: &RegisteredLaunch,
     helper: &Path,
@@ -38,8 +53,7 @@ pub fn build_package_activation_script(
     if payload_b64.len() > 30_000 {
         return Err("隔离启动参数超过商店激活限制。".to_string());
     }
-    let helper_name = windows_file_name(helper);
-    if helper_name != "codex-launcher.exe" && helper_name != "codex-launcher" {
+    if !is_launcher_helper_name(&windows_file_name(helper)) {
         return Err("商店包激活 helper 必须是 codex-launcher。".to_string());
     }
     Ok(format!(
@@ -53,10 +67,89 @@ pub fn build_package_activation_script(
 }
 
 #[cfg(target_os = "windows")]
-pub fn query_registered_launch(_path: &Path) -> Result<Option<RegisteredLaunch>, String> {
-    // Registration query is desktop-only. Until a Windows machine records a
-    // real Get-AppxPackage result, fail closed for store paths by returning None.
-    Ok(None)
+pub fn query_registered_launch(path: &Path) -> Result<Option<RegisteredLaunch>, String> {
+    use crate::codex_installation::windows::is_windowsapps_launch_path;
+    use crate::codex_installation::windows_store::package_family_from_path;
+    if !is_windowsapps_launch_path(path) {
+        return Ok(None);
+    }
+    let Some(install) = crate::codex_installation::windows::query_store_install_location() else {
+        return Ok(None);
+    };
+    let probe = std::path::PathBuf::from(format!(r"{install}\app\Codex.exe"));
+    let Some(family_name) =
+        package_family_from_path(&probe).or_else(|| package_family_from_path(path))
+    else {
+        return Ok(None);
+    };
+    let executable = if path.is_file() {
+        path.display().to_string()
+    } else {
+        probe.display().to_string()
+    };
+    Ok(Some(RegisteredLaunch {
+        family_name,
+        app_id: "App".to_string(),
+        executable,
+    }))
+}
+
+pub fn encode_helper_request(request: &PackageHelperRequest) -> Result<String, String> {
+    let bytes =
+        serde_json::to_vec(request).map_err(|error| format!("无法序列化商店激活参数：{error}"))?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+#[cfg(target_os = "windows")]
+pub fn run_helper(payload_b64: &str) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload_b64)
+        .map_err(|_| "商店激活参数无法解码。".to_string())?;
+    let request: PackageHelperRequest =
+        serde_json::from_slice(&bytes).map_err(|_| "商店激活参数无法解析。".to_string())?;
+    let mut command = std::process::Command::new(&request.executable);
+    command.args(&request.args);
+    for (key, value) in &request.env {
+        command.env(key, value);
+    }
+    command.stdin(std::process::Stdio::null());
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("无法启动商店版 Codex：{error}"))?;
+    if request.status_file.is_empty() {
+        let status = child
+            .wait()
+            .map_err(|error| format!("无法等待商店版 Codex：{error}"))?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(format!("商店版 Codex 以状态 {status} 退出。"))
+        };
+    }
+    let identity = crate::launcher_protocol::process_start_identity(child.id())
+        .unwrap_or_else(|_| "unknown".to_string());
+    let running = crate::launcher_protocol::LauncherReceipt::running(
+        request.instance_id,
+        request.launch_nonce,
+        child.id(),
+        identity,
+        request.executable,
+        request.codex_home,
+    );
+    let status_path = std::path::PathBuf::from(&request.status_file);
+    crate::launcher_protocol::write_receipt_atomically(&status_path, &running)?;
+    let status = child
+        .wait()
+        .map_err(|error| format!("无法等待商店版 Codex：{error}"))?;
+    let exited = crate::launcher_protocol::LauncherReceipt::exited_from(&running, status.code());
+    crate::launcher_protocol::write_receipt_atomically(&status_path, &exited)?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("商店版 Codex 以状态 {status} 退出。"))
+    }
 }
 
 #[cfg(test)]
@@ -70,6 +163,20 @@ mod tests {
 
     fn launcher() -> &'static str {
         r"C:\Program Files\R Codex\codex-launcher.exe"
+    }
+
+    #[test]
+    fn triple_named_launcher_can_activate_store_package() {
+        let package = RegisteredLaunch {
+            family_name: "OpenAI.Codex_2p2nqsd0c76g0".into(),
+            app_id: "App".into(),
+            executable: store_gui().into(),
+        };
+        let helper =
+            Path::new(r"C:\Program Files\R Codex\codex-launcher-x86_64-pc-windows-msvc.exe");
+        let script = build_package_activation_script(&package, helper, "cA==").unwrap();
+        assert!(script.contains("OpenAI.Codex_2p2nqsd0c76g0"));
+        assert!(script.contains("codex-launcher-x86_64-pc-windows-msvc.exe"));
     }
 
     #[test]

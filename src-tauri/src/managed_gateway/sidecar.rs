@@ -704,11 +704,20 @@ fn find_sidecar_executable() -> Result<PathBuf, String> {
     let mut candidates = Vec::new();
     if let Ok(current) = std::env::current_exe() {
         if let Some(parent) = current.parent() {
-            candidates.push(parent.join("codex-gateway"));
+            candidates.extend(crate::support::bundled_sidecar_candidates(
+                parent,
+                "codex-gateway",
+            ));
         }
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/codex-gateway"));
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/release/codex-gateway"));
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for profile in ["debug", "release"] {
+        let directory = manifest.join("target").join(profile);
+        candidates.extend(crate::support::bundled_sidecar_candidates(
+            &directory,
+            "codex-gateway",
+        ));
+    }
     candidates
         .into_iter()
         .find(|path| path.is_file())

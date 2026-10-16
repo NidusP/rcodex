@@ -42,18 +42,9 @@ fn managed_app_runtime_probe() -> bool {
     let Some(parent) = executable.parent() else {
         return false;
     };
-    let windows = cfg!(target_os = "windows");
-    let launcher = if windows {
-        "codex-launcher.exe"
-    } else {
-        "codex-launcher"
-    };
-    let gateway = if windows {
-        "codex-gateway.exe"
-    } else {
-        "codex-gateway"
-    };
-    if !parent.join(launcher).is_file() || !parent.join(gateway).is_file() {
+    if crate::support::first_existing_sidecar(parent, "codex-launcher").is_none()
+        || crate::support::first_existing_sidecar(parent, "codex-gateway").is_none()
+    {
         return false;
     }
     #[cfg(target_os = "macos")]
@@ -71,15 +62,12 @@ fn managed_app_runtime_probe() -> bool {
     }
     #[cfg(target_os = "windows")]
     {
-        // First Windows testers use an unpackaged ChatGPT.exe / Codex.exe.
-        // Store packages stay unavailable until package activation is recorded.
+        // Unpackaged exe and the Microsoft Store package both enable the button.
+        // Store installs are launched later with the package identity.
         let Ok(cli) = crate::codex_installation::resolve_codex_executable() else {
             return false;
         };
-        let Ok(gui) = crate::codex_installation::resolve_codex_app_executable(&cli) else {
-            return false;
-        };
-        return !crate::codex_installation::windows::is_windowsapps_launch_path(&gui);
+        crate::codex_installation::resolve_codex_app_executable(&cli).is_ok()
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
