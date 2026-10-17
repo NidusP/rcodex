@@ -719,6 +719,7 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn supervisor_records_real_pid_and_nonzero_exit() {
         let directory = env::temp_dir().join(format!("3r-supervisor-{}", uuid::Uuid::new_v4()));
@@ -746,6 +747,7 @@ mod tests {
         std::fs::remove_dir_all(directory).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn supervisor_terminates_child_when_running_receipt_cannot_be_written() {
         let directory = env::temp_dir().join(format!("3r-supervisor-{}", uuid::Uuid::new_v4()));

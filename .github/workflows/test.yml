@@ -18,5 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Placeholder sidecars for tauri_build
+        shell: bash
+        run: |
+          mkdir -p binaries
+          for name in codex-launcher codex-gateway; do
+            : > "binaries/${name}-aarch64-apple-darwin"
+            : > "binaries/${name}-x86_64-apple-darwin"
+            : > "binaries/${name}-x86_64-pc-windows-msvc.exe"
+            chmod +x "binaries/${name}-aarch64-apple-darwin" "binaries/${name}-x86_64-apple-darwin" || true
+          done
       - name: Run library and launcher tests
         run: cargo test --lib --bins -- --skip managed_gateway

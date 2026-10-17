@@ -2,6 +2,13 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-17：CI Test 补 sidecar 占位
+
+- 变更目的：GitHub Actions Test 在 macOS/Windows 都失败。干净检出没有 gitignore 的 binaries，tauri_build 过不了；Windows 上 launcher 单测还在 spawn /bin/sh。
+- 合同：test.yml 在 cargo test 前写入空的 launcher/gateway 三元组文件。supervisor 单测只在 unix 编译。不改版本号。
+- 修改文件：.github/workflows/test.yml，src-tauri/src/bin/codex-launcher.rs，本计划。
+- 验证：本机 cargo test --bin codex-launcher 11 passed。
+
 ### 2026-10-17：发布 0.1.4
 
 - 变更目的：用一次版本号更新验证自动打包发布。
