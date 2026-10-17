@@ -2,6 +2,14 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-17：发布 0.1.4
+
+- 变更目的：用一次版本号更新验证自动打包发布。
+- 合同：四个版本文件为 0.1.4。推 main，不另打本地 tag。CI 应创建 v0.1.4、打三份包并标为 latest。
+- 修改文件：package.json、Cargo.toml、tauri.conf.json、website/package.json、Cargo.lock，updater 文档，本计划，AGENTS.md，website isolated-config。
+- 验证：未本机打包。下一步看 GitHub Actions Release 作业。
+- 回滚：不要把 0.1.4 发成 latest；保留上一版即可。
+
 ### 2026-10-17：发版工作流自动发布
 
 - 变更目的：推 main 且版本号更新后，不再停在草稿 Release 等人点发布。

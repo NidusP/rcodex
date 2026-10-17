@@ -157,7 +157,7 @@ Tauri 构建脚本会先构建 `codex-launcher` 和 `codex-gateway`，再嵌入 
 以 [独立工作区改造](docs/designs/2026-09-21-isolated-only-product-plan.md) 和路由执行计划的最新验收为准：
 
 - 真实 Codex App 的独立 API 登录、多渠道连续会话、重启与导入后恢复验收；不得读取默认认证验证。
-- 隔离 Browser/Computer Use 的本地 `node_repl`/`cua_repl` 已写入隔离配置。三方目录 `node_repl_disabled` 在 0.1.3 为 false。已安装 0.1.2 仍写 true，要装 0.1.3 并重新启动隔离实例。Windows 隔离 config.toml 的 MCP 与 catalog 路径经 `join_config_path` 写入；旧实例要新包并重启才会重写。Chat 自动审核仍不指向自己。不能把 Settings 的组织/地区提示直接归因于默认配置继承。
+- 隔离 Browser/Computer Use 的本地 `node_repl`/`cua_repl` 已写入隔离配置。三方目录 `node_repl_disabled` 在 0.1.4 为 false。已安装 0.1.2 仍写 true，要装 0.1.4 并重新启动隔离实例。Windows 隔离 config.toml 的 MCP 与 catalog 路径经 `join_config_path` 写入；旧实例要新包并重启才会重写。Chat 自动审核仍不指向自己。不能把 Settings 的组织/地区提示直接归因于默认配置继承。
 - Windows 打包、签名/公证、凭据文件权限，以及散装 DirectExe 与隔离 CLI 终端的虚拟机验收。安装根、默认入口 AppsFolder、CLI wt/cmd 已写入源码。
 - 官方账户与订阅模型路由仍关闭；不接管原 Codex 登录态。
 - 跨渠道旧历史的字段兼容性和旁路模型须按真实合同验证；不能通过改源历史、自动换渠道或回退默认上游修复。
