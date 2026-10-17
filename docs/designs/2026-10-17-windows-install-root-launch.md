@@ -1,6 +1,6 @@
 # Windows 安装根、DirectExe 与隔离 CLI
 
-> 状态：2026-10-17 源码已落地。散装 DirectExe 与 Windows 隔离 CLI 终端仍需虚拟机验收。商店包隔离启动已接通。本方案把「商店 / exe」收成同一份 Codex 安装，只在拉起进程时分叉；Windows 隔离 CLI 用 Windows Terminal 或 cmd start 打开，不再返回仅 macOS。发现层桌面优先于 PATH、隔离首启打开 Browser / Computer Use 已在同日落地。
+> 状态：2026-10-17 源码已落地。散装 DirectExe 与 Windows 隔离 CLI 终端仍需虚拟机验收。商店包隔离启动已接通。隔离 config.toml 的路径经 `join_config_path` 写入，去掉 canonicalize 的 `\\?\` 前缀，也不再混用斜杠；要新包并重新启动隔离 App 才会重写已有 toml。本方案把「商店 / exe」收成同一份 Codex 安装，只在拉起进程时分叉；Windows 隔离 CLI 用 Windows Terminal 或 cmd start 打开，不再返回仅 macOS。发现层桌面优先于 PATH、隔离首启打开 Browser / Computer Use 已在同日落地。
 
 ## 目标
 
@@ -113,10 +113,13 @@ App 启动仍直接 spawn codex-launcher.exe（可无窗口）。商店包激活
    `launch_codex_in_app` 去掉商店拒绝，改用同一安装解析的非隔离拉起。
 
 6. `src-tauri/src/managed_codex_config/computer_use.rs`  
-   Windows helper 从 CLI 推出的 app 目录解析 cua_node；没有 resources 段时回退 CLI 父目录，不要假设只有商店 `app\resources`。自选目录若是扁平布局，走 `resources\cua_node`。
+   Windows helper 从 CLI 推出的 app 目录解析 cua_node；没有 resources 段时回退 CLI 父目录，不要假设只有商店 `app\resources`。自选目录若是扁平布局，走 `resources\cua_node`。相对段一律交给 `join_config_path`，写入 toml 前再走 `config_path_text`。
 
 7. `src-tauri/src/managed_spawn/windows.rs` 与可在 macOS 单测的 `windows_cli.rs`
    CLI 按 wt / cmd 合同组装 argv 并 spawn。App 保持现有 spawn launcher。
+
+8. `src-tauri/src/managed_codex_config/io.rs`  
+   `join_config_path` 是隔离配置路径的唯一拼装入口。Windows 形态用 `\`，Unix 形态用 `/`；去掉 `\\?\` / `//?/`。发现层 `codex_installation/windows.rs` 仍用文本切割，不走这套写入合同。
 
 调用方（`managed_launch/prepare.rs`、探针、打开隔离目录）继续只拿 CLI/GUI 路径，不出现「商店用户 / exe 用户」分支。
 
@@ -137,6 +140,7 @@ App 启动仍直接 spawn codex-launcher.exe（可无窗口）。商店包激活
 - 「打开默认 Codex」在商店安装上不再报请改用非商店包；Package 走 shell:AppsFolder 与包家族 AppID。
 - 隔离 CLI：有 wt 时命令含 -d、--、launcher 和 --target cli；无 wt 时为 cmd.exe /c start "R Codex CLI"。
 - `cargo fmt --check`、Windows 路径与 Computer Use 相关单测、`cargo test --lib --offline` 通过。
+- 隔离 config.toml 的 `model_catalog_json` 与 MCP command 不含 `\\?\`，Windows 路径不含 `/`。
 
 ## 回滚
 
@@ -146,4 +150,20 @@ App 启动仍直接 spawn codex-launcher.exe（可无窗口）。商店包激活
 
 - 发现层桌面优先于 PATH：已在 `codex_installation/mod.rs`。
 - 隔离首启打开 Browser / Computer Use / Ask for approval：已在 `preferences.rs`。
-- 本方案已写入源码：安装根类型、DirectExe cwd、默认入口去商店拒绝、Windows 隔离 CLI 终端。散装 DirectExe 与 CLI 终端未在 Windows 实机验收。
+- 本方案已写入源码：安装根类型、DirectExe cwd、默认入口去商店拒绝、Windows 隔离 CLI 终端、隔离 config 路径 `join_config_path`。散装 DirectExe 与 CLI 终端未在 Windows 实机验收。
+
+## 隔离 config 路径
+
+写入隔离 `config.toml` 的路径必须经过 `join_config_path` 拼装、`config_path_text` 写出，包括 `model_catalog_json`、MCP `command` / `args`、以及 `CODEX_HOME`、`SKY_CUA_SERVICE_PATH`、`NODE_REPL_*` 这些环境值。
+
+- 相对段里的 `/` 与 `\` 先拆开，再按路径自己的形态重拼：带盘符或 `\` 的用 `\`，其余用 `/`。不能只看编译目标，因为 macOS 单测会喂 Windows 路径样本。
+- 去掉 `canonicalize()` 的 `\\?\` / `//?/`。Codex MCP 拿带此前缀或混用斜杠的 command 去拉 `node_repl.exe` 时会找不到。
+- 相对常量可以继续写 `resources/cua_node/...`；禁止把 `Path::join` 的 Display 直接写进 toml。
+
+已有隔离实例要重新启动才会重写 toml。发现层安装根解析不改。
+
+## 卸载
+
+关窗口只隐藏控制面。卸载或覆盖安装前必须结束 `r-codex.exe`、`codex-launcher.exe` 和 `codex-gateway.exe`，否则 NSIS 删不掉被锁住的 sidecar，目录里会留下启动器。不要结束 `ChatGPT.exe` / `Codex.exe`，那是 Codex 桌面本身。
+
+安装包用 `windows/installer-hooks.nsh`：PREINSTALL 和 PREUNINSTALL 先 taskkill 这些进程，POSTUNINSTALL 再删掉仍留在安装目录里的文件。用户数据在 `%APPDATA%\io.rcodex`，卸载不自动删除。

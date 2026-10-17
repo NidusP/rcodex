@@ -18,6 +18,8 @@ mod time;
 
 pub use hash::sha256_label;
 pub use paths::{resolve_workspace, set_private_directory, user_home};
+#[cfg(target_os = "windows")]
+pub use process::terminate_pid;
 pub use process::{command_without_console, process_exists, process_start_identity};
 pub use sidecar::{bundled_sidecar_candidates, first_existing_sidecar};
 pub use time::unix_now_seconds;

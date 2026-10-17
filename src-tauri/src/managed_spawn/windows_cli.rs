@@ -10,6 +10,7 @@ use crate::codex_installation::windows::normalized_windows_path_text;
 pub enum WindowsCliTerminalKind {
     WindowsTerminal,
     CmdStart,
+    DirectLauncher,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,6 +39,8 @@ pub fn windows_cli_terminal_spec(
             args.push(dir.to_string());
         }
         args.push("--".to_string());
+        args.push("cmd.exe".to_string());
+        args.push("/k".to_string());
         args.push(helper);
         args.extend(launcher_args.iter().cloned());
         WindowsCliTerminalSpec {
@@ -55,6 +58,8 @@ pub fn windows_cli_terminal_spec(
             args.push("/D".to_string());
             args.push(dir.to_string());
         }
+        args.push("cmd.exe".to_string());
+        args.push("/k".to_string());
         args.push(helper);
         args.extend(launcher_args.iter().cloned());
         WindowsCliTerminalSpec {
@@ -62,6 +67,15 @@ pub fn windows_cli_terminal_spec(
             program: "cmd.exe".to_string(),
             args,
         }
+    }
+}
+
+/// Direct spawn of the GUI-subsystem launcher. It allocates its own console.
+pub fn windows_cli_direct_spec(helper: &Path, launcher_args: &[String]) -> WindowsCliTerminalSpec {
+    WindowsCliTerminalSpec {
+        kind: WindowsCliTerminalKind::DirectLauncher,
+        program: normalized_windows_path_text(helper),
+        args: launcher_args.to_vec(),
     }
 }
 
@@ -100,6 +114,8 @@ mod tests {
                 "-d".to_string(),
                 r"C:\Users\a\project".to_string(),
                 "--".to_string(),
+                "cmd.exe".to_string(),
+                "/k".to_string(),
                 r"C:\Program Files\R Codex\codex-launcher.exe".to_string(),
                 "--target".to_string(),
                 "cli".to_string(),
@@ -127,6 +143,8 @@ mod tests {
                 "R Codex CLI".to_string(),
                 "/D".to_string(),
                 r"C:\Users\a\project".to_string(),
+                "cmd.exe".to_string(),
+                "/k".to_string(),
                 r"C:\Program Files\R Codex\codex-launcher.exe".to_string(),
                 "--target".to_string(),
                 "cli".to_string(),
@@ -154,5 +172,16 @@ mod tests {
         );
         assert!(!cmd.args.iter().any(|arg| arg == "/D"));
         assert_eq!(cmd.args[2], "R Codex CLI");
+    }
+
+    #[test]
+    fn direct_launcher_uses_helper_as_program() {
+        let spec = windows_cli_direct_spec(
+            Path::new(r"C:\codex-launcher.exe"),
+            &["--target".into(), "cli".into()],
+        );
+        assert_eq!(spec.kind, WindowsCliTerminalKind::DirectLauncher);
+        assert_eq!(spec.program, r"C:\codex-launcher.exe");
+        assert_eq!(spec.args, vec!["--target".to_string(), "cli".to_string()]);
     }
 }

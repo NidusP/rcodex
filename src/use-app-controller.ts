@@ -4,7 +4,6 @@ import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import {
   getCodexControlSnapshot,
-  getCodexSpecialModelRoles,
   invokeControl,
   isActiveInstanceState,
   isApiKeyCredential,
@@ -260,8 +259,7 @@ export function useAppController() {
           })),
         );
       }
-      const [roles, summaries, reports, events, requests] = await Promise.all([
-        getCodexSpecialModelRoles().catch(() => []),
+      const [summaries, reports, events, requests] = await Promise.all([
         Promise.all(snapshot.providers.map(async (provider) => {
           try {
             return [provider.id, await invoke<ProviderUsageSummary>("get_provider_usage_summary", { providerId: provider.id })] as const;
@@ -275,7 +273,6 @@ export function useAppController() {
         invoke<GatewayDiagnosticEvent[]>("gateway_recent_diagnostics").catch(() => []),
         invoke<InstanceRequestDiagnostic[]>("recent_gateway_requests").catch(() => []),
       ]);
-      setSpecialModelRoles(roles);
       setUsageByProvider(Object.fromEntries(summaries.filter((entry): entry is readonly [string, ProviderUsageSummary] => entry !== null)));
       setConnectivityByProvider(Object.fromEntries(reports.filter((entry): entry is ProviderConnectivityReport => entry !== null).map((entry) => [entry.providerId, entry])));
       setDiagnostics(events);

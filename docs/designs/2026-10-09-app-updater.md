@@ -52,6 +52,8 @@ pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action
 
 2026-10-14：v0.1.2 带上 Chat 工具转换、空前缀不再自动补 /v1，以及 DeepSeek、GLM、Qwen 的官方档位。版本仍写在上述四个文件。tag v0.1.2 出草稿 Release，人工发布后已安装的 0.1.1 才会看到更新。私钥不变。
 
+2026-10-17：v0.1.3 带上 Windows 隔离路径拼装、托盘退出杀进程、NSIS 卸载钩子，以及商店/散装安装根启动。版本仍写在上述四个文件。tag v0.1.3 出草稿 Release，人工发布后已安装的 0.1.2 才会看到更新。私钥不变。
+
 ## 验收
 
 - `pnpm run check` 通过。

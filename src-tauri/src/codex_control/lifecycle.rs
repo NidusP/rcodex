@@ -150,6 +150,15 @@ impl CodexControlStore {
                 }
             }
         }
+        #[cfg(target_os = "windows")]
+        {
+            if let Err(error) = crate::support::terminate_pid(pid) {
+                if crate::support::process_exists(pid) {
+                    return Err(error);
+                }
+                self.finish_instance_without_receipt(instance_id)?;
+            }
+        }
         self.instance(instance_id)
     }
 

@@ -92,6 +92,26 @@ pub fn command_without_console(program: impl AsRef<std::ffi::OsStr>) -> std::pro
     command
 }
 
+/// Stop a verified instance PID. Windows uses taskkill so child renderer
+/// processes go with the supervisor; Unix stop_instance still sends SIGTERM.
+#[cfg(target_os = "windows")]
+pub fn terminate_pid(pid: u32) -> Result<(), String> {
+    let output = command_without_console("taskkill")
+        .args(["/F", "/T", "/PID", &pid.to_string()])
+        .output()
+        .map_err(|error| format!("无法停止 Codex 实例：{error}"))?;
+    if output.status.success() || !process_exists(pid) {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr);
+    let detail = detail.trim();
+    if detail.is_empty() {
+        Err("无法停止 Codex 实例。".to_string())
+    } else {
+        Err(format!("无法停止 Codex 实例：{detail}"))
+    }
+}
+
 pub fn process_exists(pid: u32) -> bool {
     #[cfg(unix)]
     {

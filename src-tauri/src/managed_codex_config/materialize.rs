@@ -14,8 +14,8 @@ use url::Url;
 use crate::routing::validate_public_model_id;
 
 use super::io::{
-    reject_link, sha256_label, validate_gateway_url, validate_profile_name,
-    write_immutable_atomically, write_private_atomically_overwrite,
+    config_path_text, join_config_path, reject_link, sha256_label, validate_gateway_url,
+    validate_profile_name, write_immutable_atomically, write_private_atomically_overwrite,
 };
 use super::preferences::ensure_collaboration_feature;
 use super::{
@@ -67,6 +67,7 @@ pub fn materialize_managed_codex_config_with_auto_review(
     if !codex_home.is_dir() {
         return Err("managed_codex_home_not_directory".to_string());
     }
+    let catalog_name = format!("{profile_name}.models.json");
     materialize_profile_files(
         &codex_home,
         profile_name,
@@ -75,7 +76,7 @@ pub fn materialize_managed_codex_config_with_auto_review(
         render_profile(
             gateway_base_url,
             requires_openai_auth,
-            &codex_home.join(format!("{profile_name}.models.json")),
+            &join_config_path(&codex_home, [catalog_name.as_str()]),
             default_model_id,
         )?,
     )
@@ -94,7 +95,7 @@ pub fn materialize_managed_app_config(
     if profile_path.parent() != Some(codex_home.as_path()) {
         return Err("managed_app_profile_outside_home".to_string());
     }
-    let config_path = codex_home.join("config.toml");
+    let config_path = join_config_path(&codex_home, ["config.toml"]);
     let profile_bytes = fs::read(&profile_path)
         .map_err(|error| format!("managed_app_profile_read_failed:{error}"))?;
     reject_link(&config_path)?;
@@ -145,8 +146,10 @@ fn materialize_profile_files(
     let catalog_bytes = serde_json::to_vec_pretty(catalog)
         .map_err(|error| format!("catalog_encode_failed:{error}"))?;
     let profile_bytes = profile.into_bytes();
-    let catalog_path = codex_home.join(format!("{profile_name}.models.json"));
-    let profile_path = codex_home.join(format!("{profile_name}.config.toml"));
+    let catalog_name = format!("{profile_name}.models.json");
+    let profile_file = format!("{profile_name}.config.toml");
+    let catalog_path = join_config_path(codex_home, [catalog_name.as_str()]);
+    let profile_path = join_config_path(codex_home, [profile_file.as_str()]);
     let catalog_existed = catalog_path.exists();
     write_immutable_atomically(&catalog_path, &catalog_bytes)?;
     if let Err(error) = write_immutable_atomically(&profile_path, &profile_bytes) {
@@ -181,7 +184,7 @@ fn render_profile(
     );
     root.insert(
         "model_catalog_json".to_string(),
-        toml::Value::String(catalog_path.display().to_string()),
+        toml::Value::String(config_path_text(catalog_path)),
     );
     root.insert(
         "model".to_string(),

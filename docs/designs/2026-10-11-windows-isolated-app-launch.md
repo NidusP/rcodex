@@ -108,7 +108,7 @@ src-tauri/src/managed_app_launch/
 
 ## 2026-10-17：Windows Computer Use 与控制台抑制
 
-商店包的 Browser/Computer Use 运行时继续从已安装包读取 node.exe、node_repl.exe、cua-repl.mjs 和 Node 模块。启动准备会把随包的 Windows Computer Use helper 目录复制到隔离 CODEX_HOME\computer-use\windows，拒绝符号链接和默认用户 .codex\computer-use 来源；配置中的 CODEX_HOME、SKY_CUA_SERVICE_PATH、notify 和 MCP 命令都指向隔离路径或当前商店包路径。
+商店包的 Browser/Computer Use 运行时继续从已安装包读取 node.exe、node_repl.exe、cua-repl.mjs 和 Node 模块。启动准备会把随包的 Windows Computer Use helper 目录复制到隔离 CODEX_HOME\computer-use\windows，拒绝符号链接和默认用户 .codex\computer-use 来源；配置中的 CODEX_HOME、SKY_CUA_SERVICE_PATH、notify 和 MCP 命令都指向隔离路径或当前商店包路径。这些字符串必须由 `join_config_path` / `config_path_text` 写出：不能带 `\\?\`，Windows 上也不得留下 `app\resources/cua_node` 这种混用斜杠，否则 Browser / Computer Use 的 node_repl 起不来。
 
 Windows 下的 powershell.exe、Codex CLI 探针、tasklist、netstat、taskkill 和 launcher 进程都不应分配可见控制台。工具进程使用 CREATE_NO_WINDOW，codex-launcher.exe 和 codex-gateway.exe 使用 Windows GUI 子系统。找错 resources\codex.exe 会导致一次启动失败和退出码 2，但它不是保存渠道或刷新控制面时反复空白终端的唯一来源；后者主要来自这些探针和控制台 sidecar。
 
@@ -116,6 +116,7 @@ Windows 下的 powershell.exe、Codex CLI 探针、tasklist、netstat、taskkill
 
 ## 执行记录
 
+- 2026-10-17：隔离 config 路径改为 `join_config_path` 拼装。Windows 形态用反斜杠，去掉 `\\?\`。已有实例要新包并重新启动隔离 App 才会重写 toml。
 - 2026-10-17：安装根 WindowsCodexInstall、DirectExe cwd=gui 目录、打开默认 Codex 走 AppsFolder/CreateProcess、Windows 隔离 CLI 用 wt.exe 或 cmd start。cargo fmt、cargo test --lib --offline 366 passed、cargo check --all-targets --offline 通过。散装 DirectExe 与 CLI 终端仍需 Windows 虚拟机验收。
 
 

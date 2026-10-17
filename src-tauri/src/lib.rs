@@ -185,8 +185,7 @@ pub fn run() {
                 WindowEvent::CloseRequested { api, .. } => {
                     // Red close button: hide the control plane. It must not
                     // tear down a sidecar that an active Codex CLI still uses.
-                    // On macOS the dock icon goes away; the menu bar icon stays.
-                    // Dock Quit and Cmd+Q are handled by macos_quit, not here.
+                    // Tray 退出 / macOS Dock Quit run perform_exit_cleanup.
                     api.prevent_close();
                     park_main_window(window);
                 }

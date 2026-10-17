@@ -2,11 +2,7 @@
 //!
 //! 普通诊断只记形状、计数和脱敏摘要，不写正文或 Key。失败不改已物化文件。
 
-use std::{
-    collections::BTreeSet,
-    path::Path,
-    process::Output,
-};
+use std::{collections::BTreeSet, path::Path, process::Output};
 
 use serde_json::Value as JsonValue;
 

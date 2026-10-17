@@ -3,7 +3,59 @@
 use std::{fs, path::Path};
 use uuid::Uuid;
 
+use super::io::config_path_text;
 use super::*;
+
+fn assert_eq_config_path(actual: Option<&str>, path: &Path) {
+    let expected = config_path_text(path);
+    assert_eq!(actual, Some(expected.as_str()));
+}
+
+fn assert_spawnable_config_paths(config: &toml::Table) {
+    let servers = config["mcp_servers"].as_table().expect("mcp_servers");
+    for name in ["node_repl", "cua_repl"] {
+        let server = servers[name].as_table().expect(name);
+        assert_single_separator(server["command"].as_str().expect("command"));
+        if let Some(args) = server.get("args").and_then(|value| value.as_array()) {
+            for arg in args {
+                if let Some(text) = arg.as_str() {
+                    assert_single_separator(text);
+                }
+            }
+        }
+        let env = server["env"].as_table().expect("env");
+        for key in [
+            "NODE_REPL_NODE_MODULE_DIRS",
+            "NODE_REPL_NODE_PATH",
+            "CODEX_HOME",
+            "NODE_REPL_TRUSTED_CODE_PATHS",
+            "SKY_CUA_SERVICE_PATH",
+            "CUA_REPL_NODE_REPL_PATH",
+            "CODEX_CLI_PATH",
+        ] {
+            assert_single_separator(env[key].as_str().expect(key));
+        }
+    }
+    if let Some(notify) = config.get("notify").and_then(|value| value.as_array()) {
+        if let Some(text) = notify.first().and_then(|value| value.as_str()) {
+            assert_single_separator(text);
+        }
+    }
+}
+
+fn assert_single_separator(value: &str) {
+    let windows = value.contains('\\') || value.chars().nth(1) == Some(':');
+    if windows {
+        assert!(
+            !value.contains('/'),
+            "mixed separators in isolated config path: {value}"
+        );
+        assert!(
+            !value.contains(r"\\?\"),
+            "verbatim prefix in isolated config path: {value}"
+        );
+    }
+}
 
 #[test]
 fn isolated_computer_use_mcp_isolated_paths_and_services_are_materialized() {
@@ -41,27 +93,25 @@ fn isolated_computer_use_mcp_isolated_paths_and_services_are_materialized() {
         config["mcp_servers"]["cua_repl"]["enabled"].as_bool(),
         Some(true)
     );
-    assert_eq!(
-        config["mcp_servers"]["cua_repl"]["command"].as_str(),
-        Some(node.to_str().unwrap())
-    );
-    assert_eq!(
+    assert_eq_config_path(config["mcp_servers"]["cua_repl"]["command"].as_str(), &node);
+    assert_eq_config_path(
         config["mcp_servers"]["node_repl"]["env"]["CODEX_HOME"].as_str(),
-        Some(root.to_str().unwrap())
+        &root,
     );
-    assert_eq!(
+    assert_eq_config_path(
         config["mcp_servers"]["node_repl"]["env"]["CODEX_CLI_PATH"].as_str(),
-        Some(codex_cli.to_str().unwrap())
+        &codex_cli,
     );
-    assert_eq!(
+    assert_eq_config_path(
         config["mcp_servers"]["node_repl"]["env"]["NODE_REPL_NODE_PATH"].as_str(),
-        Some(node.to_str().unwrap())
+        &node,
     );
-    assert_eq!(
+    assert_eq_config_path(
         config["mcp_servers"]["node_repl"]["env"]["SKY_CUA_SERVICE_PATH"].as_str(),
-        Some(root.join(ISOLATED_COMPUTER_USE_APP).to_str().unwrap())
+        &root.join(ISOLATED_COMPUTER_USE_APP),
     );
-    assert_eq!(config["notify"][0].as_str(), Some(client.to_str().unwrap()));
+    assert_eq_config_path(config["notify"][0].as_str(), &client);
+    assert_spawnable_config_paths(&config);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -122,14 +172,12 @@ fn isolated_computer_use_helper_is_copied_from_the_desktop_bundle() {
         .unwrap()
         .parse()
         .unwrap();
-    assert_eq!(
+    assert_eq_config_path(
         config["mcp_servers"]["node_repl"]["env"]["SKY_CUA_SERVICE_PATH"].as_str(),
-        Some(isolated_computer_use_app(&home).to_str().unwrap())
+        &isolated_computer_use_app(&home),
     );
-    assert_eq!(
-        config["notify"][0].as_str(),
-        Some(dest_client.to_str().unwrap())
-    );
+    assert_eq_config_path(config["notify"][0].as_str(), &dest_client);
+    assert_spawnable_config_paths(&config);
     assert!(!config["notify"][0]
         .as_str()
         .unwrap()
@@ -280,15 +328,13 @@ fn windows_store_computer_use_helper_is_copied_and_interpreters_stay_in_the_pack
         .parse()
         .unwrap();
     let node = app.join("resources/cua_node/bin/node.exe");
-    assert_eq!(
-        config["mcp_servers"]["cua_repl"]["command"].as_str(),
-        Some(node.to_str().unwrap())
-    );
-    assert_eq!(
+    assert_eq_config_path(config["mcp_servers"]["cua_repl"]["command"].as_str(), &node);
+    assert_eq_config_path(
         config["mcp_servers"]["node_repl"]["env"]["SKY_CUA_SERVICE_PATH"].as_str(),
-        Some(copied.to_str().unwrap())
+        &copied,
     );
-    assert_eq!(config["notify"][0].as_str(), Some(copied.to_str().unwrap()));
+    assert_eq_config_path(config["notify"][0].as_str(), &copied);
+    assert_spawnable_config_paths(&config);
     fs::remove_dir_all(root).unwrap();
 }
 

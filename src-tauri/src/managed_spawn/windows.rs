@@ -258,34 +258,60 @@ fn launch_managed_cli(
         electron_user_data_dir,
         sqlite_home,
     )?;
-    let spec = super::windows_cli::windows_cli_terminal_spec(
+    let mut specs = Vec::new();
+    specs.push(super::windows_cli::windows_cli_terminal_spec(
         &prepared.helper,
         &prepared.args,
         working_directory,
         find_windows_terminal().as_deref(),
-    );
+    ));
+    if specs[0].kind != super::windows_cli::WindowsCliTerminalKind::CmdStart {
+        specs.push(super::windows_cli::windows_cli_terminal_spec(
+            &prepared.helper,
+            &prepared.args,
+            working_directory,
+            None,
+        ));
+    }
+    specs.push(super::windows_cli::windows_cli_direct_spec(
+        &prepared.helper,
+        &prepared.args,
+    ));
     // CLI 必须是可见终端，不能套 CREATE_NO_WINDOW。
-    Command::new(&spec.program)
-        .args(&spec.args)
-        .spawn()
-        .map_err(|error| {
-            if let Some(path) = prepared.secret_file.as_deref() {
-                let _ = fs::remove_file(path);
+    let mut last_error = None;
+    for spec in specs {
+        match Command::new(&spec.program).args(&spec.args).spawn() {
+            Ok(_) => {
+                let _ = append_startup_log(
+                    &prepared.log_file,
+                    &format!(
+                        "cli_spawn_dispatched target={launch_target} terminal={}",
+                        spec.program
+                    ),
+                );
+                return Ok(());
             }
-            let _ = append_startup_log(
-                &prepared.log_file,
-                &format!("cli_spawn_failed target={launch_target} error={error}"),
-            );
-            format!("无法启动 Codex CLI：{error}")
-        })?;
-    let _ = append_startup_log(
-        &prepared.log_file,
-        &format!(
-            "cli_spawn_dispatched target={launch_target} terminal={}",
-            spec.program
-        ),
-    );
-    Ok(())
+            Err(error) => {
+                let _ = append_startup_log(
+                    &prepared.log_file,
+                    &format!(
+                        "cli_spawn_failed target={launch_target} terminal={} error={error}",
+                        spec.program
+                    ),
+                );
+                last_error = Some(error);
+            }
+        }
+    }
+    if let Some(path) = prepared.secret_file.as_deref() {
+        let _ = fs::remove_file(path);
+    }
+    Err(format!(
+        "无法启动 Codex CLI：{}",
+        last_error
+            .map(|error| error.to_string())
+            .unwrap_or_else(|| "没有可用的终端。".to_string())
+    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -294,7 +320,7 @@ fn find_windows_terminal() -> Option<std::path::PathBuf> {
     if let Some(path_value) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&path_value) {
             let candidate = directory.join("wt.exe");
-            if candidate.is_file() {
+            if is_usable_windows_terminal(&candidate) {
                 return Some(candidate);
             }
         }
@@ -302,5 +328,12 @@ fn find_windows_terminal() -> Option<std::path::PathBuf> {
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .map(|local| local.join(r"Microsoft\WindowsApps\wt.exe"))
-        .filter(|path| path.is_file())
+        .filter(|path| is_usable_windows_terminal(path))
+}
+
+#[cfg(target_os = "windows")]
+fn is_usable_windows_terminal(path: &std::path::Path) -> bool {
+    std::fs::metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.len() > 0)
+        .unwrap_or(false)
 }

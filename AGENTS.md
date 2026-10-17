@@ -157,7 +157,7 @@ Tauri 构建脚本会先构建 `codex-launcher` 和 `codex-gateway`，再嵌入 
 以 [独立工作区改造](docs/designs/2026-09-21-isolated-only-product-plan.md) 和路由执行计划的最新验收为准：
 
 - 真实 Codex App 的独立 API 登录、多渠道连续会话、重启与导入后恢复验收；不得读取默认认证验证。
-- 隔离 Browser/Computer Use 的本地 `node_repl`/`cua_repl` 已写入隔离配置。三方目录 `node_repl_disabled` 在当前源码为 false，但 0.1.2 仍写成 true；要用这份源码跑 tauri:dev 或再发一版后，退出隔离实例再启动。Chat 自动审核仍不指向自己。不能把 Settings 的组织/地区提示直接归因于默认配置继承。
+- 隔离 Browser/Computer Use 的本地 `node_repl`/`cua_repl` 已写入隔离配置。三方目录 `node_repl_disabled` 在 0.1.3 为 false。已安装 0.1.2 仍写 true，要装 0.1.3 并重新启动隔离实例。Windows 隔离 config.toml 的 MCP 与 catalog 路径经 `join_config_path` 写入；旧实例要新包并重启才会重写。Chat 自动审核仍不指向自己。不能把 Settings 的组织/地区提示直接归因于默认配置继承。
 - Windows 打包、签名/公证、凭据文件权限，以及散装 DirectExe 与隔离 CLI 终端的虚拟机验收。安装根、默认入口 AppsFolder、CLI wt/cmd 已写入源码。
 - 官方账户与订阅模型路由仍关闭；不接管原 Codex 登录态。
 - 跨渠道旧历史的字段兼容性和旁路模型须按真实合同验证；不能通过改源历史、自动换渠道或回退默认上游修复。
@@ -229,6 +229,8 @@ Tauri 构建脚本会先构建 `codex-launcher` 和 `codex-gateway`，再嵌入 
 - 2026-10-09：运行中的隔离实例不再锁工作区。渠道、模型、排序和 API 登录可以改，下次启动才用新配置；保存后提示「当前隔离实例正在运行，重启可应用修改」。删除模型渠道仍要先停掉占用它的实例。
 - 2026-10-09：删除全部旧选择器自定义类名和样式，包括选择器宽度规则。src/workspace-surface.tsx、src/SessionImportPanel.tsx、src/ConversationArchivePanel.tsx、src/components/model-utility/diagnostics-board.tsx 及对应 CSS。
 - 2026-10-10：标题栏不再显示 Gateway 空闲或转发。只有失联时右侧显示「重启」。应用启动即拉起 Gateway，真正退出先停隔离实例再停 Gateway。关窗口仍只隐藏。
+- 2026-10-17：Windows 关窗口仍隐藏。托盘「退出」走 taskkill 停止隔离实例、launcher 和 Gateway。src-tauri/src/codex_control/lifecycle.rs、src-tauri/src/support/process.rs。
+- 2026-10-17：隔离 config 路径经 join_config_path 拼装。src-tauri/src/managed_codex_config/io.rs、computer_use.rs、materialize.rs。
 - 2026-10-11：程序坞「退出」和 Cmd+Q 与菜单栏「退出」走同一条清理。macOS 拦截 `applicationShouldTerminate:`，取消系统 terminate，改发 `exit(0)`，先停隔离实例再停 Gateway。红点关闭仍只隐藏。src-tauri/src/macos_quit.rs、src-tauri/src/lib.rs。
 - 2026-10-10：恢复系统标题栏。去掉网页自绘标题栏、macOS 交通灯改位和 Windows 自绘窗口按钮。失联时的「重启」放在页面「R Codex」右侧。主题和更新也留在这一行。
 - 2026-10-10：初版收口。实例详情和请求记录禁用。明暗和强调色入口隐藏。错误通知不弹出。见 docs/designs/2026-10-10-initial-release-surface.md。

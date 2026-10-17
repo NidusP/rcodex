@@ -5,7 +5,7 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use url::Url;
@@ -167,4 +167,153 @@ pub(super) fn sync_parent_directory(path: &Path, label: &str) -> Result<(), Stri
             .map_err(|error| format!("{label}_parent_sync_failed:{error}"))?;
     }
     Ok(())
+}
+
+/// Paths written into isolated config.toml and MCP env.
+///
+/// Assembly and stringify share this contract so Windows and macOS do not
+/// leak mixed separators or canonicalize()'s verbatim prefix into Codex.
+pub(crate) fn join_config_path(
+    base: impl AsRef<Path>,
+    segments: impl IntoIterator<Item = impl AsRef<str>>,
+) -> PathBuf {
+    let mut assembled = normalize_config_path_text(&base.as_ref().to_string_lossy());
+    for segment in segments {
+        let segment = segment.as_ref();
+        let normalized_segment = normalize_config_path_text(segment);
+        if is_absolute_config_path(&normalized_segment) {
+            assembled = normalized_segment;
+            continue;
+        }
+        let separator = config_path_separator(&assembled);
+        for part in config_path_parts(segment) {
+            if assembled.ends_with(separator) || assembled.is_empty() {
+                assembled.push_str(part);
+            } else {
+                assembled.push(separator);
+                assembled.push_str(part);
+            }
+        }
+        assembled = normalize_config_path_text(&assembled);
+    }
+    PathBuf::from(normalize_config_path_text(&assembled))
+}
+
+/// Write form of an assembled or canonical path.
+pub(crate) fn config_path_text(path: &Path) -> String {
+    normalize_config_path_text(&path.to_string_lossy())
+}
+
+fn normalize_config_path_text(raw: &str) -> String {
+    let stripped = strip_verbatim_prefix(raw);
+    if is_windows_config_path(stripped) {
+        stripped.replace('/', "\\")
+    } else {
+        stripped.to_string()
+    }
+}
+
+fn strip_verbatim_prefix(raw: &str) -> &str {
+    raw.strip_prefix(r"\\?\")
+        .or_else(|| raw.strip_prefix("//?/"))
+        .unwrap_or(raw)
+}
+
+fn is_windows_config_path(value: &str) -> bool {
+    let stripped = strip_verbatim_prefix(value);
+    stripped.contains('\\') || stripped.chars().nth(1) == Some(':')
+}
+
+fn is_absolute_config_path(value: &str) -> bool {
+    let stripped = strip_verbatim_prefix(value);
+    stripped.starts_with('\\') || stripped.starts_with('/') || stripped.chars().nth(1) == Some(':')
+}
+
+fn config_path_separator(value: &str) -> char {
+    if is_windows_config_path(value) {
+        '\\'
+    } else {
+        '/'
+    }
+}
+
+fn config_path_parts(value: &str) -> impl Iterator<Item = &str> {
+    strip_verbatim_prefix(value)
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty() && *part != ".")
+        .filter(|part| !is_windows_drive_component(part))
+}
+
+fn is_windows_drive_component(part: &str) -> bool {
+    let bytes = part.as_bytes();
+    bytes.len() == 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{join_config_path, normalize_config_path_text};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn strips_verbatim_prefix_and_mixed_separators() {
+        assert_eq!(
+            normalize_config_path_text(r"\\?\C:\Users\a\codex-home\file.json"),
+            r"C:\Users\a\codex-home\file.json",
+        );
+        assert_eq!(
+            normalize_config_path_text(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources/cua_node/bin/node.exe",
+            ),
+            r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources\cua_node\bin\node.exe",
+        );
+        assert_eq!(
+            normalize_config_path_text("/tmp/isolated/config.toml"),
+            "/tmp/isolated/config.toml",
+        );
+    }
+
+    #[test]
+    fn join_config_path_uses_the_path_platform_separator() {
+        assert_eq!(
+            join_config_path(
+                Path::new(r"C:\Program Files\WindowsApps\OpenAI.Codex\app"),
+                ["resources/cua_node/bin/node.exe"],
+            ),
+            PathBuf::from(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources\cua_node\bin\node.exe",
+            ),
+        );
+        assert_eq!(
+            join_config_path(
+                Path::new(r"\\?\C:\Users\a\codex-home"),
+                ["managed_x.models.json"],
+            ),
+            PathBuf::from(r"C:\Users\a\codex-home\managed_x.models.json"),
+        );
+        assert_eq!(
+            join_config_path(
+                Path::new(r"C:\Users\a\codex-home"),
+                ["computer-use/windows", "codex-computer-use-arm64.exe"],
+            ),
+            PathBuf::from(
+                r"C:\Users\a\codex-home\computer-use\windows\codex-computer-use-arm64.exe",
+            ),
+        );
+        assert_eq!(
+            join_config_path(
+                Path::new("/tmp/isolated"),
+                ["computer-use/windows", "helper.exe"],
+            ),
+            PathBuf::from("/tmp/isolated/computer-use/windows/helper.exe"),
+        );
+        assert_eq!(
+            join_config_path(
+                Path::new(r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources/cua_node",),
+                ["bin/node.exe"],
+            ),
+            PathBuf::from(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources\cua_node\bin\node.exe",
+            ),
+        );
+    }
 }

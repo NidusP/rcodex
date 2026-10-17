@@ -18,7 +18,8 @@ use crate::codex_installation::{
 };
 
 use super::io::{
-    read_regular_toml, reject_link, sync_parent_directory, write_private_atomically_overwrite,
+    config_path_text, join_config_path, read_regular_toml, reject_link, sync_parent_directory,
+    write_private_atomically_overwrite,
 };
 
 pub(crate) const DESKTOP_CUA_NODE: &str = "Contents/Resources/cua_node/bin/node";
@@ -54,14 +55,17 @@ pub(crate) fn materialize_isolated_computer_use_mcp_from_bundle(
     bundle: &Path,
 ) -> Result<(), String> {
     install_isolated_computer_use_helper(codex_home, bundle)?;
-    let node = bundle.join(DESKTOP_CUA_NODE);
-    let node_repl = bundle.join(DESKTOP_CUA_NODE_REPL);
-    let cua_repl = bundle.join(DESKTOP_CUA_REPL);
+    let node = join_config_path(bundle, [DESKTOP_CUA_NODE]);
+    let node_repl = join_config_path(bundle, [DESKTOP_CUA_NODE_REPL]);
+    let cua_repl = join_config_path(bundle, [DESKTOP_CUA_REPL]);
     let codex_cli = bundled_codex_cli_candidates(bundle)
         .into_iter()
         .find(|path| path.is_file())
         .unwrap_or_else(|| {
-            bundle.join("Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
+            join_config_path(
+                bundle,
+                ["Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"],
+            )
         });
     let client = isolated_computer_use_client(codex_home);
     materialize_isolated_computer_use_mcp_at(
@@ -70,15 +74,18 @@ pub(crate) fn materialize_isolated_computer_use_mcp_from_bundle(
 }
 
 pub(crate) fn isolated_computer_use_app(codex_home: &Path) -> PathBuf {
-    codex_home.join(ISOLATED_COMPUTER_USE_APP)
+    join_config_path(codex_home, [ISOLATED_COMPUTER_USE_APP])
 }
 
 pub(crate) fn isolated_computer_use_client(codex_home: &Path) -> PathBuf {
-    isolated_computer_use_app(codex_home).join(COMPUTER_USE_CLIENT_RELATIVE)
+    join_config_path(
+        &isolated_computer_use_app(codex_home),
+        [COMPUTER_USE_CLIENT_RELATIVE],
+    )
 }
 
 pub(crate) fn desktop_computer_use_app(bundle: &Path) -> PathBuf {
-    bundle.join(DESKTOP_COMPUTER_USE_APP)
+    join_config_path(bundle, [DESKTOP_COMPUTER_USE_APP])
 }
 
 #[cfg_attr(test, allow(dead_code))]
@@ -95,9 +102,11 @@ fn resolve_computer_use_desktop_bundle() -> Result<PathBuf, String> {
         if !seen.insert(bundle.clone()) {
             continue;
         }
-        if desktop_computer_use_app(&bundle)
-            .join(COMPUTER_USE_CLIENT_RELATIVE)
-            .is_file()
+        if join_config_path(
+            &desktop_computer_use_app(&bundle),
+            [COMPUTER_USE_CLIENT_RELATIVE],
+        )
+        .is_file()
         {
             return Ok(bundle);
         }
@@ -111,7 +120,7 @@ pub(crate) fn install_isolated_computer_use_helper(
     codex_home: &Path,
     bundle: &Path,
 ) -> Result<(), String> {
-    let computer_use_dir = codex_home.join("computer-use");
+    let computer_use_dir = join_config_path(codex_home, ["computer-use"]);
     let destination = isolated_computer_use_app(codex_home);
     let dest_client = isolated_computer_use_client(codex_home);
     reject_path_symlink(&computer_use_dir)?;
@@ -126,7 +135,7 @@ pub(crate) fn install_isolated_computer_use_helper(
     if source_is_forbidden_default_computer_use(&source) {
         return Err("managed_computer_use_default_home_rejected".to_string());
     }
-    if !source.join(COMPUTER_USE_CLIENT_RELATIVE).is_file() {
+    if !join_config_path(&source, [COMPUTER_USE_CLIENT_RELATIVE]).is_file() {
         return Err("managed_computer_use_client_missing".to_string());
     }
     if destination.exists() {
@@ -161,7 +170,7 @@ pub(crate) fn install_isolated_computer_use_helper(
     ));
     let result = (|| {
         copy_signed_app_bundle(&source, &temporary)?;
-        if !temporary.join(COMPUTER_USE_CLIENT_RELATIVE).is_file() {
+        if !join_config_path(&temporary, [COMPUTER_USE_CLIENT_RELATIVE]).is_file() {
             return Err("managed_computer_use_install_failed".to_string());
         }
         fs::rename(&temporary, &destination)
@@ -245,15 +254,15 @@ fn reject_path_symlink(path: &Path) -> Result<(), String> {
 
 fn node_repl_module_dirs(node: &Path) -> PathBuf {
     if let Some(bin_dir) = node.parent() {
-        let beside = bin_dir.join("node_modules");
+        let beside = join_config_path(bin_dir, ["node_modules"]);
         if beside.is_dir() {
             return beside;
         }
         if let Some(cua_node) = bin_dir.parent() {
-            return cua_node.join("lib/node_modules");
+            return join_config_path(cua_node, ["lib/node_modules"]);
         }
     }
-    node.join("node_modules")
+    join_config_path(node, ["node_modules"])
 }
 
 pub(crate) fn materialize_isolated_computer_use_mcp_at(
@@ -295,7 +304,7 @@ fn materialize_isolated_computer_use_mcp_with_service(
             return Err(label.to_string());
         }
     }
-    let config_path = codex_home.join("config.toml");
+    let config_path = join_config_path(codex_home, ["config.toml"]);
     reject_link(&config_path)?;
     let mut config = read_regular_toml(&config_path)?.unwrap_or_default();
     let servers = config
@@ -306,8 +315,8 @@ fn materialize_isolated_computer_use_mcp_with_service(
         .ok_or_else(|| "managed_mcp_servers_invalid".to_string())?;
     let trusted_code = format!(
         "{}:{}",
-        codex_home.display(),
-        node.parent().unwrap().display()
+        config_path_text(codex_home),
+        config_path_text(node.parent().unwrap()),
     );
     let trusted_services = r#"{"browser":"@oai/browser-desktop/service","sky":"@oai/sky/service"}"#;
     let mut node_env = toml::Table::new();
@@ -323,15 +332,15 @@ fn materialize_isolated_computer_use_mcp_with_service(
     }
     node_env.insert(
         "NODE_REPL_NODE_MODULE_DIRS".to_string(),
-        toml::Value::String(node_repl_module_dirs(node).display().to_string()),
+        toml::Value::String(config_path_text(&node_repl_module_dirs(node))),
     );
     node_env.insert(
         "NODE_REPL_NODE_PATH".to_string(),
-        toml::Value::String(node.display().to_string()),
+        toml::Value::String(config_path_text(node)),
     );
     node_env.insert(
         "CODEX_HOME".to_string(),
-        toml::Value::String(codex_home.display().to_string()),
+        toml::Value::String(config_path_text(codex_home)),
     );
     node_env.insert(
         "NODE_REPL_TRUSTED_CODE_PATHS".to_string(),
@@ -343,20 +352,20 @@ fn materialize_isolated_computer_use_mcp_with_service(
     );
     node_env.insert(
         "SKY_CUA_SERVICE_PATH".to_string(),
-        toml::Value::String(service_path.display().to_string()),
+        toml::Value::String(config_path_text(service_path)),
     );
     node_env.insert(
         "CUA_REPL_NODE_REPL_PATH".to_string(),
-        toml::Value::String(node_repl.display().to_string()),
+        toml::Value::String(config_path_text(node_repl)),
     );
     node_env.insert(
         "CODEX_CLI_PATH".to_string(),
-        toml::Value::String(codex_cli.display().to_string()),
+        toml::Value::String(config_path_text(codex_cli)),
     );
     let mut node_server = toml::Table::new();
     node_server.insert(
         "command".to_string(),
-        toml::Value::String(node_repl.display().to_string()),
+        toml::Value::String(config_path_text(node_repl)),
     );
     node_server.insert("enabled".to_string(), toml::Value::Boolean(true));
     node_server.insert("startup_timeout_sec".to_string(), toml::Value::Integer(120));
@@ -365,11 +374,11 @@ fn materialize_isolated_computer_use_mcp_with_service(
     let mut cua_server = toml::Table::new();
     cua_server.insert(
         "command".to_string(),
-        toml::Value::String(node.display().to_string()),
+        toml::Value::String(config_path_text(node)),
     );
     cua_server.insert(
         "args".to_string(),
-        toml::Value::Array(vec![toml::Value::String(cua_repl.display().to_string())]),
+        toml::Value::Array(vec![toml::Value::String(config_path_text(cua_repl))]),
     );
     cua_server.insert("enabled".to_string(), toml::Value::Boolean(true));
     cua_server.insert("startup_timeout_sec".to_string(), toml::Value::Integer(120));
@@ -378,7 +387,7 @@ fn materialize_isolated_computer_use_mcp_with_service(
     servers.remove("computer-use");
     if let Some(toml::Value::Array(notify)) = config.get_mut("notify") {
         if notify.len() >= 1 {
-            notify[0] = toml::Value::String(client.display().to_string());
+            notify[0] = toml::Value::String(config_path_text(client));
         }
     }
     let encoded = toml::to_string(&config)
@@ -434,14 +443,14 @@ pub(crate) fn materialize_windows_computer_use_from_cli(
 ) -> Result<(), String> {
     let app_dir = windows_app_dir_from_cli(cli)
         .ok_or_else(|| "managed_computer_use_client_missing".to_string())?;
-    let node = app_dir.join("resources/cua_node/bin/node.exe");
-    let node_repl = app_dir.join("resources/cua_node/bin/node_repl.exe");
+    let node = join_config_path(&app_dir, ["resources/cua_node/bin/node.exe"]);
+    let node_repl = join_config_path(&app_dir, ["resources/cua_node/bin/node_repl.exe"]);
     let cua_repl = WINDOWS_CUA_REPL_RELATIVE
         .into_iter()
-        .map(|relative| app_dir.join(relative))
+        .map(|relative| join_config_path(&app_dir, [relative]))
         .find(|path| path.is_file())
         .ok_or_else(|| "managed_computer_use_cua_repl_missing".to_string())?;
-    let codex_cli = app_dir.join("resources/codex.exe");
+    let codex_cli = join_config_path(&app_dir, ["resources/codex.exe"]);
     let helper = find_windows_computer_use_helper(&app_dir)?;
     let service = install_windows_computer_use_helper(codex_home, &helper)?;
     materialize_isolated_computer_use_mcp_with_service(
@@ -452,7 +461,7 @@ pub(crate) fn materialize_windows_computer_use_from_cli(
 #[cfg(any(test, target_os = "windows"))]
 fn find_windows_computer_use_helper(app_dir: &Path) -> Result<PathBuf, String> {
     for relative in WINDOWS_HELPER_DIRECTORIES {
-        let directory = app_dir.join(relative);
+        let directory = join_config_path(app_dir, [relative]);
         let Ok(entries) = fs::read_dir(&directory) else {
             continue;
         };
@@ -493,8 +502,9 @@ fn install_windows_computer_use_helper(
     let exe_name = helper_exe
         .file_name()
         .ok_or_else(|| "managed_computer_use_client_missing".to_string())?;
-    let destination_dir = codex_home.join(WINDOWS_COMPUTER_USE_RELATIVE);
-    let destination_exe = destination_dir.join(exe_name);
+    let exe_name = exe_name.to_string_lossy();
+    let destination_dir = join_config_path(codex_home, [WINDOWS_COMPUTER_USE_RELATIVE]);
+    let destination_exe = join_config_path(&destination_dir, [exe_name.as_ref()]);
     reject_path_symlink(&destination_dir)?;
     reject_path_symlink(&destination_exe)?;
     if destination_exe.is_file() {

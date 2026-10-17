@@ -294,7 +294,7 @@ Gateway 是共享的本机数据面，不再全局绑定单个 Provider。每个
 - API-key-only 实例；
 - official-only 实例，但仍通过同一专用 Provider 保持会话身份一致。
 
-多个受管理 Codex App 可以同时运行；同一条实例未退出时不能再次启动。所有隔离空间共用一个 Gateway。R Codex 启动时就调用 `ensure_serving()`，在 `127.0.0.1:43123` 等待绑定；每个正在运行的隔离 CLI 或 App 各登记一条绑定。控制令牌文件丢失但端口仍被 `codex-gateway` 占用时，窗口仍打开，并使用系统标题栏。失联时，页面里的「R Codex」右侧显示「重启」。平时不显示 Gateway 空闲或转发。关闭窗口只隐藏控制面。菜单栏「退出」、程序坞「退出」、Cmd+Q 以及其他非重启退出会先停止全部活动隔离实例，再 `stop_if_unused()`。只有 Tauri 重启退出码保留实例和 sidecar；开发热更新从外部结束控制面进程，独立 sidecar 留下并由下次启动复用。5 秒没有启动回执返回 `launch_unconfirmed`，不拆绑定。sidecar 源码或二进制更新只在显式停止旧 Gateway 后重新启动时生效。Gateway 崩溃时实例进入 `degraded` 并保留锁，重启 Gateway 只能恢复同一修订和同一实例密钥，不得重新解析最新逻辑配置。
+多个受管理 Codex App 可以同时运行；同一条实例未退出时不能再次启动。所有隔离空间共用一个 Gateway。R Codex 启动时就调用 `ensure_serving()`，在 `127.0.0.1:43123` 等待绑定；每个正在运行的隔离 CLI 或 App 各登记一条绑定。控制令牌文件丢失但端口仍被 `codex-gateway` 占用时，窗口仍打开，并使用系统标题栏。失联时，页面里的「R Codex」右侧显示「重启」。平时不显示 Gateway 空闲或转发。关闭窗口只隐藏控制面。菜单栏「退出」、托盘「退出」、程序坞「退出」、Cmd+Q 以及其他非重启退出会先停止全部活动隔离实例（Windows 含 launcher/Gateway），再 `stop_if_unused()`。只有 Tauri 重启退出码保留实例和 sidecar；开发热更新从外部结束控制面进程，独立 sidecar 留下并由下次启动复用。5 秒没有启动回执返回 `launch_unconfirmed`，不拆绑定。sidecar 源码或二进制更新只在显式停止旧 Gateway 后重新启动时生效。Gateway 崩溃时实例进入 `degraded` 并保留锁，重启 Gateway 只能恢复同一修订和同一实例密钥，不得重新解析最新逻辑配置。
 
 ## 11. 从参考项目借鉴什么
 

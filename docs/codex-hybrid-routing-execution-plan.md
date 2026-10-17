@@ -2,6 +2,41 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-17：发布 0.1.3
+
+- 变更目的：把 Windows 隔离启动、路径拼装、托盘退出和卸载钩子发给已安装的 0.1.2。
+- 合同：package.json、Cargo.toml、tauri.conf.json、website/package.json 版本为 0.1.3。打 tag v0.1.3 触发草稿 Release，人工发布后 /releases/latest 指向 0.1.3。签名私钥不变。已安装 0.1.2 的隔离实例要装 0.1.3 并重新启动，才会重写 node_repl_disabled 和 Windows 路径。
+- 修改文件：上述四个版本文件、Cargo.lock、updater 文档、本计划、AGENTS.md、website isolated-config、以及未提交的 Windows/路径改动。
+- 验证：此前 cargo test --lib --offline 为 369 passed，cargo fmt --check 与 pnpm run check 通过。本机不打包。
+- 未完成项：Chat 自审仍关闭。散装 DirectExe 与 Windows 隔离 CLI 仍以 commander 已做的基本验收为准。
+- 回滚：不要把 0.1.3 发成 latest；保留 0.1.2 为 latest 即可。已安装 0.1.3 的机器只能手动重装 0.1.2。
+- 下一步：推送 tag v0.1.3 后由 CI 生成草稿 Release，需人工发布。
+
+### 2026-10-17：隔离 config 路径统一拼装
+
+- 变更目的：Windows 隔离 App 的 Browser / Computer Use 起不来。config.toml 里 `model_catalog_json` 带 `\\?\`，MCP command 是 `app\resources/cua_node` 这种混用斜杠，Codex 找不到 node_repl.exe。
+- 合同：`join_config_path` 是隔离配置路径的拼装入口，`config_path_text` 是写入 toml 的形式。带盘符或反斜杠的路径用 `\`，其余用 `/`；去掉 canonicalize 的 `\\?\` / `//?/`。computer_use 与 materialize 的 catalog/MCP/环境路径走这套 API。发现层安装解析不改。
+- 修改文件：managed_codex_config/io.rs、computer_use.rs、materialize.rs、tests_computer_use.rs，2026-10-17/11 设计文档，AGENTS.md，本计划。
+- 验证：cargo fmt --all -- --check 通过。cargo test --lib --offline 为 369 passed。pnpm run check 通过。未启动 Tauri，未打 Windows 包。
+- 未完成项：commander 用新 NSIS 安装后，必须退出并重新启动隔离 App，才会重写 config.toml。
+- 回滚：恢复 Path::join + Display 直接写入 toml。
+- 下一步：推送后打 Windows NSIS，在虚拟机重装并新开隔离 App，确认 MCP command 全是反斜杠、catalog 路径没有 `\\?\`，再试 Browser / Computer Use。
+
+### 2026-10-17：Windows 退出杀进程、CLI 回退、工作区刷新缓存
+
+- 变更目的：关闭主程序后 launcher/Gateway/隔离 App 仍在；勾选模型和启动时「正在更新工作区」过久；隔离 CLI 点了没窗口。
+- 合同：Windows `stop_instance` 对已核验 PID 执行 taskkill /T。关窗口仍隐藏；托盘退出才停实例和 Gateway。CLI 先试非空 wt.exe（包一层 cmd /k），失败再 cmd start，再直接 spawn launcher。refresh 按 Codex 路径和版本缓存 special model roles，避免每次保存都跑 `codex debug models --bundled`。
+- 修改文件：support/process.rs、codex_control/lifecycle.rs、lib.rs、managed_spawn/windows.rs、windows_cli.rs、use-app-controller.ts、产品原理、AGENTS.md、本计划。
+- 验证：待 cargo test。Browser/Computer Use 若启动已写 windows_computer_use_ready 仍不可用，查隔离 config.toml 的 mcp_servers.node_repl 与本机 Chrome。
+
+### 2026-10-17：Windows 卸载先结束 sidecar
+
+- 变更目的：卸载后安装目录里会留下 codex-launcher.exe。关窗口只隐藏控制面，启动器和网关仍占用文件，NSIS 和 Remove-Item 都删不掉。
+- 合同：安装/卸载前结束 r-codex.exe、codex-launcher.exe、codex-gateway.exe 及其 Windows 三元组文件名。不结束 ChatGPT.exe / Codex.exe。卸载后若安装目录还有残留则删掉。用户数据 %APPDATA%\io.rcodex 不随卸载删除。
+- 修改文件：src-tauri/windows/installer-hooks.nsh，tauri.conf.json nsis.installerHooks，2026-10-17 设计文档卸载节，本计划。
+- 验证：JSON 可解析。未打 Windows 包；卸载钩子要下一份 NSIS 才生效。
+- 下一步：打新的 Windows NSIS 后，先按手动步骤清掉当前残留，再装新包验证卸载。
+
 ### 2026-10-17：Windows 安装根、DirectExe 与隔离 CLI 落地
 
 - 变更目的：自选目录的散装 ChatGPT.exe 不能把用户项目目录当 cwd；商店用户打开默认 Codex 不该被拒绝；Windows 点隔离 CLI 不能再无反应。
