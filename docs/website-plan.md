@@ -81,3 +81,9 @@
 - 目的：把当天同一句桌面 Word 和 Excel，在硅基流动 V4-Flash、onomeo V4.1-Flash 和 Grok 上的差别记成一则短文，不写成能力承诺。
 - 修改：website/src/content/docs/guides/field-note.md，侧栏使用指南增加入口，渠道页末尾链过去。
 - 回滚：删除该页、侧栏项和渠道页链接。
+
+## 2026-10-17 GitHub Pages 未启用
+
+- 现象：`website.yml` 构建和上传 artifact 成功，`actions/deploy-pages@v4` 返回 404 `Creating Pages deployment failed`。公开 API 里仓库 `has_pages` 为 false。`punycode` 弃用警告来自 deploy-pages 自己的 Node，不是失败原因。
+- 处理：仓库管理员打开 https://github.com/NidusP/rcodex/settings/pages ，Build and deployment 的 Source 选 GitHub Actions 并保存。若出现 `github-pages` 环境等待审核，批准一次。然后在 Actions 里重跑 Deploy R Codex website。
+- 工作流在 Pages 未开启时于构建前失败并打印上述地址，避免再走到 404。

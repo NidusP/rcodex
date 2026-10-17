@@ -1,4 +1,4 @@
-name: Deploy 3R Codex website
+name: Deploy R Codex website
 
 on:
   push:
@@ -24,6 +24,13 @@ jobs:
       run:
         working-directory: website
     steps:
+      - name: Require GitHub Pages
+        if: ${{ !github.event.repository.has_pages }}
+        run: |
+          echo "GitHub Pages is not enabled for this repository."
+          echo "Open https://github.com/${{ github.repository }}/settings/pages"
+          echo "Set Build and deployment Source to GitHub Actions, save, then re-run this workflow."
+          exit 1
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup pnpm
