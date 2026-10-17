@@ -126,16 +126,19 @@ fn launch_managed_app(
         electron_user_data_dir,
         sqlite_home,
     });
-    Command::new(&helper).args(&args).spawn().map_err(|error| {
-        if let Some(path) = secret_file.as_deref() {
-            let _ = fs::remove_file(path);
-        }
-        let _ = append_startup_log(
-            &log_file,
-            &format!("app_spawn_failed target={launch_target} error={error}"),
-        );
-        format!("无法启动 Codex App：{error}")
-    })?;
+    crate::support::command_without_console(&helper)
+        .args(&args)
+        .spawn()
+        .map_err(|error| {
+            if let Some(path) = secret_file.as_deref() {
+                let _ = fs::remove_file(path);
+            }
+            let _ = append_startup_log(
+                &log_file,
+                &format!("app_spawn_failed target={launch_target} error={error}"),
+            );
+            format!("无法启动 Codex App：{error}")
+        })?;
     let _ = append_startup_log(
         &log_file,
         &format!("app_spawn_dispatched target={launch_target}"),

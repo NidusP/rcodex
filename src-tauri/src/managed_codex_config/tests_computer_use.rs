@@ -239,3 +239,71 @@ fn isolated_computer_use_helper_replaces_an_incomplete_leftover() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn windows_store_computer_use_helper_is_copied_and_interpreters_stay_in_the_package() {
+    let root = std::env::temp_dir().join(format!("3r-cua-windows-{}", Uuid::new_v4()));
+    let app = root.join("app");
+    let home = root.join("isolated-home");
+    fs::create_dir_all(&home).unwrap();
+    let helper =
+        app.join("resources/cua_node/bin/node_modules/@oai/sky/bin/windows/codex-computer-use.exe");
+    write_fake_file(&helper, b"sky-helper");
+    write_fake_file(
+        &helper.parent().unwrap().join("swift/arm64/runtime.dll"),
+        b"runtime",
+    );
+    for relative in [
+        "resources/cua_node/bin/node.exe",
+        "resources/cua_node/bin/node_repl.exe",
+        "resources/cua_node/bin/node_modules/@oai/cua-repl/bin/cua-repl.mjs",
+        "resources/codex.exe",
+    ] {
+        write_fake_file(&app.join(relative), b"fixture");
+    }
+    fs::write(
+        home.join("config.toml"),
+        "notify = [\"old\", \"turn-ended\"]\n",
+    )
+    .unwrap();
+
+    materialize_windows_computer_use_from_cli(&home, &app.join("resources/codex.exe")).unwrap();
+
+    let copied = home.join("computer-use/windows/codex-computer-use.exe");
+    assert_eq!(fs::read(&copied).unwrap(), b"sky-helper");
+    assert_eq!(
+        fs::read(home.join("computer-use/windows/swift/arm64/runtime.dll")).unwrap(),
+        b"runtime"
+    );
+    let config: toml::Table = fs::read_to_string(home.join("config.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    let node = app.join("resources/cua_node/bin/node.exe");
+    assert_eq!(
+        config["mcp_servers"]["cua_repl"]["command"].as_str(),
+        Some(node.to_str().unwrap())
+    );
+    assert_eq!(
+        config["mcp_servers"]["node_repl"]["env"]["SKY_CUA_SERVICE_PATH"].as_str(),
+        Some(copied.to_str().unwrap())
+    );
+    assert_eq!(config["notify"][0].as_str(), Some(copied.to_str().unwrap()));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn windows_cli_path_resolves_the_install_app_directory_case_insensitively() {
+    let cli = Path::new(
+        r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0\App\Resources\codex.exe",
+    );
+    assert_eq!(
+        windows_app_dir_from_cli(cli),
+        Some(
+            Path::new(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0\App"
+            )
+            .to_path_buf()
+        )
+    );
+}

@@ -619,7 +619,7 @@ fn assert_codex_stopped() -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        let output = std::process::Command::new("tasklist")
+        let output = crate::support::command_without_console("tasklist")
             .args(["/FO", "CSV", "/NH"])
             .output()
             .map_err(|_| "session_import_process_check_failed")?;

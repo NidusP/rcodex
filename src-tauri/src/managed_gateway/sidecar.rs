@@ -513,7 +513,7 @@ fn gateway_listener_pids() -> Result<Vec<u32>, String> {
     }
     #[cfg(windows)]
     {
-        let output = Command::new("netstat")
+        let output = crate::support::command_without_console("netstat")
             .args(["-ano", "-p", "tcp"])
             .output()
             .map_err(|_| "managed_gateway_cleanup_process_lookup_failed".to_string())?;
@@ -557,7 +557,7 @@ fn gateway_process_command(pid: u32) -> Option<String> {
     }
     #[cfg(windows)]
     {
-        let output = Command::new("tasklist")
+        let output = crate::support::command_without_console("tasklist")
             .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
             .output()
             .ok()?;
@@ -607,7 +607,7 @@ fn terminate_gateway_process(pid: u32, force: bool) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        let mut command = Command::new("taskkill");
+        let mut command = crate::support::command_without_console("taskkill");
         command.args(["/PID", &pid.to_string(), "/T"]);
         if force {
             command.arg("/F");

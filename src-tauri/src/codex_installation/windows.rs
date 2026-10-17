@@ -60,35 +60,44 @@ pub fn gui_candidates_from_cli(cli: &Path) -> Vec<String> {
     let original_file = normalized.rsplit('\\').next().unwrap_or_default();
     let file = original_file.to_ascii_lowercase();
     let mut candidates = Vec::new();
-    // ChatGPT.exe is always the GUI. Codex.exe (desktop branding) is GUI.
-    // lowercase codex.exe is the CLI and must derive a sibling GUI first.
+    // Store CLI is app\resources\codex.exe. The window is app\ChatGPT.exe,
+    // then app\Codex.exe. resources\Codex.exe is the CLI on a case-insensitive
+    // volume and must never be nominated.
+    if let Some(app_dir) = app_dir_before_resources(&normalized) {
+        for name in GUI_FILE_NAMES {
+            push_gui_candidate(&mut candidates, format!(r"{app_dir}\{name}"));
+        }
+        return candidates;
+    }
+    // ChatGPT.exe is always the GUI. Codex.exe beside a non-store CLI is the
+    // desktop name. lowercase codex.exe stays the CLI and only derives siblings.
     if file == "chatgpt.exe" || original_file == "Codex.exe" {
-        candidates.push(normalized.clone());
+        push_gui_candidate(&mut candidates, normalized.clone());
     }
     if let Some((parent, _)) = normalized.rsplit_once('\\') {
         for name in GUI_FILE_NAMES {
-            let candidate = format!(r"{parent}\{name}");
-            if !candidates
-                .iter()
-                .any(|current| current.eq_ignore_ascii_case(&candidate))
-            {
-                candidates.push(candidate);
-            }
-        }
-    }
-    // Store CLI lives under app\resources. The desktop exe is one directory above.
-    if let Some((app_dir, _)) = normalized.rsplit_once(r"\resources\") {
-        for name in GUI_FILE_NAMES {
-            let candidate = format!(r"{app_dir}\{name}");
-            if !candidates
-                .iter()
-                .any(|current| current.eq_ignore_ascii_case(&candidate))
-            {
-                candidates.push(candidate);
-            }
+            push_gui_candidate(&mut candidates, format!(r"{parent}\{name}"));
         }
     }
     candidates
+}
+
+fn app_dir_before_resources(path: &str) -> Option<&str> {
+    let folded = path.to_ascii_lowercase();
+    let marker = r"\resources\";
+    let index = folded.rfind(marker)?;
+    let app_dir = path.get(..index)?;
+    (!app_dir.is_empty()).then_some(app_dir)
+}
+
+fn push_gui_candidate(candidates: &mut Vec<String>, candidate: String) {
+    if candidates
+        .iter()
+        .any(|current| current.eq_ignore_ascii_case(&candidate))
+    {
+        return;
+    }
+    candidates.push(candidate);
 }
 
 pub fn store_cli_candidates(install_location: &str) -> Vec<String> {
@@ -117,7 +126,11 @@ pub fn path_cli_candidates(directory: &Path) -> Vec<PathBuf> {
 }
 
 pub fn resolve_gui_executable(cli: &Path) -> Result<PathBuf, String> {
+    let cli_text = normalized_windows_path_text(cli);
     for candidate in gui_candidates_from_cli(cli) {
+        if candidate.eq_ignore_ascii_case(&cli_text) {
+            continue;
+        }
         let path = PathBuf::from(&candidate);
         if super::is_executable_file(&path) {
             return Ok(path);
@@ -128,7 +141,7 @@ pub fn resolve_gui_executable(cli: &Path) -> Result<PathBuf, String> {
 
 #[cfg(target_os = "windows")]
 pub fn query_store_install_location() -> Option<String> {
-    let output = std::process::Command::new("powershell.exe")
+    let output = crate::support::command_without_console("powershell.exe")
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -198,13 +211,28 @@ mod tests {
 
     #[test]
     fn store_resources_cli_also_checks_app_directory() {
-        let cli = Path::new(
-            r"C:\Program Files\WindowsApps\OpenAI.ChatGPT-Desktop_1.2026.1.0_x64__8wekyb3d8bbwe\app\resources\codex.exe",
+        let cli = Path::new(concat!(
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0",
+            r"\app\resources\codex.exe"
+        ));
+        assert_eq!(
+            gui_candidates_from_cli(cli),
+            vec![
+                concat!(
+                    r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0",
+                    r"\app\ChatGPT.exe"
+                )
+                .to_string(),
+                concat!(
+                    r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0",
+                    r"\app\Codex.exe"
+                )
+                .to_string(),
+            ]
         );
-        let candidates = gui_candidates_from_cli(cli);
-        assert!(candidates.iter().any(|path| path.eq_ignore_ascii_case(
-            r"C:\Program Files\WindowsApps\OpenAI.ChatGPT-Desktop_1.2026.1.0_x64__8wekyb3d8bbwe\app\ChatGPT.exe"
-        )));
+        assert!(gui_candidates_from_cli(cli)
+            .iter()
+            .all(|path| !path.to_ascii_lowercase().contains(r"\resources\")));
     }
 
     #[test]

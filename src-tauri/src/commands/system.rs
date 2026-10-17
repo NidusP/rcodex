@@ -428,7 +428,7 @@ pub(crate) fn codex_version(executable: &std::path::Path) -> Result<String, Stri
     directory
         .create(&probe_home)
         .map_err(|_| "codex_version_probe_home_failed".to_string())?;
-    let output = std::process::Command::new(executable)
+    let output = crate::support::command_without_console(executable)
         .arg("--version")
         .env("CODEX_HOME", &probe_home)
         .env("CODEX_SQLITE_HOME", &probe_home)

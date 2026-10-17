@@ -4,7 +4,7 @@
 //! 由 managed_launch 启动准备、system command 和 isolated_auth 调用。
 
 mod catalog;
-#[cfg(any(test, target_os = "macos"))]
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
 mod computer_use;
 mod io;
 mod isolated_auth;
@@ -34,8 +34,12 @@ pub use catalog::{build_version_matched_catalog, build_version_matched_catalog_w
 pub use catalog::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility, read_bundled_catalog,
 };
-#[cfg(all(not(test), target_os = "macos"))]
+#[cfg(all(not(test), any(target_os = "macos", target_os = "windows")))]
 pub use computer_use::materialize_isolated_computer_use_mcp;
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) use computer_use::{
+    materialize_windows_computer_use_from_cli, windows_app_dir_from_cli,
+};
 #[cfg(test)]
 pub use materialize::materialize_managed_codex_config;
 pub use materialize::{

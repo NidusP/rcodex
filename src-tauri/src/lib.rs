@@ -30,7 +30,7 @@ mod session_import;
 mod settings;
 mod special_models;
 mod support;
-pub use support::user_home;
+pub use support::{command_without_console, user_home};
 #[cfg(target_os = "macos")]
 mod macos_quit;
 mod usage;

@@ -14,6 +14,8 @@ use crate::codex_control::InstanceState;
 use crate::launcher_protocol::LaunchTarget;
 #[cfg(all(not(test), target_os = "macos"))]
 use crate::managed_codex_config::materialize_isolated_computer_use_mcp;
+#[cfg(all(not(test), target_os = "windows"))]
+use crate::managed_codex_config::materialize_windows_computer_use_from_cli;
 use crate::managed_codex_config::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility,
     keep_catalog_reasoning_efforts_selectable, keep_managed_permission_selector_available,
@@ -427,6 +429,15 @@ impl ManagedLaunchStore {
         if LaunchTarget::wire_is_managed_app(&launch_target) {
             #[cfg(all(not(test), target_os = "macos"))]
             materialize_isolated_computer_use_mcp(&managed_codex_home)?;
+            #[cfg(all(not(test), target_os = "windows"))]
+            {
+                let computer_use_log = lifecycle_dir.join("startup.log");
+                materialize_windows_computer_use_from_cli(&managed_codex_home, codex_executable)?;
+                let _ = crate::launcher_protocol::append_startup_log(
+                    &computer_use_log,
+                    "windows_computer_use_ready",
+                );
+            }
             keep_managed_permission_selector_available(&managed_codex_home)?;
             keep_catalog_reasoning_efforts_selectable(&managed_codex_home)?;
         }

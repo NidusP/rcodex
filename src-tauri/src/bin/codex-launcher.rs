@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -820,7 +822,7 @@ fn activate_store_package(
         log_file,
         &format!("store_activation_started family={}", package.family_name),
     );
-    let output = Command::new("powershell.exe")
+    let output = r_codex_lib::command_without_console("powershell.exe")
         .args([
             "-NoProfile",
             "-NonInteractive",

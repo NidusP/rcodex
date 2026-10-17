@@ -32,7 +32,7 @@ pub fn verify_catalog_models_with_codex(
         "codex_catalog_validation_failed".to_string()
     })?;
     let path_value = toml::Value::String(catalog_path.display().to_string()).to_string();
-    let output = Command::new(codex_executable)
+    let output = crate::support::command_without_console(codex_executable)
         .args([
             "-c",
             &format!("model_catalog_json={path_value}"),
@@ -120,7 +120,7 @@ pub fn verify_managed_profile_with_codex(
     startup_log_path: &Path,
 ) -> Result<(), String> {
     validate_profile_name(profile_name)?;
-    let output = Command::new(codex_executable)
+    let output = crate::support::command_without_console(codex_executable)
         .args([
             "--profile",
             profile_name,

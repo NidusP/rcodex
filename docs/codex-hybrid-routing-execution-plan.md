@@ -33,6 +33,15 @@
 - 下一步：提交后在 GitHub Actions 手动运行 Windows NSIS。
 
 
+### 2026-10-17：Windows 商店隔离 App 与 Computer Use
+
+- 变更目的：修复商店包把 app\resources\codex.exe 当成桌面窗口的问题，并让 Windows 隔离 Browser/Computer Use 使用商店包运行时与隔离 helper。
+- 合同：商店 CLI 从 resources 目录启动时，桌面候选只从上一层 app 目录生成，优先 ChatGPT.exe；不复制或启动 resources、cua_node、plugins 里的其它 exe 作为桌面程序。Windows helper 复制到隔离 CODEX_HOME\computer-use\windows，node/node_repl/cua-repl 仍从已安装包运行时读取。
+- 终端：powershell、Codex 探针、tasklist/netstat/taskkill 走 CREATE_NO_WINDOW；codex-launcher 与 codex-gateway 使用 Windows GUI 子系统。这样可消除控制面刷新时的空白终端，独立 App 找错命令行程序造成的退出码 2 也被单独修复。
+- 修改文件：codex_installation/windows.rs、managed_codex_config/computer_use.rs、managed_launch/prepare.rs、managed_codex_config/probe.rs、catalog.rs、commands/system.rs、managed_spawn/windows.rs、managed_gateway/sidecar.rs、session_import.rs、codex-launcher.rs、codex-gateway.rs、support/process.rs 及 Windows 启动设计文档。
+- 验证：cargo fmt --all 通过；cargo check --all-targets --offline 通过；Windows 路径和 Computer Use 相关 15 项测试通过。真实 Windows 包和商店 App 仍需在虚拟机确认 status.json 保持 running、codexExecutable 指向 app\ChatGPT.exe、隔离目录有 helper 且无可见终端。
+- 未完成项：本机没有 Windows Rust target，未做交叉编译；Chat 自审继续等待真实自动审核请求 JSON。
+
 ### 2026-10-15：三方目录开放本机 node_repl
 
 - 变更目的：跨境电商等三方模型会话开场大量出现 node_repl is unavailable for this model，Browser、Computer Use 和其它依赖本机 Node REPL 的插件无法使用。

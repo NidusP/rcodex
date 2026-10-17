@@ -244,10 +244,16 @@ fn reject_path_symlink(path: &Path) -> Result<(), String> {
 }
 
 fn node_repl_module_dirs(node: &Path) -> PathBuf {
-    match node.parent().and_then(Path::parent) {
-        Some(cua_node) => cua_node.join("lib/node_modules"),
-        None => node.join("node_modules"),
+    if let Some(bin_dir) = node.parent() {
+        let beside = bin_dir.join("node_modules");
+        if beside.is_dir() {
+            return beside;
+        }
+        if let Some(cua_node) = bin_dir.parent() {
+            return cua_node.join("lib/node_modules");
+        }
     }
+    node.join("node_modules")
 }
 
 pub(crate) fn materialize_isolated_computer_use_mcp_at(
@@ -257,6 +263,26 @@ pub(crate) fn materialize_isolated_computer_use_mcp_at(
     node_repl: &Path,
     cua_repl: &Path,
     codex_cli: &Path,
+) -> Result<(), String> {
+    materialize_isolated_computer_use_mcp_with_service(
+        codex_home,
+        client,
+        node,
+        node_repl,
+        cua_repl,
+        codex_cli,
+        &isolated_computer_use_app(codex_home),
+    )
+}
+
+fn materialize_isolated_computer_use_mcp_with_service(
+    codex_home: &Path,
+    client: &Path,
+    node: &Path,
+    node_repl: &Path,
+    cua_repl: &Path,
+    codex_cli: &Path,
+    service_path: &Path,
 ) -> Result<(), String> {
     for (label, path) in [
         ("managed_computer_use_client_missing", client),
@@ -317,7 +343,7 @@ pub(crate) fn materialize_isolated_computer_use_mcp_at(
     );
     node_env.insert(
         "SKY_CUA_SERVICE_PATH".to_string(),
-        toml::Value::String(isolated_computer_use_app(codex_home).display().to_string()),
+        toml::Value::String(service_path.display().to_string()),
     );
     node_env.insert(
         "CUA_REPL_NODE_REPL_PATH".to_string(),
@@ -362,4 +388,151 @@ pub(crate) fn materialize_isolated_computer_use_mcp_at(
         encoded.as_bytes(),
         "managed_computer_use_config",
     )
+}
+
+#[cfg(any(test, target_os = "windows"))]
+const WINDOWS_COMPUTER_USE_RELATIVE: &str = "computer-use/windows";
+
+#[cfg(any(test, target_os = "windows"))]
+const WINDOWS_HELPER_DIRECTORIES: [&str; 4] = [
+    "resources/cua_node/bin/node_modules/@oai/sky/bin/windows",
+    "resources/cua_node/bin/node_modules/@oai/cua/bin/windows",
+    "resources/cua_node/lib/node_modules/@oai/sky/bin/windows",
+    "resources/cua_node/lib/node_modules/@oai/cua/bin/windows",
+];
+
+#[cfg(any(test, target_os = "windows"))]
+const WINDOWS_CUA_REPL_RELATIVE: [&str; 2] = [
+    "resources/cua_node/bin/node_modules/@oai/cua-repl/bin/cua-repl.mjs",
+    "resources/cua_node/lib/node_modules/@oai/cua-repl/bin/cua-repl.mjs",
+];
+
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) fn windows_app_dir_from_cli(cli: &Path) -> Option<PathBuf> {
+    let text = cli.to_string_lossy();
+    let folded = text.replace('/', "\\").to_ascii_lowercase();
+    let marker = "\\resources\\";
+    let index = folded.find(marker)?;
+    let app_dir = text.get(..index)?.trim();
+    if app_dir.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(app_dir.to_string()))
+}
+
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) fn materialize_windows_computer_use_from_cli(
+    codex_home: &Path,
+    cli: &Path,
+) -> Result<(), String> {
+    let app_dir = windows_app_dir_from_cli(cli)
+        .ok_or_else(|| "managed_computer_use_client_missing".to_string())?;
+    let node = app_dir.join("resources/cua_node/bin/node.exe");
+    let node_repl = app_dir.join("resources/cua_node/bin/node_repl.exe");
+    let cua_repl = WINDOWS_CUA_REPL_RELATIVE
+        .into_iter()
+        .map(|relative| app_dir.join(relative))
+        .find(|path| path.is_file())
+        .ok_or_else(|| "managed_computer_use_cua_repl_missing".to_string())?;
+    let codex_cli = app_dir.join("resources/codex.exe");
+    let helper = find_windows_computer_use_helper(&app_dir)?;
+    let service = install_windows_computer_use_helper(codex_home, &helper)?;
+    materialize_isolated_computer_use_mcp_with_service(
+        codex_home, &service, &node, &node_repl, &cua_repl, &codex_cli, &service,
+    )
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn find_windows_computer_use_helper(app_dir: &Path) -> Result<PathBuf, String> {
+    for relative in WINDOWS_HELPER_DIRECTORIES {
+        let directory = app_dir.join(relative);
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+        let mut matches = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if name.starts_with("codex-compu") && name.ends_with(".exe") {
+                matches.push(path);
+            }
+        }
+        matches.sort();
+        if let Some(path) = matches.into_iter().next() {
+            return Ok(path);
+        }
+    }
+    Err("managed_computer_use_client_missing".to_string())
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn install_windows_computer_use_helper(
+    codex_home: &Path,
+    helper_exe: &Path,
+) -> Result<PathBuf, String> {
+    let source_dir = helper_exe
+        .parent()
+        .ok_or_else(|| "managed_computer_use_client_missing".to_string())?;
+    reject_path_symlink(source_dir)?;
+    reject_path_symlink(helper_exe)?;
+    if source_is_forbidden_default_computer_use(source_dir)
+        || source_is_forbidden_default_computer_use(helper_exe)
+    {
+        return Err("managed_computer_use_default_home_rejected".to_string());
+    }
+    let exe_name = helper_exe
+        .file_name()
+        .ok_or_else(|| "managed_computer_use_client_missing".to_string())?;
+    let destination_dir = codex_home.join(WINDOWS_COMPUTER_USE_RELATIVE);
+    let destination_exe = destination_dir.join(exe_name);
+    reject_path_symlink(&destination_dir)?;
+    reject_path_symlink(&destination_exe)?;
+    if destination_exe.is_file() {
+        ensure_computer_use_path_inside_home(codex_home, &destination_exe)?;
+        return Ok(destination_exe);
+    }
+    if destination_dir.exists() {
+        fs::remove_dir_all(&destination_dir)
+            .map_err(|error| format!("managed_computer_use_install_failed:{error}"))?;
+    }
+    let parent = destination_dir
+        .parent()
+        .ok_or_else(|| "managed_computer_use_install_failed".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("managed_computer_use_install_failed:{error}"))?;
+    copy_directory_without_symlinks(source_dir, &destination_dir)?;
+    if !destination_exe.is_file() {
+        return Err("managed_computer_use_install_failed".to_string());
+    }
+    ensure_computer_use_path_inside_home(codex_home, &destination_exe)?;
+    Ok(destination_exe)
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn copy_directory_without_symlinks(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination)
+        .map_err(|error| format!("managed_computer_use_install_failed:{error}"))?;
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("managed_computer_use_install_failed:{error}"))?
+    {
+        let entry =
+            entry.map_err(|error| format!("managed_computer_use_install_failed:{error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("managed_computer_use_install_failed:{error}"))?;
+        if file_type.is_symlink() {
+            return Err("managed_file_symlink_rejected".to_string());
+        }
+        let target = destination.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_directory_without_symlinks(&entry.path(), &target)?;
+        } else if file_type.is_file() {
+            fs::copy(entry.path(), &target)
+                .map_err(|error| format!("managed_computer_use_install_failed:{error}"))?;
+        }
+    }
+    Ok(())
 }

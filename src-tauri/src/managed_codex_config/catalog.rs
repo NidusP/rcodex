@@ -92,7 +92,7 @@ pub fn read_bundled_catalog(codex_executable: &Path) -> Result<JsonValue, String
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&probe_home, fs::Permissions::from_mode(0o700));
     }
-    let result = Command::new(codex_executable)
+    let result = crate::support::command_without_console(codex_executable)
         .args(["debug", "models", "--bundled"])
         .env_remove("OPENAI_API_KEY")
         .env_remove("CODEX_API_KEY")

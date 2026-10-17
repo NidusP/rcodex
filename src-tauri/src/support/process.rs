@@ -80,6 +80,18 @@ mod windows_process {
     }
 }
 
+pub fn command_without_console(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut command = std::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 pub fn process_exists(pid: u32) -> bool {
     #[cfg(unix)]
     {

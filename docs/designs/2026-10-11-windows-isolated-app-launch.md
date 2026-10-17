@@ -83,7 +83,40 @@ src-tauri/src/managed_app_launch/
 恢复 `managed_app_compatibility_enabled` 非 macOS 为 false，Windows `managed_spawn` 回到显式错误。不删除已准备的隔离目录。
 
 
+## 2026-10-17：商店桌面程序只认 app\ChatGPT.exe
+
+虚拟机目录已经列出 `OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0`。隔离启动失败是因为把命令行程序当成了桌面程序，不是因为商店激活失败。
+
+已确认的文件：
+
+- 桌面窗口：`InstallLocation\app\ChatGPT.exe`。开始菜单名是 ChatGPT，AppID 是 `OpenAI.Codex_2p2nqsd0c76g0!App`。
+- 同层还有 `app\Codex.exe`。它不是 `resources\codex.exe`，不能拿来当命令行，也不能优先于 `ChatGPT.exe`。
+- 命令行：`InstallLocation\app\resources\codex.exe`。
+- `chrome_proxy.exe`、`elevation_service.exe`、`node.exe`、`rg.exe` 以及 `resources`、`cua_node`、`plugins` 里的其它 exe 都不是桌面程序。
+
+这次 `status.json` 的程序是 `app\resources\Codex.exe`，退出码 2。Windows 不区分大小写，查找时先拼了同目录的 `Codex.exe`，命中命令行文件后就返回了，没有再看上一层的 `app\ChatGPT.exe`。
+
+修改只动发现层，不改 Gateway，不改激活脚本的包家族和 AppID。
+
+1. 商店 CLI 位于 `app\resources\codex.exe` 时，桌面候选只生成 `app\ChatGPT.exe`，然后才是 `app\Codex.exe`。不要生成 `resources\ChatGPT.exe` 或 `resources\Codex.exe`。
+2. `resolve_gui_executable` 在返回前拒绝与 CLI 路径大小写不敏感相同的候选。找不到就失败，不能退回命令行程序。
+3. 非商店安装仍用 CLI 同目录的 `ChatGPT.exe`，其次 `Codex.exe`。不套用商店的 `resources` 规则。
+4. 单测锁住这条虚拟机路径：从 `...\app\resources\codex.exe` 推出的第一个候选必须是 `...\app\ChatGPT.exe`，候选列表里不得出现 `resources\Codex.exe`。
+5. 默认 App 仍拒绝商店路径。这次不改那条拒绝。
+
+验收：新的 Windows 包在虚拟机启动隔离 App 后，`status.json` 的 `codexExecutable` 以 `\app\ChatGPT.exe` 结尾，并且状态保持 `running`。若仍是 `resources\codex.exe` 或马上 `exited`，这次修改不算通过。
+
+## 2026-10-17：Windows Computer Use 与控制台抑制
+
+商店包的 Browser/Computer Use 运行时继续从已安装包读取 node.exe、node_repl.exe、cua-repl.mjs 和 Node 模块。启动准备会把随包的 Windows Computer Use helper 目录复制到隔离 CODEX_HOME\computer-use\windows，拒绝符号链接和默认用户 .codex\computer-use 来源；配置中的 CODEX_HOME、SKY_CUA_SERVICE_PATH、notify 和 MCP 命令都指向隔离路径或当前商店包路径。
+
+Windows 下的 powershell.exe、Codex CLI 探针、tasklist、netstat、taskkill 和 launcher 进程都不应分配可见控制台。工具进程使用 CREATE_NO_WINDOW，codex-launcher.exe 和 codex-gateway.exe 使用 Windows GUI 子系统。找错 resources\codex.exe 会导致一次启动失败和退出码 2，但它不是保存渠道或刷新控制面时反复空白终端的唯一来源；后者主要来自这些探针和控制台 sidecar。
+
+验收增加两项：隔离实例的 config.toml 中 Windows node_repl/cua_repl 能找到商店包运行时，computer-use\windows 有 helper；打开 R Codex、保存渠道和启动隔离 App 时不出现空白终端。若启动失败，startup.log 仍是诊断事实来源。
+
 ## 执行记录
+
+- 2026-10-17：商店 CLI 从 resources 目录推导桌面程序时只生成上一层 app 下的 ChatGPT.exe、Codex.exe；加入同路径排除、Windows Computer Use helper 复制、隔离 MCP 配置和 CREATE_NO_WINDOW/GUI 子系统处理。cargo fmt、cargo check --all-targets --offline、cargo test --offline --lib（355 passed）和 pnpm run check 已通过。真实 Windows 包仍需验证 status.json、隔离 helper 和无终端。
 
 - 2026-10-11：完成发现层目录拆分（`codex_installation/{mod,macos,windows,windows_store}.rs`），HOME 读取改为 HOME 或 USERPROFILE。Windows 控制面受管理 App 直接 spawn `codex-launcher.exe` 且 argv 不套 shell；CLI 仍返回原错误。商店路径无包注册时失败，不回退默认实例；helper 必须是 launcher。`managed_app_compatibility_enabled` 在 Windows 上仍为 false。商店激活、ACL、真实 ChatGPT.exe 只在 Windows 桌面记一次。
 
