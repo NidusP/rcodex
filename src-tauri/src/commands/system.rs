@@ -383,12 +383,29 @@ fn launch_codex_in_app(_working_directory: Option<&str>) -> Result<(), String> {
 
 #[cfg(target_os = "windows")]
 fn launch_codex_in_app(_working_directory: Option<&str>) -> Result<(), String> {
+    use crate::codex_installation::windows::{
+        install_from_cli, normalized_windows_path_text, WindowsSpawnKind,
+    };
+    use crate::managed_app_launch::windows::{unmanaged_windows_launch, UnmanagedWindowsLaunch};
     let cli = resolve_codex_executable()?;
-    let gui = resolve_codex_app_executable(&cli)?;
-    if crate::codex_installation::windows::is_windowsapps_launch_path(&gui) {
-        return Err("当前版本请使用非商店安装的 Codex 桌面。商店包激活尚未验收。".to_string());
+    let mut install = install_from_cli(&cli)?;
+    if install.spawn == WindowsSpawnKind::Direct {
+        let gui = resolve_codex_app_executable(&cli)?;
+        install.gui = normalized_windows_path_text(&gui);
     }
-    std::process::Command::new(&gui)
+    let mut command = match unmanaged_windows_launch(&install)? {
+        UnmanagedWindowsLaunch::StoreAppFolder { program, args } => {
+            let mut command = std::process::Command::new(program);
+            command.args(args);
+            command
+        }
+        UnmanagedWindowsLaunch::DirectExe { gui, current_dir } => {
+            let mut command = std::process::Command::new(gui);
+            command.current_dir(current_dir);
+            command
+        }
+    };
+    command
         .env_remove("CODEX_HOME")
         .env_remove("CODEX_SQLITE_HOME")
         .env_remove("CODEX_ELECTRON_USER_DATA_PATH")

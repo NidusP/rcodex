@@ -50,7 +50,7 @@ non_code_mode_only = false
 
 - `[desktop]`：语言、对话详情、跟进队列等界面偏好。
 - `[features]`：功能开关。复制后仍按上一节收回 `multi_agent_v2`。
-- `[plugins]`：只复制每个插件的启用或停用，不复制插件里的其他字段。
+- `[plugins]`：只复制每个插件的启用或停用，不复制插件里的其他字段。启动后仍会打开 Browser、Chrome、Computer Use 和 unified Computer Use。
 - `[projects]`：只复制项目的信任级别。
 - 顶层的通知方式、网络访问、响应存储开关、人格和推理显示。
 - 引导完成状态，以及不含会话编号的界面偏好。默认目录已经用过、但还没有新版无项目引导完成记录时，隔离目录会补上这条完成记录，避免再次进入欢迎页。已打开的项目文件夹不复制。
@@ -66,6 +66,8 @@ R Codex 不导入默认目录里的 MCP。它只在隔离目录里启用两个�
 - `cua_repl`
 
 它们指向这个隔离目录自己的 Computer Use，不指向 `~/.codex`。
+
+即使从未打开过默认 Codex，隔离 App 也会打开 Browser / Computer Use 插件，并把权限选择器留在「Ask for approval」。不要把默认目录里的非编程引导或关掉的插件当成隔离实例的能力。
 
 模型目录里的 `node_repl_disabled` 决定 Codex 会不会把本机 Node REPL 交给当前模型。源码对三方条目写 false；已安装的 0.1.2 仍写 true。这个开关不在系统设置里。换上带这份源码的构建并重新启动隔离实例后，新对话回合才会放开内嵌浏览器。
 

@@ -1,6 +1,6 @@
 //! 控制面如何拉起 `codex-launcher`。
 //!
-//! 不准备隔离目录、不写 RouteSet。macOS 用临时脚本，Windows 稍后直接 spawn。
+//! 不准备隔离目录、不写 RouteSet。macOS 用临时脚本；Windows App 直接 spawn，CLI 走终端。
 //! 由 `commands/instances` 在快照落盘后调用。
 
 mod args;
@@ -13,6 +13,8 @@ mod macos;
 mod windows;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod windows;
+#[cfg(any(test, target_os = "windows"))]
+mod windows_cli;
 
 #[cfg(target_os = "macos")]
 use macos as platform;

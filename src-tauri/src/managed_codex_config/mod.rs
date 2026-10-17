@@ -46,8 +46,9 @@ pub use materialize::{
     materialize_managed_app_config, materialize_managed_codex_config_with_auto_review,
 };
 pub use preferences::{
-    keep_catalog_reasoning_efforts_selectable, keep_managed_permission_selector_available,
-    seed_default_codex_preferences, sync_default_codex_preferences,
+    ensure_isolated_local_plugins, keep_catalog_reasoning_efforts_selectable,
+    keep_managed_permission_selector_available, seed_default_codex_preferences,
+    sync_default_codex_preferences,
 };
 pub use probe::{verify_catalog_models_with_codex, verify_managed_profile_with_codex};
 

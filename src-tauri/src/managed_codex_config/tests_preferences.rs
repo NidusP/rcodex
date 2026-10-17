@@ -200,7 +200,7 @@ fn project_trust_alone_marks_projectless_onboarding_complete() {
 }
 
 #[test]
-fn explicit_projectless_flag_and_unused_home_are_not_rewritten() {
+fn explicit_projectless_flag_is_kept_and_unused_home_skips_welcome() {
     let root = std::env::temp_dir().join(format!("3r-projectless-explicit-{}", Uuid::new_v4()));
     let explicit_source = root.join("explicit");
     let explicit_managed = root.join("explicit-managed");
@@ -235,18 +235,28 @@ fn explicit_projectless_flag_and_unused_home_are_not_rewritten() {
     let unused_state: JsonValue =
         serde_json::from_slice(&fs::read(unused_managed.join(".codex-global-state.json")).unwrap())
             .unwrap();
-    assert!(unused_state["electron-persisted-atom-state"]
-        .get("electron:onboarding-projectless-completed")
-        .is_none());
+    assert_eq!(
+        unused_state["electron-persisted-atom-state"]["electron:onboarding-projectless-completed"],
+        true
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn managed_home_keeps_permission_selector_visible_without_creating_state() {
+fn managed_home_keeps_permission_selector_visible_and_creates_state() {
     let root = std::env::temp_dir().join(format!("3r-permission-selector-{}", Uuid::new_v4()));
     fs::create_dir(&root).unwrap();
     keep_managed_permission_selector_available(&root).unwrap();
-    assert!(!root.join(".codex-global-state.json").exists());
+    let created: JsonValue =
+        serde_json::from_slice(&fs::read(root.join(".codex-global-state.json")).unwrap()).unwrap();
+    assert_eq!(
+        created["electron-persisted-atom-state"]["composer-permission-mode-visibility"],
+        true
+    );
+    assert_eq!(
+        created["electron-persisted-atom-state"]["electron:onboarding-projectless-completed"],
+        true
+    );
 
     let state = serde_json::json!({
         "selected-project": "kept",
@@ -373,5 +383,35 @@ fn isolated_config_rejects_link_to_user_file_without_reading_it() {
         "managed_file_symlink_rejected"
     );
     assert_eq!(fs::read_to_string(source).unwrap(), "sentinel");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ensure_isolated_local_plugins_enables_browser_and_computer_use() {
+    let root = std::env::temp_dir().join(format!("3r-isolated-plugins-{}", Uuid::new_v4()));
+    fs::create_dir(&root).unwrap();
+    fs::write(
+        root.join("config.toml"),
+        "model_provider = \"rcodex\"\n[plugins.\"browser@openai-bundled\"]\nenabled = false\n",
+    )
+    .unwrap();
+    ensure_isolated_local_plugins(&root).unwrap();
+    let config: toml::Table = fs::read_to_string(root.join("config.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(config["model_provider"].as_str(), Some("rcodex"));
+    for name in [
+        "browser@openai-bundled",
+        "chrome@openai-bundled",
+        "computer-use@openai-bundled",
+        "unified-computer-use@openai-bundled",
+    ] {
+        assert_eq!(
+            config["plugins"][name]["enabled"].as_bool(),
+            Some(true),
+            "{name}"
+        );
+    }
     fs::remove_dir_all(root).unwrap();
 }

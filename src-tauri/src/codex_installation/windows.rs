@@ -5,6 +5,30 @@ use std::path::{Path, PathBuf};
 pub const CLI_FILE_NAMES: [&str; 2] = ["codex.exe", "codex"];
 pub const GUI_FILE_NAMES: [&str; 2] = ["ChatGPT.exe", "Codex.exe"];
 
+const CLI_RELATIVE_PATHS: [&str; 7] = [
+    r"app\resources\codex.exe",
+    r"resources\codex.exe",
+    r"app\resources\codex-cli\codex.exe",
+    r"app\resources\codex-cli\bin\codex.exe",
+    r"app\codex.exe",
+    r"codex.exe",
+    r"codex",
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowsSpawnKind {
+    Package,
+    Direct,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowsCodexInstall {
+    pub spawn: WindowsSpawnKind,
+    pub root: String,
+    pub cli: String,
+    pub gui: String,
+}
+
 /// 把任意分隔符收成 Windows 风格，便于在 Mac 上测商店路径。
 pub fn normalized_windows_path_text(path: &Path) -> String {
     path.to_string_lossy()
@@ -44,13 +68,21 @@ pub fn is_store_gui_file_name(path: &Path) -> bool {
     name == "chatgpt.exe" || name == "codex.exe"
 }
 
+pub fn cli_candidates_from_root(root: &str) -> Vec<String> {
+    let root = normalized_windows_path_text(Path::new(root));
+    CLI_RELATIVE_PATHS
+        .into_iter()
+        .map(|relative| format!(r"{root}\{relative}"))
+        .collect()
+}
+
 pub fn program_cli_candidates(local_app_data: &str) -> Vec<String> {
     let root = normalized_windows_path_text(Path::new(local_app_data));
     let mut candidates = Vec::new();
     for directory in ["Codex", "ChatGPT", "OpenAI Codex"] {
-        for name in CLI_FILE_NAMES {
-            candidates.push(format!(r"{root}\Programs\{directory}\{name}"));
-        }
+        candidates.extend(cli_candidates_from_root(&format!(
+            r"{root}\Programs\{directory}"
+        )));
     }
     candidates
 }
@@ -101,21 +133,60 @@ fn push_gui_candidate(candidates: &mut Vec<String>, candidate: String) {
 }
 
 pub fn store_cli_candidates(install_location: &str) -> Vec<String> {
-    let root = normalized_windows_path_text(Path::new(install_location));
-    [
-        r"app\resources\codex.exe",
-        r"app\resources\codex-cli\codex.exe",
-        r"app\resources\codex-cli\bin\codex.exe",
-        r"app\codex.exe",
-    ]
-    .into_iter()
-    .map(|relative| format!(r"{root}\{relative}"))
-    .collect()
+    cli_candidates_from_root(install_location)
 }
 
 /// 从 CLI 或 GUI 路径推出应对接隔离环境的 Desktop exe。不访问磁盘。
 pub fn derive_gui_path_from_cli(cli: &Path) -> Option<String> {
     gui_candidates_from_cli(cli).into_iter().next()
+}
+
+pub fn install_root_from_cli(cli: &Path) -> Option<String> {
+    let normalized = normalized_windows_path_text(cli);
+    if let Some(before_resources) = app_dir_before_resources(&normalized) {
+        return root_if_app_dir(before_resources);
+    }
+    let parent = normalized.rsplit_once('\\')?.0;
+    root_if_app_dir(parent)
+}
+
+fn root_if_app_dir(dir: &str) -> Option<String> {
+    if dir.is_empty() {
+        return None;
+    }
+    let folded = dir.to_ascii_lowercase();
+    if folded.ends_with(r"\app") {
+        dir.rsplit_once('\\')
+            .map(|(root, _)| root.to_string())
+            .filter(|root| !root.is_empty())
+    } else {
+        Some(dir.to_string())
+    }
+}
+
+pub fn install_from_cli(cli: &Path) -> Result<WindowsCodexInstall, String> {
+    let cli_text = normalized_windows_path_text(cli);
+    if cli_text.is_empty() {
+        return Err("无法定位 Codex 安装路径。".to_string());
+    }
+    let root =
+        install_root_from_cli(cli).ok_or_else(|| "无法定位 Codex 安装根目录。".to_string())?;
+    let gui = derive_gui_path_from_cli(cli)
+        .ok_or_else(|| "未找到与 Codex CLI 匹配的桌面 App 可执行文件。".to_string())?;
+    let spawn = if is_windowsapps_launch_path(cli)
+        || is_windowsapps_launch_path(Path::new(&gui))
+        || is_windowsapps_launch_path(Path::new(&root))
+    {
+        WindowsSpawnKind::Package
+    } else {
+        WindowsSpawnKind::Direct
+    };
+    Ok(WindowsCodexInstall {
+        spawn,
+        root,
+        cli: cli_text,
+        gui,
+    })
 }
 
 pub fn path_cli_candidates(directory: &Path) -> Vec<PathBuf> {
@@ -252,5 +323,52 @@ mod tests {
         );
         assert!(candidates
             .contains(&r"C:\Users\a\AppData\Local\Programs\ChatGPT\codex.exe".to_string()));
+        assert!(candidates.contains(
+            &r"C:\Users\a\AppData\Local\Programs\Codex\app\resources\codex.exe".to_string()
+        ));
+    }
+
+    #[test]
+    fn custom_resources_cli_is_direct_install() {
+        let cli = Path::new(r"D:\Apps\Codex\app\resources\codex.exe");
+        let install = install_from_cli(cli).unwrap();
+        assert_eq!(install.spawn, WindowsSpawnKind::Direct);
+        assert_eq!(install.root, r"D:\Apps\Codex");
+        assert_eq!(install.cli, r"D:\Apps\Codex\app\resources\codex.exe");
+        assert_eq!(install.gui, r"D:\Apps\Codex\app\ChatGPT.exe");
+        assert!(!install.gui.to_ascii_lowercase().contains(r"\resources\"));
+    }
+
+    #[test]
+    fn store_resources_cli_is_package_install() {
+        let cli = Path::new(concat!(
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0",
+            r"\app\resources\codex.exe"
+        ));
+        let install = install_from_cli(cli).unwrap();
+        assert_eq!(install.spawn, WindowsSpawnKind::Package);
+        assert_eq!(
+            install.root,
+            r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0"
+        );
+        assert_eq!(
+            install.gui,
+            concat!(
+                r"C:\Program Files\WindowsApps\OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0",
+                r"\app\ChatGPT.exe"
+            )
+        );
+    }
+
+    #[test]
+    fn unpackaged_cli_install_root_is_parent_directory() {
+        let cli = Path::new(r"C:\Users\a\AppData\Local\Programs\Codex\codex.exe");
+        let install = install_from_cli(cli).unwrap();
+        assert_eq!(install.spawn, WindowsSpawnKind::Direct);
+        assert_eq!(install.root, r"C:\Users\a\AppData\Local\Programs\Codex");
+        assert_eq!(
+            install.gui,
+            r"C:\Users\a\AppData\Local\Programs\Codex\ChatGPT.exe"
+        );
     }
 }

@@ -18,9 +18,10 @@ use crate::managed_codex_config::materialize_isolated_computer_use_mcp;
 use crate::managed_codex_config::materialize_windows_computer_use_from_cli;
 use crate::managed_codex_config::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility,
-    keep_catalog_reasoning_efforts_selectable, keep_managed_permission_selector_available,
-    materialize_managed_app_config, materialize_managed_codex_config_with_auto_review,
-    read_bundled_catalog, seed_default_codex_preferences, verify_catalog_models_with_codex,
+    ensure_isolated_local_plugins, keep_catalog_reasoning_efforts_selectable,
+    keep_managed_permission_selector_available, materialize_managed_app_config,
+    materialize_managed_codex_config_with_auto_review, read_bundled_catalog,
+    seed_default_codex_preferences, verify_catalog_models_with_codex,
     verify_managed_profile_with_codex,
 };
 use crate::model_family_profile::{
@@ -438,6 +439,7 @@ impl ManagedLaunchStore {
                     "windows_computer_use_ready",
                 );
             }
+            ensure_isolated_local_plugins(&managed_codex_home)?;
             keep_managed_permission_selector_available(&managed_codex_home)?;
             keep_catalog_reasoning_efforts_selectable(&managed_codex_home)?;
         }

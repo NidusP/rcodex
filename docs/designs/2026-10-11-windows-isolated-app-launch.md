@@ -1,6 +1,6 @@
  # Windows 隔离 App 启动
 
-> 状态：普通 Win32 路径已接通，可供安装包外发测试。商店包激活仍关闭。
+> 状态：商店包隔离启动已接通。安装根、DirectExe 与隔离 CLI 见 [Windows 安装根、DirectExe 与隔离 CLI](2026-10-17-windows-install-root-launch.md)。
 
 ## 目标
 
@@ -12,7 +12,7 @@ macOS 继续用现在的 `.app` + FIFO + `/bin/sh` 或直接 spawn launcher。�
 
 - 不复制 Cockpit 的多账户池、OAuth relay 或 PowerShell 长期控制面。
 - 不把 macOS 短 `CODEX_HOME` 迁到 Windows。
-- 首版不实现 Windows 受管理 CLI 的 `wt.exe` / `cmd.exe` 终端包装；CLI 按钮可继续提示未支持。
+- Windows 受管理 CLI 的 wt.exe / cmd.exe 终端包装改由 2026-10-17 安装根方案落地，不再作为本文件的非目标。
 - 不在没有 Windows 实机时宣称商店包激活已验收。
 - 不把 `Invoke-CommandInDesktopPackage` 用到未注册的普通 exe 上。
 
@@ -66,7 +66,7 @@ src-tauri/src/managed_app_launch/
 ## 分步
 
 1. **只重构 macOS。** 把 `launch_codex_in_terminal`、FIFO、Terminal 选择挪到 `managed_spawn/macos.rs`，把 `configure_managed_app_command` 挪到 `managed_app_launch`。行为与测试不变。Windows 仍返回现有「仅 macOS」错误。
-2. **发现层。** Windows 候选：`CODEX_BIN`、PATH 上的 `codex.exe`、`%LOCALAPPDATA%\Programs`、`WindowsApps\...\app\ChatGPT.exe`。从 GUI 反推 CLI、从 CLI 反推 GUI。商店路径用文本切割。Mac 单测覆盖路径样本。
+2. **发现层。** 顺序：`CODEX_BIN`，已安装的桌面（Windows：`%LOCALAPPDATA%\Programs` 然后商店 `InstallLocation`；macOS：`/Applications`），然后 PATH，最后用户目录里的 npm 全局。不要让 PATH 上的 npm `codex` 盖住商店或桌面安装。从 GUI 反推 CLI、从 CLI 反推 GUI。商店路径用文本切割。Mac 单测覆盖路径样本。
 3. **调度与密钥。** Windows 控制面直接 spawn `codex-launcher.exe`，不写 `.command`。密钥用 Named Pipe；协议与超时在 Mac 上测。`process_start_identity` 补 Windows。`HOME` 读取改为 `HOME` 或 `USERPROFILE`。
 4. **GUI 拉起。** `managed_app_launch/windows.rs` 先查包注册：有则 `Invoke-CommandInDesktopPackage`，helper 为当前 `codex-launcher.exe`；无且不在 WindowsApps 则 `CreateProcess`。参数统一 `--user-data-dir=`，去掉重复项。用新 PID + 用户数据目录确认实例，避免认到默认窗口。
 5. **探针与权限。** `managed_app_compatibility_enabled` 在 Windows 上检查 `.exe` sidecar 和已发现 GUI。`set_private_directory` 在 Windows 上设当前用户 ACL；没有实机前可先做空操作但测试要标明。打开隔离目录用 `explorer`。默认 Codex 用普通 exe 或包身份，且不带隔离环境变量。
@@ -102,7 +102,7 @@ src-tauri/src/managed_app_launch/
 2. `resolve_gui_executable` 在返回前拒绝与 CLI 路径大小写不敏感相同的候选。找不到就失败，不能退回命令行程序。
 3. 非商店安装仍用 CLI 同目录的 `ChatGPT.exe`，其次 `Codex.exe`。不套用商店的 `resources` 规则。
 4. 单测锁住这条虚拟机路径：从 `...\app\resources\codex.exe` 推出的第一个候选必须是 `...\app\ChatGPT.exe`，候选列表里不得出现 `resources\Codex.exe`。
-5. 默认 App 仍拒绝商店路径。这次不改那条拒绝。
+5. 当时默认 App 仍拒绝商店路径；2026-10-17 已改为 AppsFolder 打开默认窗口。
 
 验收：新的 Windows 包在虚拟机启动隔离 App 后，`status.json` 的 `codexExecutable` 以 `\app\ChatGPT.exe` 结尾，并且状态保持 `running`。若仍是 `resources\codex.exe` 或马上 `exited`，这次修改不算通过。
 
@@ -116,6 +116,9 @@ Windows 下的 powershell.exe、Codex CLI 探针、tasklist、netstat、taskkill
 
 ## 执行记录
 
+- 2026-10-17：安装根 WindowsCodexInstall、DirectExe cwd=gui 目录、打开默认 Codex 走 AppsFolder/CreateProcess、Windows 隔离 CLI 用 wt.exe 或 cmd start。cargo fmt、cargo test --lib --offline 366 passed、cargo check --all-targets --offline 通过。散装 DirectExe 与 CLI 终端仍需 Windows 虚拟机验收。
+
+
 - 2026-10-17：商店 CLI 从 resources 目录推导桌面程序时只生成上一层 app 下的 ChatGPT.exe、Codex.exe；加入同路径排除、Windows Computer Use helper 复制、隔离 MCP 配置和 CREATE_NO_WINDOW/GUI 子系统处理。cargo fmt、cargo check --all-targets --offline、cargo test --offline --lib（355 passed）和 pnpm run check 已通过。真实 Windows 包仍需验证 status.json、隔离 helper 和无终端。
 
 - 2026-10-11：完成发现层目录拆分（`codex_installation/{mod,macos,windows,windows_store}.rs`），HOME 读取改为 HOME 或 USERPROFILE。Windows 控制面受管理 App 直接 spawn `codex-launcher.exe` 且 argv 不套 shell；CLI 仍返回原错误。商店路径无包注册时失败，不回退默认实例；helper 必须是 launcher。`managed_app_compatibility_enabled` 在 Windows 上仍为 false。商店激活、ACL、真实 ChatGPT.exe 只在 Windows 桌面记一次。
@@ -126,7 +129,7 @@ Windows 下的 powershell.exe、Codex CLI 探针、tasklist、netstat、taskkill
 
 - 商店包激活没有真实 Get-AppxPackage 结果，不能启动 WindowsApps 里的 ChatGPT。
 - 一次性密钥写成 launch-secret.txt，没有 Named Pipe，也没有只给当前用户的 ACL。set_private_directory 在 Windows 上仍是空操作。
-- 受管理 CLI 仍返回仅 macOS；不在这次 App 放行里。
+- 受管理 CLI 曾返回仅 macOS；2026-10-17 已改为 wt/cmd 终端包装，待虚拟机验收。
 - 没有 Windows 桌面记录：普通安装打开隔离 App、目录不进默认窗口、Dev 与生产身份分离。
 - 2026-10-16：虚拟机安装 0.1.2 后弹出终端，打印 managed gateway startup deferred: managed_gateway_sidecar_missing，关掉终端时应用一起退出；商店版 Codex 被报未找到 CLI。原因是正式包仍是控制台子系统，伴随进程只找不带 .exe 和目标三元组的文件名，CLI 发现也不查 Appx 安装位置。源码已改为正式 Windows 包不分配控制台，按 Tauri externalBin 文件名查找 codex-gateway 与 codex-launcher，并用 Get-AppxPackage 找商店包里的 codex.exe。0.1.2 安装包本身不会变，要下一版 Windows 包才能验证。商店包激活仍不启动隔离 App。
 - 2026-10-16：虚拟机里的商店包 Name 是 OpenAI.Codex，不是 OpenAI.ChatGPT。PackageFullName 为 OpenAI.Codex_26.1013.3656.0_arm64__2p2nqsd0c76g0，InstallLocation 在 WindowsApps 下同名目录。C:\Users\xxx\.codex 只是配置目录。查找改为先 Get-AppxPackage -Name OpenAI.Codex，没有再回退 OpenAI.ChatGPT*。

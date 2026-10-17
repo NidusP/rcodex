@@ -307,3 +307,12 @@ fn windows_cli_path_resolves_the_install_app_directory_case_insensitively() {
         )
     );
 }
+
+#[test]
+fn windows_flat_cli_falls_back_to_parent_directory() {
+    let cli = Path::new(r"D:\Apps\Codex\codex.exe");
+    assert_eq!(
+        windows_app_dir_from_cli(cli),
+        Some(Path::new(r"D:\Apps\Codex").to_path_buf())
+    );
+}

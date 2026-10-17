@@ -98,7 +98,7 @@ CLI 启动仍用独立 `CODEX_HOME` 和 `--profile`。Codex 先读 home 的 `con
 
 macOS：若 `/Applications/iTerm.app`、`/Applications/iTerm2.app` 或用户 `~/Applications` 下同名 bundle 存在，用 `open -a iTerm` / `iTerm2` 跑启动脚本；失败再退回 `Terminal`。日志写 `terminal_open_dispatched app=...`。
 
-Windows：当前仍返回错误，不打开终端。计划优先 `wt.exe`（Windows Terminal），没有再 `cmd.exe`。凭据 FIFO 与 `.command` 脚本还是 macOS 专用，Windows CLI 不能只换一个 exe 名。
+Windows：有 Windows Terminal 时 `wt.exe -d <项目目录> -- <codex-launcher> <argv>`；否则 `cmd.exe /c start "R Codex CLI" /D <项目目录> <codex-launcher> <argv>`。不能用 CREATE_NO_WINDOW 包住这条命令。凭据 FIFO 与 `.command` 脚本仍是 macOS 专用；Windows 用 launch-secret.txt，与隔离 App 相同。详见 [Windows 安装根、DirectExe 与隔离 CLI](2026-10-17-windows-install-root-launch.md)。
 
 
 ## 审批询问（2026-10-09）

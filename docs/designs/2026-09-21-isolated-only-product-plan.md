@@ -16,10 +16,10 @@ R Codex 只管理自己的一套 Codex 环境。用户配置多个模型渠道�
 
 - 内部目标仅 managed_app / cli。Codex App 使用独立 CODEX_HOME、Electron 用户数据根和启动配置；`CODEX_SQLITE_HOME` 必须等于本次启动的 `CODEX_HOME`。macOS 受管理 App 的短路径在 Step 2 仍是 symlink（现状）；Step 5 目标是短真实目录，见归档专项。不得再把活动对话库放到 `managed-app-sqlite/<preset>`。CLI 使用独立实例目录，两个环境变量本来就是同一路径。归档修复见 [隔离 App 会话归档](2026-10-02-isolated-app-thread-archive.md)。
 - macOS 为避免 Unix socket 路径超限，启动用短 `CODEX_HOME`（`.../r/<short-id>`）。当前实现仍是指向实例长目录的符号链接；Electron 归档不跟随 symlink，与 sqlite 长 `rollout_path` 字面不一致，隔离会话在拆库收回后仍可能无法归档。下一步是让短路径成为真实目录，见 [归档修复 Step 5](2026-10-02-isolated-app-thread-archive.md)。Profile 仍写 `allow_symlinked_codex_home = true`，以免残留链接被沙箱拒绝。
-- 隔离 App 首次引导若选了非编程角色，Codex 会把 `composer-permission-mode-visibility` 写成 false。权限菜单于是只剩 Ask for approval，Change permissions 被禁用。受管理 App 每次启动只在已有 `.codex-global-state.json` 里把这个开关恢复为 true，不新建该文件，也不改已选角色。
+- 隔离 App 首次引导若选了非编程角色，Codex 会把 `composer-permission-mode-visibility` 写成 false。权限菜单于是只剩 Ask for approval，Change permissions 被禁用。受管理 App 每次启动都把这个开关写成 true。没有 `.codex-global-state.json` 时创建，并标上 `electron:onboarding-projectless-completed`，避免从未用过默认 Codex 时再进欢迎页。不写入非编程角色。
 - 新版 Codex 是否显示欢迎页，不看 `electron:onboarding-welcome-pending`。没有 ChatGPT 账号的桌面引导完成时间时，它只认 `electron:onboarding-projectless-completed`，或侧边栏里至少有一个工作区根目录。工作区根目录是已经打开过的项目文件夹，不是隔离目录，也不等于 `[projects]` 里的信任级别。默认目录通常靠这些项目路径跳过欢迎页；隔离目录不复制这些路径，所以空的新环境会被当成第一次使用。首次继承，以及之后同步「引导与权限偏好」时，只要默认目录已经用过，且来源没有显式写下这条新记录，就把隔离环境的 `electron:onboarding-projectless-completed` 写成 true。已经用过指欢迎待处理明确为关闭、已有主界面模式，或已有项目信任。不复制工作区根目录，不写入 `something_else` 或非编程角色。来源若已经写了这条记录，按原值复制，包括显式的 false。
 - App 的会话根与工作区绑定，退出、重启后复用；每次启动重建不可变路由快照和准入绑定。登录、认证文件和历史对话不继承。每个隔离目录首次启动时，从用户默认 `~/.codex` 复制一次应用偏好和引导状态：`[desktop]`、`[features]`、插件开关、项目信任级别，以及 `electron:onboarding-*`、引导完成标记和主界面模式；同时复制用户根目录 `AGENTS.md`、`rules/` 和个人 `skills/`，保留隔离环境自带的 `.system` skills。不复制 MCP、marketplace、shell 环境、模型路由、Cookie、会话和草稿。复制后 R Codex 路由字段仍覆盖来源配置。之后隔离环境里的修改不再被默认目录覆盖。每次启动再把 `[features].multi_agent_v2` 写成布尔值 `true`。不保留嵌套表，也不写 `non_code_mode_only = false`：Codex 0.160 上那种写法会拿掉 `collaboration` 命名空间，`spawn_agent` 就不再是直接工具。 版本边界：Codex CLI `0.159.0-alpha.12.1` 只保留 `goals = true` 时，`spawn_agent` 仍是直接工具。从 `0.160.0` 起，嵌套表 `non_code_mode_only = false` 会拿掉整个 `collaboration` 命名空间；隔离配置因此必须写成布尔值 `true`。更早小版本未逐个复测。
-- 主界面提供「打开默认 Codex」。macOS 对与当前 Codex CLI 对应的应用包执行 `open -n`，不传 `--user-data-dir` 或工作区路径，并去掉隔离环境变量。隔离 App 仍在时，Finder 普通点击只会聚焦隔离窗口；这个入口另起默认实例。再次点击共享默认 Electron 数据目录，由应用自己的单实例锁回到已有默认窗口。
+- 主界面提供「打开默认 Codex」。macOS 对与当前 Codex CLI 对应的应用包执行 `open -n`；Windows 商店走 `explorer.exe shell:AppsFolder`，散装走 `ChatGPT.exe`。都不传隔离 `--user-data-dir` 或工作区路径，并去掉隔离环境变量。隔离 App 仍在时，Finder 普通点击只会聚焦隔离窗口；这个入口另起默认实例。再次点击共享默认 Electron 数据目录，由应用自己的单实例锁回到已有默认窗口。
 - 查看实例按钮旁提供「打开CODEX_HOME目录」。隔离 App 的 CODEX_HOME 等同于默认环境的 `~/.codex`，存放 config.toml 和引导状态，不是应用包，也不是 Electron 用户数据目录。目录在该工作区首次启动后才存在；应用正在运行时仍可打开。前端只传启动方案 ID，后端核验目录属于 R Codex 实例根之后才交给访达。
 
 ### 设置继承清单
@@ -41,7 +41,7 @@ R Codex 只管理自己的一套 Codex 环境。用户配置多个模型渠道�
 | Account / Login | 否 | `auth.json`、Keychain、Electron 数据 | 不复制 OAuth、API Key、Cookie、登录数据库或账户身份。API Key 仅按 R Codex 工作区登录渠道写入 R Codex 自有 `auth.json`。 |
 | History / Sessions | 否 | SQLite、sessions、rollouts | 不复制历史对话、草稿、线程映射、浏览器会话或请求正文；项目导入是用户主动发起的独立单向流程。 |
 
-当前实现已经继承插件启用状态、个人 skills、`AGENTS.md`、`rules/`，并补齐了稳定的 General、Appearance、Onboarding 原子偏好；Browser 和 Computer Use 的账号/运行时数据仍按上表隔离。
+当前实现会继承界面偏好、个人 skills、`AGENTS.md` 和 `rules/`。Browser、Computer Use 和「Ask for approval」由隔离启动直接打开，不依赖用户是否用过默认 Codex。默认目录里关掉的同名插件不会盖住隔离开关。账号、Cookie 和运行时数据仍按上表隔离。
 当前播种只挂在隔离 App 启动路径；隔离 CLI 实例只有不可变 profile、没有 `config.toml`。CLI 对齐同一白名单的合同见 [隔离 CLI 继承默认环境策略](2026-10-09-isolated-cli-preference-inheritance.md)。
 
 ### 2026-09-23：隔离 Computer Use 与按模型推理档实施计划

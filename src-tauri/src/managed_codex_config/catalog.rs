@@ -2,7 +2,7 @@
 //!
 //! 不写 config.toml、不探测真实 Codex 进程。启动准备用它从捆绑目录生成隔离目录。
 
-use std::{collections::BTreeSet, fs, path::Path, process::Command};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use uuid::Uuid;

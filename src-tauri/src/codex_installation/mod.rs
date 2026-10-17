@@ -23,17 +23,8 @@ pub fn resolve_codex_executable() -> Result<PathBuf, String> {
             .map_err(|error| format!("CODEX_BIN 指向的 Codex 不可用：{error}"));
     }
 
-    if let Some(path_value) = std::env::var_os("PATH") {
-        for directory in std::env::split_paths(&path_value) {
-            for name in path_cli_file_names() {
-                let path = directory.join(name);
-                if is_executable_file(&path) {
-                    return path.canonicalize().map_err(|error| error.to_string());
-                }
-            }
-        }
-    }
-
+    // Prefer a real desktop install over a shell PATH shim such as npm's
+    // global `codex`. CODEX_BIN still wins above this.
     #[cfg(target_os = "macos")]
     {
         for bundle in codex_app_bundle_candidates() {
@@ -60,6 +51,17 @@ pub fn resolve_codex_executable() -> Result<PathBuf, String> {
                 let path = PathBuf::from(&candidate);
                 if is_executable_file(&path) {
                     return Ok(path);
+                }
+            }
+        }
+    }
+
+    if let Some(path_value) = std::env::var_os("PATH") {
+        for directory in std::env::split_paths(&path_value) {
+            for name in path_cli_file_names() {
+                let path = directory.join(name);
+                if is_executable_file(&path) {
+                    return path.canonicalize().map_err(|error| error.to_string());
                 }
             }
         }

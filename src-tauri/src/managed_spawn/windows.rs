@@ -1,14 +1,16 @@
 //! Windows：控制面拉起 `codex-launcher.exe`。
 //!
-//! 受管理 App 直接 spawn，不写 .command。CLI 首版仍返回未支持。
+//! 受管理 App 直接 spawn，不写 .command。CLI 用 Windows Terminal 或 cmd start。
 //! 商店包激活属于 launcher，不在这里。
 
 use std::path::Path;
 
+#[cfg(target_os = "windows")]
+use super::args::{launcher_argv, LauncherArgSpec};
+#[cfg(target_os = "windows")]
 use crate::launcher_protocol::{append_startup_log, LaunchTarget};
 
-use super::args::{launcher_argv, LauncherArgSpec};
-
+#[cfg(not(target_os = "windows"))]
 const WINDOWS_LAUNCH_UNAVAILABLE: &str =
     "当前版本仅在 macOS 提供受管理终端启动。Windows 计划优先使用 Windows Terminal（wt.exe），没有时再打开 cmd.exe。";
 
@@ -28,9 +30,6 @@ pub(super) fn launch(
     electron_user_data_dir: Option<&Path>,
     sqlite_home: Option<&Path>,
 ) -> Result<(), String> {
-    if !LaunchTarget::wire_is_managed_app(launch_target) {
-        return Err(WINDOWS_LAUNCH_UNAVAILABLE.to_string());
-    }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (
@@ -45,6 +44,7 @@ pub(super) fn launch(
             model,
             working_directory,
             launch_secret,
+            launch_target,
             electron_user_data_dir,
             sqlite_home,
         );
@@ -52,27 +52,54 @@ pub(super) fn launch(
     }
     #[cfg(target_os = "windows")]
     {
-        launch_managed_app(
-            instance_id,
-            launch_nonce,
-            status_file,
-            codex_home,
-            credential_kind,
-            secret_ref,
-            instance_key_ref,
-            profile,
-            model,
-            working_directory,
-            launch_secret,
-            launch_target,
-            electron_user_data_dir,
-            sqlite_home,
-        )
+        if LaunchTarget::wire_is_managed_app(launch_target) {
+            launch_managed_app(
+                instance_id,
+                launch_nonce,
+                status_file,
+                codex_home,
+                credential_kind,
+                secret_ref,
+                instance_key_ref,
+                profile,
+                model,
+                working_directory,
+                launch_secret,
+                launch_target,
+                electron_user_data_dir,
+                sqlite_home,
+            )
+        } else {
+            launch_managed_cli(
+                instance_id,
+                launch_nonce,
+                status_file,
+                codex_home,
+                credential_kind,
+                secret_ref,
+                instance_key_ref,
+                profile,
+                model,
+                working_directory,
+                launch_secret,
+                launch_target,
+                electron_user_data_dir,
+                sqlite_home,
+            )
+        }
     }
 }
 
 #[cfg(target_os = "windows")]
-fn launch_managed_app(
+struct PreparedLauncher {
+    helper: std::path::PathBuf,
+    args: Vec<String>,
+    secret_file: Option<std::path::PathBuf>,
+    log_file: std::path::PathBuf,
+}
+
+#[cfg(target_os = "windows")]
+fn prepare_launcher(
     instance_id: &str,
     launch_nonce: &str,
     status_file: &Path,
@@ -87,11 +114,10 @@ fn launch_managed_app(
     launch_target: &str,
     electron_user_data_dir: Option<&Path>,
     sqlite_home: Option<&Path>,
-) -> Result<(), String> {
-    use std::{fs, process::Command};
+) -> Result<PreparedLauncher, String> {
+    use std::fs;
 
     let log_file = status_file.with_file_name("startup.log");
-    let _ = append_startup_log(&log_file, "windows_app_launch_requested");
     let executable =
         std::env::current_exe().map_err(|error| format!("无法定位 R Codex 应用：{error}"))?;
     let helper = executable
@@ -126,22 +152,155 @@ fn launch_managed_app(
         electron_user_data_dir,
         sqlite_home,
     });
-    crate::support::command_without_console(&helper)
-        .args(&args)
+    Ok(PreparedLauncher {
+        helper,
+        args,
+        secret_file,
+        log_file,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn launch_managed_app(
+    instance_id: &str,
+    launch_nonce: &str,
+    status_file: &Path,
+    codex_home: &Path,
+    credential_kind: &str,
+    secret_ref: Option<&str>,
+    instance_key_ref: Option<&str>,
+    profile: Option<&str>,
+    model: Option<&str>,
+    working_directory: Option<&str>,
+    launch_secret: Option<&str>,
+    launch_target: &str,
+    electron_user_data_dir: Option<&Path>,
+    sqlite_home: Option<&Path>,
+) -> Result<(), String> {
+    use std::fs;
+
+    let _ = append_startup_log(
+        &status_file.with_file_name("startup.log"),
+        "windows_app_launch_requested",
+    );
+    let prepared = prepare_launcher(
+        instance_id,
+        launch_nonce,
+        status_file,
+        codex_home,
+        credential_kind,
+        secret_ref,
+        instance_key_ref,
+        profile,
+        model,
+        working_directory,
+        launch_secret,
+        launch_target,
+        electron_user_data_dir,
+        sqlite_home,
+    )?;
+    crate::support::command_without_console(&prepared.helper)
+        .args(&prepared.args)
         .spawn()
         .map_err(|error| {
-            if let Some(path) = secret_file.as_deref() {
+            if let Some(path) = prepared.secret_file.as_deref() {
                 let _ = fs::remove_file(path);
             }
             let _ = append_startup_log(
-                &log_file,
+                &prepared.log_file,
                 &format!("app_spawn_failed target={launch_target} error={error}"),
             );
             format!("无法启动 Codex App：{error}")
         })?;
     let _ = append_startup_log(
-        &log_file,
+        &prepared.log_file,
         &format!("app_spawn_dispatched target={launch_target}"),
     );
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn launch_managed_cli(
+    instance_id: &str,
+    launch_nonce: &str,
+    status_file: &Path,
+    codex_home: &Path,
+    credential_kind: &str,
+    secret_ref: Option<&str>,
+    instance_key_ref: Option<&str>,
+    profile: Option<&str>,
+    model: Option<&str>,
+    working_directory: Option<&str>,
+    launch_secret: Option<&str>,
+    launch_target: &str,
+    electron_user_data_dir: Option<&Path>,
+    sqlite_home: Option<&Path>,
+) -> Result<(), String> {
+    use std::{fs, process::Command};
+
+    let _ = append_startup_log(
+        &status_file.with_file_name("startup.log"),
+        "windows_cli_launch_requested",
+    );
+    let prepared = prepare_launcher(
+        instance_id,
+        launch_nonce,
+        status_file,
+        codex_home,
+        credential_kind,
+        secret_ref,
+        instance_key_ref,
+        profile,
+        model,
+        working_directory,
+        launch_secret,
+        launch_target,
+        electron_user_data_dir,
+        sqlite_home,
+    )?;
+    let spec = super::windows_cli::windows_cli_terminal_spec(
+        &prepared.helper,
+        &prepared.args,
+        working_directory,
+        find_windows_terminal().as_deref(),
+    );
+    // CLI 必须是可见终端，不能套 CREATE_NO_WINDOW。
+    Command::new(&spec.program)
+        .args(&spec.args)
+        .spawn()
+        .map_err(|error| {
+            if let Some(path) = prepared.secret_file.as_deref() {
+                let _ = fs::remove_file(path);
+            }
+            let _ = append_startup_log(
+                &prepared.log_file,
+                &format!("cli_spawn_failed target={launch_target} error={error}"),
+            );
+            format!("无法启动 Codex CLI：{error}")
+        })?;
+    let _ = append_startup_log(
+        &prepared.log_file,
+        &format!(
+            "cli_spawn_dispatched target={launch_target} terminal={}",
+            spec.program
+        ),
+    );
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn find_windows_terminal() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if let Some(path_value) = std::env::var_os("PATH") {
+        for directory in std::env::split_paths(&path_value) {
+            let candidate = directory.join("wt.exe");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .map(|local| local.join(r"Microsoft\WindowsApps\wt.exe"))
+        .filter(|path| path.is_file())
 }

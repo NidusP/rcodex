@@ -113,6 +113,10 @@ fn run() -> Result<(), String> {
             if codex_home.is_none() {
                 return Err("R Codex CLI 启动缺少独立 --codex-home。".to_string());
             }
+            #[cfg(target_os = "windows")]
+            {
+                ensure_windows_cli_console();
+            }
             let codex = codex.canonicalize().unwrap_or(codex);
             let mut command = Command::new(&codex);
             command
@@ -303,6 +307,16 @@ fn run() -> Result<(), String> {
                 &sqlite_home,
                 &instance_key,
             );
+            #[cfg(target_os = "windows")]
+            {
+                let cwd = r_codex_lib::managed_app_launch::windows::gui_directory(&app_executable)
+                    .ok_or_else(|| "无法定位 Codex 桌面程序目录。".to_string())?;
+                command.current_dir(cwd);
+                if let Some(directory) = working_directory.as_ref() {
+                    command.arg(directory);
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
             if let Some(directory) = working_directory.as_ref() {
                 command.current_dir(&directory).arg(directory);
             }
@@ -512,6 +526,24 @@ fn read_secret_file(path: &str) -> Result<String, String> {
 fn terminate_and_wait(child: &mut std::process::Child) {
     let _ = child.kill();
     let _ = child.wait();
+}
+
+#[cfg(target_os = "windows")]
+fn ensure_windows_cli_console() {
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+    extern "system" {
+        fn AttachConsole(dw_process_id: u32) -> i32;
+        fn AllocConsole() -> i32;
+        fn GetConsoleWindow() -> *mut std::ffi::c_void;
+    }
+    unsafe {
+        if !GetConsoleWindow().is_null() {
+            return;
+        }
+        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
+            let _ = AllocConsole();
+        }
+    }
 }
 
 fn resolve_working_directory(value: Option<&str>) -> Result<Option<PathBuf>, String> {

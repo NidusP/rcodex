@@ -11,14 +11,22 @@ use super::io::{read_regular_toml, reject_link, write_private_atomically_overwri
 const MAX_GUIDANCE_SEED_BYTES: u64 = 16 * 1024 * 1024;
 
 /// A non-coding first-run choice hides every permission except "Ask for
-/// approval", and Codex then disables Change permissions. Restore the selector
-/// without creating the state file or changing the chosen role.
+/// approval", and Codex then disables Change permissions. Isolated homes must
+/// keep the selector even when the user never opened default Codex.
 pub fn keep_managed_permission_selector_available(codex_home: &Path) -> Result<(), String> {
     let path = codex_home.join(".codex-global-state.json");
-    if !path.exists() {
-        return Ok(());
-    }
     reject_link(&path)?;
+    if !path.exists() {
+        let value = serde_json::json!({
+            "electron-persisted-atom-state": {
+                "composer-permission-mode-visibility": true,
+                "electron:onboarding-projectless-completed": true
+            }
+        });
+        let encoded = serde_json::to_vec_pretty(&value)
+            .map_err(|error| format!("managed_permission_selector_encode_failed:{error}"))?;
+        return write_private_atomically_overwrite(&path, &encoded, "managed_permission_selector");
+    }
     let mut value: JsonValue = serde_json::from_slice(
         &fs::read(&path)
             .map_err(|error| format!("managed_permission_selector_read_failed:{error}"))?,
@@ -100,6 +108,38 @@ pub fn keep_catalog_reasoning_efforts_selectable(codex_home: &Path) -> Result<()
     let encoded = serde_json::to_vec_pretty(&value)
         .map_err(|error| format!("managed_reasoning_allowlist_encode_failed:{error}"))?;
     write_private_atomically_overwrite(&path, &encoded, "managed_reasoning_allowlist")
+}
+
+const ISOLATED_LOCAL_PLUGINS: &[&str] = &[
+    "browser@openai-bundled",
+    "chrome@openai-bundled",
+    "computer-use@openai-bundled",
+    "unified-computer-use@openai-bundled",
+];
+
+/// Isolated App must expose Browser and Computer Use even when default Codex
+/// was never opened, or when its plugin table left those entries disabled.
+pub fn ensure_isolated_local_plugins(codex_home: &Path) -> Result<(), String> {
+    let config_path = codex_home.join("config.toml");
+    reject_link(&config_path)?;
+    let mut config = read_regular_toml(&config_path)?.unwrap_or_default();
+    let mut plugins = match config.remove("plugins") {
+        Some(toml::Value::Table(table)) => table,
+        _ => toml::Table::new(),
+    };
+    for name in ISOLATED_LOCAL_PLUGINS {
+        let mut plugin = plugins
+            .get(*name)
+            .and_then(toml::Value::as_table)
+            .cloned()
+            .unwrap_or_default();
+        plugin.insert("enabled".to_string(), toml::Value::Boolean(true));
+        plugins.insert((*name).to_string(), toml::Value::Table(plugin));
+    }
+    config.insert("plugins".to_string(), toml::Value::Table(plugins));
+    let encoded = toml::to_string(&config)
+        .map_err(|_| "managed_isolated_plugins_encode_failed".to_string())?;
+    write_private_atomically_overwrite(&config_path, encoded.as_bytes(), "managed_isolated_plugins")
 }
 
 const PREFERENCE_SEED_MARKER: &str = ".rcodex-preference-seed";
@@ -423,8 +463,14 @@ fn should_mark_projectless_onboarding_complete(
         if welcome_dismissed || has_home_mode {
             return Ok(true);
         }
+        // Default Codex was installed but never finished welcome. Isolated App
+        // should not wait on that flow before Browser, Computer Use, or Ask for
+        // approval are available.
+        return Ok(true);
     }
-    source_has_project_trust(source_home)
+    // No default state file: the user started from R Codex only.
+    let _ = source_has_project_trust(source_home)?;
+    Ok(true)
 }
 
 fn source_has_project_trust(source_home: &Path) -> Result<bool, String> {

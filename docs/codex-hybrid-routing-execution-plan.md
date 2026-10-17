@@ -2,6 +2,33 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-17：Windows 安装根、DirectExe 与隔离 CLI 落地
+
+- 变更目的：自选目录的散装 ChatGPT.exe 不能把用户项目目录当 cwd；商店用户打开默认 Codex 不该被拒绝；Windows 点隔离 CLI 不能再无反应。
+- 合同：发现层产出 WindowsCodexInstall（spawn/root/cli/gui）。DirectExe 的 cwd 是 gui 所在目录，项目目录只进 argv，user-data-dir 只留一份等号形式。打开默认 Codex：Package 走 explorer.exe shell:AppsFolder 与包家族 AppID，Direct 走 CreateProcess(gui)。隔离 CLI 有 wt.exe 时用 wt -d <dir> -- launcher argv，否则 cmd /c start 标题为 R Codex CLI；这条命令不用 CREATE_NO_WINDOW。launcher 在 CLI 目标 AttachConsole/AllocConsole。
+- 修改文件：codex_installation/windows.rs，managed_app_launch/windows.rs，managed_spawn/{mod,windows,windows_cli}.rs，bin/codex-launcher.rs，commands/system.rs，managed_codex_config/computer_use.rs 与 tests_computer_use.rs，2026-10-17/11/09 设计文档，本计划，AGENTS.md。
+- 验证：cargo fmt --all -- --check 通过。cargo test --lib --offline 为 366 passed。cargo check --all-targets --offline 通过。未启动 Tauri，未打 Windows 包。
+- 未完成项：散装 DirectExe 与隔离 CLI 终端需 commander 在 Windows 虚拟机确认。没有散装安装时，不把 DirectExe 标成已验收。
+- 回滚：恢复 DirectExe 以项目目录为 cwd；恢复打开默认 Codex 拒绝 WindowsApps；Windows managed_spawn 对 CLI 再返回仅 macOS。
+- 下一步：commander 用当前源码在虚拟机开隔离 CLI，确认出现 Windows Terminal 或标题为 R Codex CLI 的窗口；商店安装点打开默认 Codex 不再报请改用非商店包。
+
+### 2026-10-17：Windows 安装根与 DirectExe 方案
+
+- 变更目的：商店与 exe 是同一份 Codex 时，不要按下载渠道写两套产品。自选目录的散装安装用 CreateProcess，商店/MSIX 用包身份。
+- 合同：发现层产出 WindowsCodexInstall（spawn/root/cli/gui）。DirectExe 的 cwd 是 ChatGPT.exe 所在目录，参数只有一份 --user-data-dir=隔离目录。打开默认 Codex 共用解析，不再拒绝 WindowsApps。方案见 docs/designs/2026-10-17-windows-install-root-launch.md。方案随后已按上一节落地。
+- 修改文件：该设计文档、2026-10-11 Windows 启动文档状态、本计划。
+- 验证：文档与当前 launcher DirectExe / 包身份分叉对照。未改 Rust。
+- 下一步：见上一节落地记录。
+
+### 2026-10-17：隔离首启不依赖默认 Codex
+
+- 变更目的：用户可能从未打开默认 Codex，直接用 R Codex 开隔离 App。再复用空的或未完成的默认配置，会让 Browser、Computer Use 和 Ask for approval 不可用。
+- 合同：隔离 App 每次启动都打开 browser / chrome / computer-use / unified-computer-use 插件。没有 .codex-global-state.json 时创建，并打开权限选择器、标上无项目引导完成。默认 Codex 从未用过时也跳过欢迎页。商店与非商店安装在发现层共用「桌面安装优先于 PATH」；拉起 GUI 仍是 CreateProcess 对普通 exe、Invoke-CommandInDesktopPackage 对商店包。
+- 修改文件：preferences.rs、tests_preferences.rs、prepare.rs、codex_installation/mod.rs，隔离计划、Windows 启动设计、website isolated-config、本计划。
+- 验证：cargo fmt 通过。cargo test --lib --offline -- managed_codex_config::tests_preferences 为 10 passed。未启动 Tauri。
+- 回滚：权限选择器恢复为不建文件；未用过的默认 home 不再标引导完成；发现层恢复 PATH 优先。
+- 下一步：commander 在从未打开过默认 Codex 的 Windows 上开隔离 App，确认 Browser / Computer Use / Ask for approval 可用。
+
 ### 2026-10-16：三方 Node REPL 与 Chat 审核合同落地
 
 - 变更目的：把 10 月 15 日的本机 node_repl 开放、Chat 自动审核暂不指向自己、以及 GPT 5.6/6 官方 max 档写进专项文档，方便 commander 用 tauri:dev 隔离实例接着试。

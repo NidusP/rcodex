@@ -5,7 +5,7 @@
 use std::{
     collections::BTreeSet,
     path::Path,
-    process::{Command, Output},
+    process::Output,
 };
 
 use serde_json::Value as JsonValue;

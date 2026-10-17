@@ -412,12 +412,19 @@ pub(crate) fn windows_app_dir_from_cli(cli: &Path) -> Option<PathBuf> {
     let text = cli.to_string_lossy();
     let folded = text.replace('/', "\\").to_ascii_lowercase();
     let marker = "\\resources\\";
-    let index = folded.find(marker)?;
-    let app_dir = text.get(..index)?.trim();
-    if app_dir.is_empty() {
-        return None;
+    if let Some(index) = folded.find(marker) {
+        let app_dir = text.get(..index)?.trim();
+        if !app_dir.is_empty() {
+            return Some(PathBuf::from(app_dir.to_string()));
+        }
     }
-    Some(PathBuf::from(app_dir.to_string()))
+    let normalized = text.replace('/', "\\");
+    let parent = normalized.rsplit_once('\\')?.0.trim();
+    if parent.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(parent.to_string()))
+    }
 }
 
 #[cfg(any(test, target_os = "windows"))]
