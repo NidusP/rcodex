@@ -645,3 +645,72 @@ fn prepare_launch_uses_gateway_when_auto_review_is_enabled() {
     drop(connection);
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn failed_cli_prepare_removes_empty_lifecycle_home() {
+    let database = Database::in_memory();
+    seed_provider(&database, "relay", "relay-r1", "responses");
+    let root = std::env::temp_dir().join(format!("3r-cli-empty-home-{}", Uuid::new_v4()));
+    let instances_root = root.join("codex-instances");
+    let store = ManagedLaunchStore::for_test(
+        database,
+        instances_root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    let saved = store
+        .create_preset(CreateManagedLaunchPresetInput {
+            entry_kind: None,
+            name: "DeepSeek".to_string(),
+            official_account_id: None,
+            api_key_provider_ids: vec!["relay".to_string()],
+            models: vec![ManagedModelSelectionInput {
+                source_kind: RouteKind::ApiProvider,
+                source_id: "relay".to_string(),
+                upstream_model_id: "deepseek-chat".to_string(),
+                public_model_id: "deepseek-chat".to_string(),
+                display_name: "DeepSeek Chat".to_string(),
+                ..Default::default()
+            }],
+            auto_review_public_model_id: None,
+            transport_mode: None,
+            default_workspace_path: None,
+            create_new: false,
+            launch_preset_id: None,
+        })
+        .unwrap();
+    let missing = root.join("missing-codex");
+    let error = match store.prepare_launch_with_target(
+        &saved.id,
+        saved.version,
+        None,
+        &missing,
+        "codex-test",
+        Some(&Url::parse("http://127.0.0.1:43123/v1").unwrap()),
+        &root,
+        "cli",
+    ) {
+        Ok(_) => panic!("expected CLI prepare to fail before catalog probe"),
+        Err(error) => error,
+    };
+    assert!(error.contains("codex_catalog_probe_failed"), "{error}");
+    let leftover_dirs = std::fs::read_dir(&instances_root)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.path().is_dir())
+                .map(|entry| entry.file_name())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    assert!(leftover_dirs.is_empty(), "{leftover_dirs:?}");
+    let short_root = instances_root.parent().unwrap().join("r");
+    if short_root.exists() {
+        let leftover_links = std::fs::read_dir(&short_root)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name())
+            .collect::<Vec<_>>();
+        assert!(leftover_links.is_empty(), "{leftover_links:?}");
+    }
+    let _ = std::fs::remove_dir_all(root);
+}

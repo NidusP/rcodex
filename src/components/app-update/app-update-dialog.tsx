@@ -11,18 +11,24 @@ function formatBytes(bytes: number) {
 
 /**
  * @component AppUpdateDialog
- * @description 新版本下载弹窗。标题栏按钮只负责打开，确认后才下载并显示进度。
+ * @description 新版本弹窗。先下载当前系统的安装包，下完后才能安装重启。
  */
 export function AppUpdateDialog() {
   const {
     appUpdate,
     appUpdateOpen,
     appUpdateBusy,
+    appUpdateDownloaded,
     appUpdateProgress,
     closeAppUpdateDialog,
+    downloadAppUpdate,
     installAppUpdate,
   } = useAppState();
   if (!appUpdateOpen || !appUpdate) return null;
+  const phase = appUpdateProgress?.phase;
+  const downloading = appUpdateBusy && phase === "downloading";
+  const installing = appUpdateBusy && phase === "installing";
+  const downloaded = appUpdateDownloaded || phase === "downloaded";
   const totalBytes = appUpdateProgress?.totalBytes ?? null;
   const receivedBytes = appUpdateProgress?.receivedBytes ?? 0;
   const percent =
@@ -31,11 +37,13 @@ export function AppUpdateDialog() {
       : null;
   const progressText = !appUpdateProgress
     ? null
-    : appUpdateProgress.phase === "installing"
-      ? "下载完成，正在安装并重启…"
-      : totalBytes
-        ? "已下载 " + formatBytes(receivedBytes) + " / " + formatBytes(totalBytes)
-        : "已下载 " + formatBytes(receivedBytes);
+    : installing
+      ? "正在安装并重启…"
+      : downloaded
+        ? "本机安装包已就绪"
+        : totalBytes
+          ? "已下载 " + formatBytes(receivedBytes) + " / " + formatBytes(totalBytes)
+          : "已下载 " + formatBytes(receivedBytes);
 
   return (
     <ControlDialog
@@ -52,16 +60,17 @@ export function AppUpdateDialog() {
           {appUpdate.body ? (
             <p className="app-update-notes">{appUpdate.body}</p>
           ) : (
-            <p>可以下载并安装这个版本。</p>
+            <p>可以下载适合当前系统的安装包。</p>
           )}
+          <p>先下载本机对应的安装包，完成后再更新。</p>
         </div>
         {progressText && (
           <div className="app-update-progress" role="status">
             <div
-              className={percent === null ? "app-update-bar is-unknown" : "app-update-bar"}
+              className={percent === null && !downloaded ? "app-update-bar is-unknown" : "app-update-bar"}
               aria-hidden="true"
             >
-              <span style={percent === null ? undefined : { width: percent + "%" }} />
+              <span style={percent === null || downloaded ? { width: "100%" } : { width: percent + "%" }} />
             </div>
             <p>{progressText}</p>
           </div>
@@ -76,12 +85,22 @@ export function AppUpdateDialog() {
             取消
           </HintedButton>
           <HintedButton
+            className="secondary-action"
+            type="button"
+            disabled={appUpdateBusy || downloaded}
+            title={downloaded ? "安装包已下载" : "下载适合当前系统的安装包"}
+            onClick={() => void downloadAppUpdate()}
+          >
+            {downloading ? "正在下载…" : downloaded ? "已下载" : "下载"}
+          </HintedButton>
+          <HintedButton
             className="primary-action"
             type="button"
-            disabled={appUpdateBusy}
+            disabled={!downloaded || appUpdateBusy}
+            title={downloaded ? "安装并重启" : "请先下载安装包"}
             onClick={() => void installAppUpdate()}
           >
-            {appUpdateBusy ? "正在更新…" : "下载并更新"}
+            {installing ? "正在更新…" : "更新"}
           </HintedButton>
         </div>
       </section>

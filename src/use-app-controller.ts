@@ -26,7 +26,7 @@ import {
   type RuntimeInstanceSummary,
 } from "./codex-control";
 import { desktopChrome } from "./components/title-bar";
-import { checkAppRelease, openAppReleasePage, type AppReleaseUpdate, type AppUpdateProgress } from "./components/app-update";
+import { FORCE_APP_UPDATE_PREVIEW, previewAppUpdate, checkAppRelease, openAppReleasePage, type AppReleaseUpdate, type AppUpdateProgress } from "./components/app-update";
 
 import {
   buildDiscoveredModelOptions,
@@ -151,8 +151,9 @@ export function useAppController() {
   });
   const [codexInstallation, setCodexInstallation] = useState<CodexInstallationStatus | null>(null);
   const [codexUpdate, setCodexUpdate] = useState<CodexUpdateStatus | null>(null);
-  const [appUpdate, setAppUpdate] = useState<AppReleaseUpdate | null>(null);
+  const [appUpdate, setAppUpdate] = useState<AppReleaseUpdate | null>(() => FORCE_APP_UPDATE_PREVIEW ? previewAppUpdate() : null);
   const [appUpdateBusy, setAppUpdateBusy] = useState(false);
+  const [appUpdateDownloaded, setAppUpdateDownloaded] = useState(false);
   const [appUpdateOpen, setAppUpdateOpen] = useState(false);
   const [appUpdateProgress, setAppUpdateProgress] = useState<AppUpdateProgress | null>(null);
   const appUpdateCheckedRef = useRef(false);
@@ -296,20 +297,42 @@ export function useAppController() {
   }
 
 
+  const downloadAppUpdate = async () => {
+    if (!appUpdate || appUpdateBusy || appUpdateDownloaded) return;
+    setAppUpdateBusy(true);
+    setAppUpdateProgress({ receivedBytes: 0, totalBytes: null, phase: "downloading" });
+    try {
+      await appUpdate.download((progress) => setAppUpdateProgress(progress));
+      setAppUpdateDownloaded(true);
+      setAppUpdateProgress((current) => ({
+        receivedBytes: current?.receivedBytes ?? 0,
+        totalBytes: current?.totalBytes ?? null,
+        phase: "downloaded",
+      }));
+    } catch (error: unknown) {
+      setAppUpdateProgress(null);
+      showCommandError(error, "下载更新失败");
+    } finally {
+      setAppUpdateBusy(false);
+    }
+  };
   const installAppUpdate = async () => {
-    if (!appUpdate || appUpdateBusy) return;
+    if (!appUpdate || appUpdateBusy || !appUpdateDownloaded) return;
     const active = instances.some((instance) => isActiveInstanceState(instance.state));
     if (active) {
       showInfo("隔离实例正在运行，请先停止后再安装更新。");
       return;
     }
     setAppUpdateBusy(true);
-    setAppUpdateProgress({ receivedBytes: 0, totalBytes: null, phase: "downloading" });
+    setAppUpdateProgress((current) => ({
+      receivedBytes: current?.receivedBytes ?? 0,
+      totalBytes: current?.totalBytes ?? null,
+      phase: "installing",
+    }));
     try {
-      await appUpdate.install((progress) => setAppUpdateProgress(progress));
+      await appUpdate.install();
     } catch (error: unknown) {
       setAppUpdateBusy(false);
-      setAppUpdateProgress(null);
       showCommandError(error, "安装更新失败");
     }
   };
@@ -320,7 +343,7 @@ export function useAppController() {
   const closeAppUpdateDialog = () => {
     if (appUpdateBusy) return;
     setAppUpdateOpen(false);
-    setAppUpdateProgress(null);
+    if (!appUpdateDownloaded) setAppUpdateProgress(null);
   };
 
   const openReleasePage = () => {
@@ -337,6 +360,8 @@ export function useAppController() {
       .then((update) => {
         if (!update) return;
         setAppUpdate(update);
+        setAppUpdateDownloaded(false);
+        setAppUpdateProgress(null);
       })
       .catch(() => undefined);
   }, [booting]);
@@ -955,7 +980,7 @@ export function useAppController() {
     utilityDrawer, setUtilityDrawer, scopedPresetId, openUtility, themeMode, setThemeMode, accent, setAccent, systemDark, setSystemDark,
     dismissedIncidentAt, setDismissedIncidentAt, gateway, setGateway, providers, setProviders,
     accounts, setAccounts, presets, setPresets, instances, setInstances, compatibility,
-    setCompatibility, codexInstallation, setCodexInstallation, codexUpdate, setCodexUpdate, appUpdate, appUpdateBusy, appUpdateOpen, appUpdateProgress, openAppUpdateDialog, closeAppUpdateDialog, installAppUpdate, openReleasePage,
+    setCompatibility, codexInstallation, setCodexInstallation, codexUpdate, setCodexUpdate, appUpdate, appUpdateBusy, appUpdateDownloaded, appUpdateOpen, appUpdateProgress, openAppUpdateDialog, closeAppUpdateDialog, downloadAppUpdate, installAppUpdate, openReleasePage,
     usageByProvider, setUsageByProvider, connectivityByProvider, setConnectivityByProvider,
     specialModelRoles, setSpecialModelRoles, diagnostics, setDiagnostics, requestDiagnostics,
     setRequestDiagnostics, notice, setNotice, booting, setBooting, noticeError, setNoticeError,

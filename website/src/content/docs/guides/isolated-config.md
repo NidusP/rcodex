@@ -69,7 +69,7 @@ R Codex 不导入默认目录里的 MCP。它只在隔离目录里启用两个�
 
 即使从未打开过默认 Codex，隔离 App 也会打开 Browser / Computer Use 插件，并把权限选择器留在「Ask for approval」。不要把默认目录里的非编程引导或关掉的插件当成隔离实例的能力。
 
-模型目录里的 `node_repl_disabled` 决定 Codex 会不会把本机 Node REPL 交给当前模型。0.1.4 对三方条目写 false。已安装的 0.1.2 仍写 true。这个开关不在系统设置里。装上 0.1.4 并重新启动隔离实例后，新对话回合才会放开内嵌浏览器。
+模型目录里的 `node_repl_disabled` 决定 Codex 会不会把本机 Node REPL 交给当前模型。0.1.4 对三方条目写 false。已安装的 0.1.2 仍写 true。这个开关不在系统设置里。装上 0.1.4 或 0.1.5 并重新启动隔离实例后，新对话回合才会放开内嵌浏览器。Windows 上 0.1.5 才会把 NODE_REPL_TRUSTED_CODE_PATHS 写成用分号拼接。
 
 ## 同一份启动配置里的模型目录
 

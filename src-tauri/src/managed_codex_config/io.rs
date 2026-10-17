@@ -204,6 +204,20 @@ pub(crate) fn config_path_text(path: &Path) -> String {
     normalize_config_path_text(&path.to_string_lossy())
 }
 
+/// Join isolated config paths for env lists such as NODE_REPL_TRUSTED_CODE_PATHS.
+///
+/// Windows-shaped paths use `;` so `C:\` drive letters stay intact. Unix uses `:`.
+pub(crate) fn join_env_path_list(first: impl AsRef<str>, second: impl AsRef<str>) -> String {
+    let first = normalize_config_path_text(first.as_ref());
+    let second = normalize_config_path_text(second.as_ref());
+    let separator = if is_windows_config_path(&first) || is_windows_config_path(&second) {
+        ';'
+    } else {
+        ':'
+    };
+    format!("{first}{separator}{second}")
+}
+
 fn normalize_config_path_text(raw: &str) -> String {
     let stripped = strip_verbatim_prefix(raw);
     if is_windows_config_path(stripped) {
@@ -251,7 +265,7 @@ fn is_windows_drive_component(part: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{join_config_path, normalize_config_path_text};
+    use super::{join_config_path, join_env_path_list, normalize_config_path_text};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -314,6 +328,24 @@ mod tests {
             PathBuf::from(
                 r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources\cua_node\bin\node.exe",
             ),
+        );
+    }
+
+    #[test]
+    fn join_env_path_list_keeps_windows_drive_letters() {
+        assert_eq!(
+            join_env_path_list(
+                r"C:\Users\a\codex-home",
+                r"C:\Program Files\WindowsApps\OpenAI.Codex\app\resources\cua_node\bin",
+            ),
+            r"C:\Users\a\codex-home;C:\Program Files\WindowsApps\OpenAI.Codex\app\resources\cua_node\bin",
+        );
+        assert_eq!(
+            join_env_path_list(
+                "/Users/a/codex-home",
+                "/Applications/ChatGPT.app/Contents/Resources/cua_node/bin",
+            ),
+            "/Users/a/codex-home:/Applications/ChatGPT.app/Contents/Resources/cua_node/bin",
         );
     }
 }

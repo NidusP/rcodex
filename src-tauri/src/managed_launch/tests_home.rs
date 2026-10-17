@@ -541,3 +541,48 @@ fn managed_home_layout_resumes_after_rename_and_rejects_two_real_homes() {
     assert!(long_home.is_dir());
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn cli_short_home_link_is_unix_only() {
+    assert_eq!(
+        ManagedLaunchStore::cli_uses_short_home_link(),
+        !cfg!(target_os = "windows")
+    );
+}
+
+#[test]
+fn cli_launch_home_follows_platform_symlink_policy() {
+    let database = Database::in_memory();
+    let root = std::env::temp_dir().join(format!("3r-cli-home-policy-{}", Uuid::new_v4()));
+    let instances_root = root.join("codex-instances");
+    let store = ManagedLaunchStore::for_test(
+        database,
+        instances_root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    let instance_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    let managed = instances_root.join(instance_id).join("codex-home");
+    std::fs::create_dir_all(&managed).unwrap();
+    let launch = store
+        .resolve_cli_launch_codex_home(instance_id, &managed)
+        .unwrap();
+    if ManagedLaunchStore::cli_uses_short_home_link() {
+        assert_ne!(launch, managed);
+        assert!(std::fs::symlink_metadata(&launch)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            launch.canonicalize().unwrap(),
+            managed.canonicalize().unwrap()
+        );
+        let _ = std::fs::remove_file(&launch);
+    } else {
+        assert_eq!(launch, managed);
+        assert!(!std::fs::symlink_metadata(&launch)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
+    let _ = std::fs::remove_dir_all(root);
+}

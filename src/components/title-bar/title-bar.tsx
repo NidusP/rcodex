@@ -1,6 +1,7 @@
 import { Download, RotateCw, SunMoon } from "lucide-react";
 import { ColorPicker, ColorSwatch, Menu, Popover } from "@mantine/core";
 import { HintedButton } from "../hinted-button";
+import { FORCE_APP_UPDATE_PREVIEW } from "../app-update";
 import { useAppState } from "../app-state";
 import { type ThemeMode } from "../../app-model";
 import "./title-bar.css";
@@ -60,16 +61,33 @@ export function desktopChrome(): "mac" | "windows" | "web" {
  * @description 有新版本时显示的安装入口。
  */
 export function AppUpdateButton() {
-  const { appUpdate, appUpdateBusy, openAppUpdateDialog } = useAppState();
-  if (!appUpdate) return null;
+  const {
+    appUpdate,
+    appUpdateBusy,
+    appUpdateDownloaded,
+    appUpdateProgress,
+    openAppUpdateDialog,
+    downloadAppUpdate,
+  } = useAppState();
+  if (!appUpdate && !FORCE_APP_UPDATE_PREVIEW) return null;
+  const title =
+    appUpdateProgress?.phase === "installing"
+      ? "正在安装更新"
+      : appUpdateBusy
+        ? "正在下载更新"
+        : appUpdateDownloaded
+          ? "安装包已就绪"
+          : "下载更新";
   return (
     <HintedButton
       className="icon-button"
       type="button"
-      title={appUpdateBusy ? "正在下载更新" : "下载更新"}
+      title={title}
       aria-label="下载更新"
-      disabled={appUpdateBusy}
-      onClick={openAppUpdateDialog}
+      onClick={() => {
+        openAppUpdateDialog();
+        if (!appUpdateDownloaded && !appUpdateBusy) void downloadAppUpdate();
+      }}
     >
       <Download size={16} aria-hidden="true" />
     </HintedButton>

@@ -3,7 +3,7 @@
 use std::{fs, path::Path};
 use uuid::Uuid;
 
-use super::io::config_path_text;
+use super::io::{config_path_text, join_env_path_list};
 use super::*;
 
 fn assert_eq_config_path(actual: Option<&str>, path: &Path) {
@@ -33,7 +33,11 @@ fn assert_spawnable_config_paths(config: &toml::Table) {
             "CUA_REPL_NODE_REPL_PATH",
             "CODEX_CLI_PATH",
         ] {
-            assert_single_separator(env[key].as_str().expect(key));
+            let value = env[key].as_str().expect(key);
+            assert_single_separator(value);
+            if key == "NODE_REPL_TRUSTED_CODE_PATHS" {
+                assert_trusted_code_path_list(value);
+            }
         }
     }
     if let Some(notify) = config.get("notify").and_then(|value| value.as_array()) {
@@ -53,6 +57,16 @@ fn assert_single_separator(value: &str) {
         assert!(
             !value.contains(r"\\?\"),
             "verbatim prefix in isolated config path: {value}"
+        );
+    }
+}
+
+fn assert_trusted_code_path_list(value: &str) {
+    let windows = value.contains('\\') || value.chars().nth(1) == Some(':');
+    if windows {
+        assert!(
+            !value.contains(":C:\\") && !value.contains(":c:\\"),
+            "Windows trusted code paths must use ';': {value}"
         );
     }
 }
@@ -335,6 +349,14 @@ fn windows_store_computer_use_helper_is_copied_and_interpreters_stay_in_the_pack
     );
     assert_eq_config_path(config["notify"][0].as_str(), &copied);
     assert_spawnable_config_paths(&config);
+    let trusted = config["mcp_servers"]["node_repl"]["env"]["NODE_REPL_TRUSTED_CODE_PATHS"]
+        .as_str()
+        .unwrap();
+    let expected = join_env_path_list(
+        config_path_text(&home),
+        config_path_text(&app.join("resources/cua_node/bin")),
+    );
+    assert_eq!(trusted, expected);
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -3,6 +3,8 @@
  * 不检查 Codex CLI。对外导出检查、下载弹窗和打开发布页。
  */
 export {
+  FORCE_APP_UPDATE_PREVIEW,
+  previewAppUpdate,
   checkAppRelease,
   openAppReleasePage,
   type AppReleaseUpdate,

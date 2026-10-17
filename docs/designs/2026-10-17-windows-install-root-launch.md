@@ -1,6 +1,6 @@
 # Windows 安装根、DirectExe 与隔离 CLI
 
-> 状态：2026-10-17 源码已落地。散装 DirectExe 与 Windows 隔离 CLI 终端仍需虚拟机验收。商店包隔离启动已接通。隔离 config.toml 的路径经 `join_config_path` 写入，去掉 canonicalize 的 `\\?\` 前缀，也不再混用斜杠；要新包并重新启动隔离 App 才会重写已有 toml。本方案把「商店 / exe」收成同一份 Codex 安装，只在拉起进程时分叉；Windows 隔离 CLI 用 Windows Terminal 或 cmd start 打开，不再返回仅 macOS。发现层桌面优先于 PATH、隔离首启打开 Browser / Computer Use 已在同日落地。
+> 状态：2026-10-17 源码已落地。散装 DirectExe 与 Windows 隔离 CLI 终端仍需虚拟机验收。0.1.4 仍给 CLI 建目录 symlink；当前源码改为与 App 一样使用长路径。商店包隔离启动已接通。隔离 config.toml 的路径经 `join_config_path` 写入，去掉 canonicalize 的 `\\?\` 前缀，也不再混用斜杠；要新包并重新启动隔离 App 才会重写已有 toml。本方案把「商店 / exe」收成同一份 Codex 安装，只在拉起进程时分叉；Windows 隔离 CLI 用 Windows Terminal 或 cmd start 打开，不再返回仅 macOS。发现层桌面优先于 PATH、隔离首启打开 Browser / Computer Use 已在同日落地。
 
 ## 目标
 
@@ -93,6 +93,8 @@ WindowsCodexInstall {
 
 App 启动仍直接 spawn codex-launcher.exe（可无窗口）。商店包激活仍在 launcher 里，不在控制面。
 
+Windows 隔离 CLI 的 CODEX_HOME 就是 `codex-instances\<id>\codex-home`，与隔离 App 相同。 不要再为 CLI 建 `r\<short>` 目录符号链接：Windows 上 `symlink_dir` 需要管理员或开发人员模式，失败时会留下空的 `codex-home`，控制面表现为正在启动后无窗口。macOS CLI 仍用短 symlink，因为 Unix socket 路径长度限制。 CLI 准备在物化配置之前失败时，删掉这次新建的 lifecycle 目录，避免空文件夹堆积。
+
 ## 代码改动
 
 现有分叉散落在发现、launcher、「打开默认 Codex」和 Windows CLI 拒绝。收成安装根之后，launcher 只问 spawn；CLI 只问终端宿主。
@@ -159,6 +161,7 @@ App 启动仍直接 spawn codex-launcher.exe（可无窗口）。商店包激活
 - 相对段里的 `/` 与 `\` 先拆开，再按路径自己的形态重拼：带盘符或 `\` 的用 `\`，其余用 `/`。不能只看编译目标，因为 macOS 单测会喂 Windows 路径样本。
 - 去掉 `canonicalize()` 的 `\\?\` / `//?/`。Codex MCP 拿带此前缀或混用斜杠的 command 去拉 `node_repl.exe` 时会找不到。
 - 相对常量可以继续写 `resources/cua_node/...`；禁止把 `Path::join` 的 Display 直接写进 toml。
+- `NODE_REPL_TRUSTED_CODE_PATHS` 这类多路径环境值走 `join_env_path_list`：Windows 形态用 `;`，Unix 用 `:`。不能用 `:` 拼接两条 `C:\` 路径，否则盘符会被拆断，node_repl 不信任隔离 home 和 cua_node。
 
 已有隔离实例要重新启动才会重写 toml。发现层安装根解析不改。
 

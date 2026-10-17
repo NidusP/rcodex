@@ -475,6 +475,33 @@ impl ManagedLaunchStore {
         ensure_owned_path(&self.instances_root, home)
     }
 
+    /// CLI 是否用短 symlink 指向 lifecycle/codex-home。
+    ///
+    /// macOS 需要短路径，因为 Unix socket 有长度限制。Windows 创建目录
+    /// symlink 需要管理员或开发人员模式；隔离 App 已经直接用长路径，CLI
+    /// 同样不再要求 symlink。
+    pub(super) const fn cli_uses_short_home_link() -> bool {
+        !cfg!(target_os = "windows")
+    }
+
+    pub(super) fn resolve_cli_launch_codex_home(
+        &self,
+        instance_id: &str,
+        managed_codex_home: &Path,
+    ) -> Result<PathBuf, String> {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = Self::cli_uses_short_home_link();
+            self.short_codex_home_link(instance_id, managed_codex_home)
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let _ = (instance_id, Self::cli_uses_short_home_link());
+            Ok(managed_codex_home.to_path_buf())
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
     pub(super) fn short_codex_home_link(
         &self,
         instance_id: &str,

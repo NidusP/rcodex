@@ -4,7 +4,7 @@
 //! `prepare_launch_with_target` 是 CLI 与 App 启动的共同入口。
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::OptionalExtension;
 use url::Url;
@@ -45,6 +45,29 @@ use super::validation::{
     ensure_owned_path, resolve_workspace, set_private_directory, sha256_label,
 };
 use super::workspace::{effective_login_provider_id, qualified_model_display_name};
+
+struct NewCliLifecycleGuard {
+    instances_root: PathBuf,
+    lifecycle_dir: PathBuf,
+    short_link: Option<PathBuf>,
+    keep: bool,
+}
+
+impl Drop for NewCliLifecycleGuard {
+    fn drop(&mut self) {
+        if self.keep {
+            return;
+        }
+        if let Some(link) = &self.short_link {
+            let _ = std::fs::remove_file(link);
+        }
+        let _ = super::home_layout::remove_owned_directory(
+            &self.instances_root,
+            &self.lifecycle_dir,
+            "managed_cli_prepare_cleanup",
+        );
+    }
+}
 
 impl ManagedLaunchStore {
     pub fn is_ready_managed_preset(&self, id: &str) -> Result<bool, String> {
@@ -276,6 +299,16 @@ impl ManagedLaunchStore {
         let status_file = lifecycle_dir.join("status.json");
         std::fs::create_dir_all(&lifecycle_dir)
             .map_err(|error| format!("managed_lifecycle_dir_create_failed:{error}"))?;
+        let mut cli_guard = if is_managed_app {
+            None
+        } else {
+            Some(NewCliLifecycleGuard {
+                instances_root: self.instances_root.clone(),
+                lifecycle_dir: lifecycle_dir.clone(),
+                short_link: None,
+                keep: false,
+            })
+        };
         set_private_directory(&lifecycle_dir)?;
         let (managed_codex_home, launch_codex_home, home_layout_marker) = if is_managed_app {
             self.prepare_managed_app_home_layout(
@@ -292,7 +325,12 @@ impl ManagedLaunchStore {
                 .map_err(|error| format!("managed_codex_home_create_failed:{error}"))?;
             set_private_directory(&managed_codex_home)?;
             let launch_codex_home =
-                self.short_codex_home_link(&instance_id, &managed_codex_home)?;
+                self.resolve_cli_launch_codex_home(&instance_id, &managed_codex_home)?;
+            if let Some(guard) = cli_guard.as_mut() {
+                if launch_codex_home.parent() != Some(lifecycle_dir.as_path()) {
+                    guard.short_link = Some(launch_codex_home.clone());
+                }
+            }
             (managed_codex_home, launch_codex_home, None)
         };
         if is_managed_app {
@@ -534,6 +572,9 @@ impl ManagedLaunchStore {
         );
         if let Err(error) = write_result {
             return Err(error);
+        }
+        if let Some(guard) = cli_guard.as_mut() {
+            guard.keep = true;
         }
         if let Some(marker) = home_layout_marker.as_deref() {
             // The control database now records the short home. A stale marker

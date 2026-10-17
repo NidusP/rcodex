@@ -2,6 +2,41 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-17：发布 0.1.5
+
+- 变更目的：0.1.4 已发布，不能再占用该版本号。0.1.2 点下载无进度。把未提交的 Windows CLI/信任路径和下载-更新拆分发出去。
+- 合同：四个版本文件为 0.1.5。FORCE_APP_UPDATE_PREVIEW=false。标题栏下载按钮打开弹窗并开始拉当前 target 的包；下完「更新」才可用。Windows CLI 用长路径；TRUSTED_CODE_PATHS 用分号。
+- 修改文件：四个版本文件与 Cargo.lock，app-update / title-bar / use-app-controller，home_layout.rs，updater 文档，AGENTS.md，本计划。
+- 验证：cargo fmt --check、cargo check --lib --offline 无告警，cargo test --lib --offline 373 passed，pnpm run check 通过。未推送。
+- 回滚：不要把 0.1.5 发成 latest；保留 0.1.4。
+
+### 2026-10-17：更新弹窗拆成下载与安装
+
+- 变更目的：下载和更新分开。先拉当前系统的签名安装包，下完「更新」才可用；点更新才安装重启。
+- 合同：标题栏按钮仍只打开弹窗。弹窗「下载」调用 updater `download()`（target 由本机二进制决定）。完成后「更新」可用，调用 `install()`；macOS 再 relaunch。活动隔离实例只挡住安装，不挡住下载。
+- 修改文件：app-update.ts、app-update-dialog.tsx、use-app-controller.ts、title-bar.tsx、tauri-plugin-shims.d.ts，updater 文档，本计划。
+- 验证：pnpm run check 通过。未启动 Tauri。FORCE_APP_UPDATE_PREVIEW 仍为 true，便于看弹窗。
+- 回滚：恢复「下载并更新」走 `downloadAndInstall`。
+
+### 2026-10-17：Windows NODE_REPL_TRUSTED_CODE_PATHS 用分号
+
+- 变更目的：0.1.4 重写后的 Windows 隔离 toml 路径已干净，但 Browser / Computer Use 仍禁用。`NODE_REPL_TRUSTED_CODE_PATHS` 用冒号拼接两条 `C:\` 路径，盘符被拆断。
+- 合同：`join_env_path_list` 对 Windows 形态路径用 `;`，Unix 用 `:`。MCP 物化走这个入口。已有隔离实例要新包并重启才会重写。
+- 修改文件：managed_codex_config/io.rs、computer_use.rs、tests_computer_use.rs，2026-10-17 设计文档，AGENTS.md，本计划。
+- 验证：cargo fmt --all -- --check 通过。cargo test --lib --offline 为 373 passed。未打 Windows 包。
+- 未完成项：commander 用新包重启 Windows 隔离 App 后再试 Browser / Computer Use。目录 json 的 node_repl_disabled 仍建议确认一次。
+- 回滚：恢复 `format!("{}:{}", ...)`。
+
+### 2026-10-17：Windows 隔离 CLI 不再建目录 symlink
+
+- 变更目的：Windows 隔离 App 能启动，隔离 CLI 点了没窗口，并留下空的 `codex-home`。
+- 合同：Windows CLI 的 launch CODEX_HOME 就是 `codex-instances/<id>/codex-home`，与隔离 App 相同，不再调用 `symlink_dir`。macOS CLI 仍用短 symlink。CLI 准备失败时删除这次新建的 lifecycle 目录。
+- 修改文件：managed_launch/home_layout.rs、prepare.rs、tests_home.rs、tests_prepare.rs，2026-10-17 设计文档，AGENTS.md，本计划。
+- 验证：cargo fmt --all -- --check 通过。cargo test --lib --offline 为 372 passed。未启动 Tauri，未打 Windows 包。
+- 未完成项：commander 需用含此改动的包在虚拟机再开隔离 CLI。已安装 0.1.4 仍会走旧 symlink。
+- 回滚：恢复 CLI 一律 `short_codex_home_link`。
+- 下一步：cargo fmt / cargo test --lib --offline。
+
 ### 2026-10-17：CI Test 补 sidecar 占位
 
 - 变更目的：GitHub Actions Test 在 macOS/Windows 都失败。干净检出没有 gitignore 的 binaries，tauri_build 过不了；Windows 上 launcher 单测还在 spawn /bin/sh。

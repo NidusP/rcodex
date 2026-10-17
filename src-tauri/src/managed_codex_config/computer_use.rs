@@ -18,8 +18,8 @@ use crate::codex_installation::{
 };
 
 use super::io::{
-    config_path_text, join_config_path, read_regular_toml, reject_link, sync_parent_directory,
-    write_private_atomically_overwrite,
+    config_path_text, join_config_path, join_env_path_list, read_regular_toml, reject_link,
+    sync_parent_directory, write_private_atomically_overwrite,
 };
 
 pub(crate) const DESKTOP_CUA_NODE: &str = "Contents/Resources/cua_node/bin/node";
@@ -313,8 +313,7 @@ fn materialize_isolated_computer_use_mcp_with_service(
     let servers = servers
         .as_table_mut()
         .ok_or_else(|| "managed_mcp_servers_invalid".to_string())?;
-    let trusted_code = format!(
-        "{}:{}",
+    let trusted_code = join_env_path_list(
         config_path_text(codex_home),
         config_path_text(node.parent().unwrap()),
     );
