@@ -2,6 +2,15 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-17：发版工作流自动发布
+
+- 变更目的：推 main 且版本号更新后，不再停在草稿 Release 等人点发布。
+- 合同：四个版本文件必须一致。main 上版本号更新且 `v*` tag 不存在时，打三份包，全部成功后 `gh release edit --draft=false --latest`。tag 已存在则跳过。直接推 tag 仍走同一套作业。v0.1.3 已按旧草稿流程打 tag，这一版仍要人工发布。
+- 修改文件：`.github/workflows/release.yml`，updater 文档，AGENTS.md，本计划。
+- 验证：未跑 CI。workflow YAML 已按 tag/main 分支写入。
+- 回滚：把 `on` 改回只监听 tag，并去掉 publish job。
+- 下一步：commander 把 v0.1.3 草稿发成 latest；从 0.1.4 起只改版本号推 main。
+
 ### 2026-10-17：发布 0.1.3
 
 - 变更目的：把 Windows 隔离启动、路径拼装、托盘退出和卸载钩子发给已安装的 0.1.2。

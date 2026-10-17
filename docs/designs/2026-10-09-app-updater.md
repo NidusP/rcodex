@@ -40,7 +40,9 @@
 
 ## 发版
 
-打 tag `v0.1.x` 触发 `.github/workflows/release.yml`。同一次草稿 Release 打三份包：macOS Apple Silicon 与 Intel 各一份 `.dmg` 和 `.app.tar.gz`，Windows x64 一份 NSIS 安装包。macOS Intel 包在 Apple Silicon 运行器上交叉编译。在线更新仍使用各平台的安装包签名，DMG 只供手动下载。不做 Apple 公证，也不做 Windows Authenticode。人工确认附件后再发布。
+把 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`website/package.json` 四个版本号改成同一个新值并推到 `main`，`.github/workflows/release.yml` 会自动打包并发布。四个文件不一致则失败。对应 `v*` tag 已存在则跳过，避免重复发版。仍可直接推 tag `v0.1.x` 触发同一套作业。
+
+同一次 Release 打三份包：macOS Apple Silicon 与 Intel 各一份 `.dmg` 和 `.app.tar.gz`，Windows x64 一份 NSIS 安装包。macOS Intel 包在 Apple Silicon 运行器上交叉编译。三平台都成功后取消草稿并标为 latest，`/releases/latest` 立刻指向新版本。在线更新仍使用各平台的安装包签名，DMG 只供手动下载。不做 Apple 公证，也不做 Windows Authenticode。手动 `Windows NSIS` 工作流仍只上传工件，不发 Release。
 
 pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action-setup` 不要再写 `version`；`10` 和 `pnpm@10.13.1` 会被当成两个版本，作业在安装依赖前失败。
 
@@ -53,6 +55,9 @@ pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action
 2026-10-14：v0.1.2 带上 Chat 工具转换、空前缀不再自动补 /v1，以及 DeepSeek、GLM、Qwen 的官方档位。版本仍写在上述四个文件。tag v0.1.2 出草稿 Release，人工发布后已安装的 0.1.1 才会看到更新。私钥不变。
 
 2026-10-17：v0.1.3 带上 Windows 隔离路径拼装、托盘退出杀进程、NSIS 卸载钩子，以及商店/散装安装根启动。版本仍写在上述四个文件。tag v0.1.3 出草稿 Release，人工发布后已安装的 0.1.2 才会看到更新。私钥不变。
+
+2026-10-17：发版工作流改为 main 上版本号更新后自动打包并发布。v0.1.3 当时已按旧草稿流程打 tag，这一版仍要人工发布一次；从 0.1.4 起不必再点发布。
+
 
 ## 验收
 

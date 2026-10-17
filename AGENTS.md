@@ -123,7 +123,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 ## 开发、测试与打包
 
 - 日常开发中，AI 不运行 `pnpm run tauri:build`、任何 Tauri 打包命令或 `codesign`；只有 commander 明确要求生成或校验发布包时才可执行。
-- 应用在线更新见 `docs/designs/2026-10-09-app-updater.md`。不要提交 `work/updater.key`。发版仓库名在 `src/app-release.ts` 与 `tauri.conf.json` updater endpoints，必须一致。
+- 应用在线更新见 `docs/designs/2026-10-09-app-updater.md`。不要提交 `work/updater.key`。发版仓库名在 `src/app-release.ts` 与 `tauri.conf.json` updater endpoints，必须一致。四个版本文件改成同一新号并推 `main` 后，CI 自动打包并发布；对应 tag 已存在则跳过。
 - commander 自行运行 `pnpm run tauri:dev`。AI 不启动、停止或重启 Tauri 开发服务，除非 commander 明确要求。
 
 在仓库根目录：

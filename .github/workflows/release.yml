@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
 
@@ -9,7 +10,68 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+      version: ${{ steps.decide.outputs.version }}
+      tag: ${{ steps.decide.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: decide
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          PKG=$(node -p "require('./package.json').version")
+          WEB=$(node -p "require('./website/package.json').version")
+          TAURI=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          CARGO=$(node -e "const fs=require('fs'); const m=fs.readFileSync('src-tauri/Cargo.toml','utf8').match(/^version = \"([^\"]+)\"/m); if (!m) process.exit(1); process.stdout.write(m[1]);")
+          if [ "$PKG" != "$WEB" ] || [ "$PKG" != "$TAURI" ] || [ "$PKG" != "$CARGO" ]; then
+            echo "version mismatch pkg=$PKG web=$WEB tauri=$TAURI cargo=$CARGO"
+            exit 1
+          fi
+          TAG="v$PKG"
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved $TAG"
+
+          if [ "$REF_TYPE" = "tag" ]; then
+            if [ "$REF_NAME" != "$TAG" ]; then
+              echo "tag $REF_NAME does not match package.json $PKG"
+              exit 1
+            fi
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$SHA" | grep -qxE 'package.json|website/package.json|src-tauri/tauri.conf.json|src-tauri/Cargo.toml'; then
+            echo "Version files changed and $TAG is new"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $PKG is untagged, but this push did not change version files"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -42,10 +104,20 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_BUNDLER_DMG_IGNORE_CI: true
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: R Codex ${{ github.ref_name }}
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: R Codex ${{ needs.prepare.outputs.tag }}
           releaseDraft: true
           prerelease: false
           tauriScript: pnpm run tauri
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           retryAttempts: 3
+
+  publish:
+    needs: [prepare, release]
+    if: needs.prepare.outputs.should_release == 'true' && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --repo "${{ github.repository }}" --draft=false --latest
