@@ -1,6 +1,6 @@
 # Windows 安装根、DirectExe 与隔离 CLI
 
-> 状态：2026-10-17 源码已落地。散装 DirectExe 与 Windows 隔离 CLI 终端仍需虚拟机验收。0.1.4 仍给 CLI 建目录 symlink；当前源码改为与 App 一样使用长路径。商店包隔离启动已接通。隔离 config.toml 的路径经 `join_config_path` 写入，去掉 canonicalize 的 `\\?\` 前缀，也不再混用斜杠；要新包并重新启动隔离 App 才会重写已有 toml。本方案把「商店 / exe」收成同一份 Codex 安装，只在拉起进程时分叉；Windows 隔离 CLI 用 Windows Terminal 或 cmd start 打开，不再返回仅 macOS。发现层桌面优先于 PATH、隔离首启打开 Browser / Computer Use 已在同日落地。
+> 状态：2026-10-18 commander 在 Windows 0.1.5 上确认隔离 CLI 可启动。隔离 App 的 Browser / Computer Use 仍禁用。散装 DirectExe 仍需虚拟机验收。商店包隔离启动已接通。隔离 config.toml 的路径经 `join_config_path` 写入，去掉 canonicalize 的 `\\?\` 前缀，也不再混用斜杠；要新包并重新启动隔离 App 才会重写已有 toml。本方案把「商店 / exe」收成同一份 Codex 安装，只在拉起进程时分叉；Windows 隔离 CLI 用 Windows Terminal 或 cmd start 打开，不再返回仅 macOS。发现层桌面优先于 PATH、隔离首启打开 Browser / Computer Use 已在同日落地。
 
 ## 目标
 

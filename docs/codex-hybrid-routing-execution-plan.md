@@ -2,12 +2,20 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-18：Windows 0.1.5 虚拟机验收
+
+- 变更目的：记录 commander 在 Windows 上装 0.1.5 后的实机结果。
+- 合同：隔离 CLI 可以启动。隔离 App 的 Browser / Computer Use 仍是禁用态。目录 `node_repl_disabled` 在 0.1.4 已是 false，路径混用与 `\\?\` 已消除；分号拼接的 TRUSTED_CODE_PATHS 仍未让这两项可用。下一步不要再归因于 CLI symlink 或目录开关。
+- 修改文件：本计划，AGENTS.md，2026-10-17 Windows 安装根文档。
+- 验证：commander 报告。未改代码。
+- 未完成项：Windows 隔离 App 的 Browser / Computer Use。
+
 ### 2026-10-17：发布 0.1.5
 
 - 变更目的：0.1.4 已发布，不能再占用该版本号。0.1.2 点下载无进度。把未提交的 Windows CLI/信任路径和下载-更新拆分发出去。
 - 合同：四个版本文件为 0.1.5。FORCE_APP_UPDATE_PREVIEW=false。标题栏下载按钮打开弹窗并开始拉当前 target 的包；下完「更新」才可用。Windows CLI 用长路径；TRUSTED_CODE_PATHS 用分号。
 - 修改文件：四个版本文件与 Cargo.lock，app-update / title-bar / use-app-controller，home_layout.rs，updater 文档，AGENTS.md，本计划。
-- 验证：cargo fmt --check、cargo check --lib --offline 无告警，cargo test --lib --offline 373 passed，pnpm run check 通过。未推送。
+- 验证：cargo fmt --check、cargo check --lib --offline 无告警，cargo test --lib --offline 373 passed，pnpm run check 通过。已推 main `bb4e649`。
 - 回滚：不要把 0.1.5 发成 latest；保留 0.1.4。
 
 ### 2026-10-17：更新弹窗拆成下载与安装
@@ -24,7 +32,7 @@
 - 合同：`join_env_path_list` 对 Windows 形态路径用 `;`，Unix 用 `:`。MCP 物化走这个入口。已有隔离实例要新包并重启才会重写。
 - 修改文件：managed_codex_config/io.rs、computer_use.rs、tests_computer_use.rs，2026-10-17 设计文档，AGENTS.md，本计划。
 - 验证：cargo fmt --all -- --check 通过。cargo test --lib --offline 为 373 passed。未打 Windows 包。
-- 未完成项：commander 用新包重启 Windows 隔离 App 后再试 Browser / Computer Use。目录 json 的 node_repl_disabled 仍建议确认一次。
+- 未完成项：Windows 0.1.5 隔离 App 的 Browser / Computer Use 仍禁用。目录开关已是 false。
 - 回滚：恢复 `format!("{}:{}", ...)`。
 
 ### 2026-10-17：Windows 隔离 CLI 不再建目录 symlink
@@ -33,7 +41,7 @@
 - 合同：Windows CLI 的 launch CODEX_HOME 就是 `codex-instances/<id>/codex-home`，与隔离 App 相同，不再调用 `symlink_dir`。macOS CLI 仍用短 symlink。CLI 准备失败时删除这次新建的 lifecycle 目录。
 - 修改文件：managed_launch/home_layout.rs、prepare.rs、tests_home.rs、tests_prepare.rs，2026-10-17 设计文档，AGENTS.md，本计划。
 - 验证：cargo fmt --all -- --check 通过。cargo test --lib --offline 为 372 passed。未启动 Tauri，未打 Windows 包。
-- 未完成项：commander 需用含此改动的包在虚拟机再开隔离 CLI。已安装 0.1.4 仍会走旧 symlink。
+- 验证补充：Windows 0.1.5 隔离 CLI 已可启动。
 - 回滚：恢复 CLI 一律 `short_codex_home_link`。
 - 下一步：cargo fmt / cargo test --lib --offline。
 

@@ -157,8 +157,8 @@ Tauri 构建脚本会先构建 `codex-launcher` 和 `codex-gateway`，再嵌入 
 以 [独立工作区改造](docs/designs/2026-09-21-isolated-only-product-plan.md) 和路由执行计划的最新验收为准：
 
 - 真实 Codex App 的独立 API 登录、多渠道连续会话、重启与导入后恢复验收；不得读取默认认证验证。
-- 隔离 Browser/Computer Use 的本地 `node_repl`/`cua_repl` 已写入隔离配置。三方目录 `node_repl_disabled` 在 0.1.4 为 false。已安装 0.1.2 仍写 true，要装 0.1.4 或 0.1.5 并重新启动隔离实例。Windows 隔离 config.toml 的 MCP 与 catalog 路径经 `join_config_path` 写入；`NODE_REPL_TRUSTED_CODE_PATHS` 经 `join_env_path_list` 用分号拼接，0.1.5 才写出分号。旧实例要新包并重启才会重写。Chat 自动审核仍不指向自己。不能把 Settings 的组织/地区提示直接归因于默认配置继承。
-- Windows 打包、签名/公证、凭据文件权限，以及散装 DirectExe 与隔离 CLI 终端的虚拟机验收。安装根、默认入口 AppsFolder、CLI wt/cmd 已写入源码。0.1.4 仍给 Windows CLI 建目录 symlink；0.1.5 改为与 App 一样使用长路径，需新包验收。
+- 隔离 Browser/Computer Use 的本地 `node_repl`/`cua_repl` 已写入隔离配置。三方目录 `node_repl_disabled` 在 0.1.4/0.1.5 为 false。Windows 0.1.5 隔离 App 上 Browser / Computer Use 仍禁用，不要再归因于目录开关、混用斜杠或 CLI symlink。Chat 自动审核仍不指向自己。不能把 Settings 的组织/地区提示直接归因于默认配置继承。
+- Windows 打包、签名/公证、凭据文件权限，以及散装 DirectExe 的虚拟机验收。安装根、默认入口 AppsFolder、CLI wt/cmd 已写入源码。Windows 0.1.5 隔离 CLI 已可启动。
 - 官方账户与订阅模型路由仍关闭；不接管原 Codex 登录态。
 - 跨渠道旧历史的字段兼容性和旁路模型须按真实合同验证；不能通过改源历史、自动换渠道或回退默认上游修复。
 - 压缩无用户开关；独立启动沿用 LocalClient，Provider 为 rcodex，显示名为 R Codex Gateway。旧默认 App remote_v2 / Summarizer 记录只作历史，不恢复兼容入口。 客户端上下文检查点的续跑由 Codex 自己组包；R Codex 不修正其中的旧任务偏移，见 [隔离实例的上下文压缩](docs/designs/2026-10-08-isolated-context-checkpoint.md)。
