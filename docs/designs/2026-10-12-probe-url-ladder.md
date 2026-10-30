@@ -65,11 +65,19 @@ P 为 https://api.deepseek.com 时，四条都打，直到某一条确认：
 - https://api.deepseek.com/chat/completions
 - https://api.deepseek.com/v1/chat/completions
 
-模型列表仍是文本探针的前提，因为它要提供第一个模型 ID。顺序独立，而且更短：先 GET P/models；只有 P 不以 /v1 结尾且这一次没有得到非空模型列表时，再 GET P/v1/models。两次都没有可用模型，则不发文本请求，协议未确认。文本阶梯不因为模型列表出现在 /v1/models 就跳过第 1 条。
+模型列表仍是文本探针的前提，因为它要提供候选模型 ID。顺序独立，而且更短：先 GET P/models；只有 P 不以 /v1 结尾且这一次没有得到非空模型列表时，再 GET P/v1/models。两次都没有可用模型，则不发文本请求，协议未确认。文本阶梯不因为模型列表出现在 /v1/models 就跳过第 1 条。
 
-每条文本请求仍用现在的最小正文。Responses 是一句输入、max_output_tokens 为 8、stream 为 false。Chat 是一条 user 消息、max_tokens 为 8、stream 为 false。模型 ID 用模型列表的第一条，四条文本请求共用这一个 ID。超时仍是每条 15 秒，不跟随重定向。一次点击最多 2 次 GET 加 4 次 POST。
+候选模型会先排除 Codex 内部角色（例如 `codex-auto-review`、`gpt-code-review`）和图像生成模型。它们不是普通文本对话模型，不能用来代表渠道的 Responses/Chat Completions 合同；完整模型目录仍然保存并由界面按现有规则隐藏。剩余候选按模型族的主流文本模型优先级排序：Grok 4.x、DeepSeek/GLM/Qwen/Claude 的常规对话 ID，以及 GPT 的 `terra`/`astra`/`sol`/`luna` 等常规后缀优先；无法识别的模型保持上游顺序。这个优先级只减少无效探针，不证明模型属于某个协议或一定可用。排序后最多取 8 个。某个候选返回模型级错误时继续用下一个候选，直到该地址有一个可解析的成功 JSON；路径明确不存在时不重复用其它模型撞同一路径。这样 `/models` 把内部角色或暂时不可用模型排在首位，都不会直接把整个渠道误判成另一种协议。
+
+每条文本请求仍用现在的最小正文。Responses 是一句输入、max_output_tokens 为 8、stream 为 false。Chat 是一条 user 消息、max_tokens 为 8、stream 为 false。协议和确认前缀由第一个真正成功的候选决定，并把该候选模型写进探针报告。超时仍是每条 15 秒，不跟随重定向；单个地址最多尝试 8 个候选，完整阶梯最多 32 次文本 POST。
 
 确认成功的定义不变：模型列表检查为 ready，文本检查为 ready，且 wire_api 是 responses 或 chat_completions。两条协议都可能成功时不会同时看到，因为 Responses 两条先打，成功即停。因此不需要再投票。
+
+## 后备设计：混合协议 Provider 暂不实现
+
+当前假设一个 Provider 的候选模型共享同一种上游协议。若未来出现同一 Base URL 下某些模型只支持 Responses、另一些模型只支持 Chat Completions，现有 Provider 级 `wire_api` 不能安全表达这种差异。
+
+当前不为混合协议增加特殊入口或数据库字段。若探针或真实请求暴露出模型间协议冲突，应把渠道视为协议未确认并阻止加入工作区，避免用一个模型的成功结果覆盖另一个模型的协议要求。后续若要支持这种聚合接口，必须把协议能力写入每个模型路由，并让 RouteSet 按模型选择转发协议；不能继续只保存 Provider 级协议。
 
 协议与传输的对应关系不变：
 

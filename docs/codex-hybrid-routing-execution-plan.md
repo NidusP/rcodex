@@ -2,6 +2,30 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-10-29：修复 3R-GPT 探针首模型误判协议
+
+- 变更目的：开发态新增的 `3R-GPT` 被判为 Chat Completions。开发库中的探针事件显示 `/models` 返回的首个模型是 Codex 内部角色 `codex-auto-review`；该模型的 `/responses` 请求返回 400，探针随后用 Chat 成功响应把整个渠道定成 Chat。对同一渠道的 `gpt-5.6-terra` 进行受控文本请求时，`/responses` 返回 200，证明中转 Responses 路径可用。
+- 合同：文本探针排除 Codex 内部角色和图像生成模型；按模型族主流文本 ID 优先级排序后，最多尝试 8 个普通文本候选。该排序只减少无效请求，不证明协议或可用性；模型级失败继续下一个候选，路径明确不存在或认证失败不重复撞同一路径。第一个可解析的 Responses/Chat JSON 成功响应决定协议和确认前缀，完整模型目录仍照常保存。
+- 修改文件：`src-tauri/src/channel_probe.rs`、`docs/designs/2026-10-12-probe-url-ladder.md`。
+- 验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、`cargo check --manifest-path src-tauri/Cargo.toml --all-targets` 通过；探针定向测试 11 passed，`cargo test --manifest-path src-tauri/Cargo.toml --lib` 为 375 passed。新增回归覆盖内部角色首位、主流候选优先级、普通模型先失败后由后续模型确认 Responses，且确认后不打 Chat。
+- 未完成项：开发库里已有的 `3R-GPT` 报告仍保留旧的 `chat_completions` 快照；代码不会静默改写已保存探针结果。热加载后在模型渠道页面对该渠道执行一次「刷新模型目录」，再按新的探针合同写入 Responses 修订。
+- 回滚：恢复 `channel_probe::classify_text` 单模型探针和文档中的第一模型合同；保留既有协议报告与修订，不需要数据库降级。
+
+### 2026-10-30：混合协议聚合接口列为后备设计
+
+- 决定：当前 Provider 仍按单一协议处理；探针按 Responses 候选全部失败后才进入 Chat Completions。暂不为同一 Base URL 下不同模型使用不同协议增加实现。
+- 后备合同：若未来发现模型间协议结果冲突，先按协议未确认处理并阻止加入工作区，避免用某个模型的成功结果覆盖其它模型的协议要求。真正支持混合协议时，需把协议能力持久化到每个模型路由和 RouteSet，而不是继续使用 Provider 级 `wire_api`。
+- 非目标：本轮不新增混合协议数据库列、不改变现有 Provider/RouteSet schema、不为已保存渠道猜测或自动拆分协议。
+- 回滚：删除本节与探针地址阶梯设计中的后备说明；当前实现无需回滚代码。
+
+### 2026-10-30：0.1.6 发布准备
+
+- 变更目的：准备把 3R-GPT 探针修复和候选模型优先级带入下一次桌面发布。`v0.1.5` 已存在，不能原地重发。
+- 版本合同：根目录 `package.json`、`website/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 已统一到 `0.1.6`。发布工作流会在推送 `main` 后检查四个版本文件并生成 `v0.1.6`，再构建 macOS Apple Silicon、macOS Intel 和 Windows x64 包。
+- 发布范围：Responses 候选全部失败后才进入 Chat；候选排除已知内部/生图模型并优先主流文本模型；混合协议仅记录为后备设计，不进入本版实现。
+- 当前状态：本地版本和代码准备中，尚未推送 `main`；推送前必须完成 Rust/前端验证并确认最终 diff。
+- 回滚：若 CI 或发布检查失败，保留 `0.1.6` 本地改动，修复后再推；不要复用已存在的 `v0.1.5`。
+
 ### 2026-10-18：Windows 0.1.5 虚拟机验收
 
 - 变更目的：记录 commander 在 Windows 上装 0.1.5 后的实机结果。

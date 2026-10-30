@@ -62,6 +62,8 @@ pnpm 版本只使用根目录 `package.json` 的 `packageManager`。`pnpm/action
 
 2026-10-17：v0.1.5 带上 Windows CLI 长路径、NODE_REPL_TRUSTED_CODE_PATHS 分号，以及标题栏点下载即拉包、下完再更新。四个版本文件为 0.1.5。v0.1.4 tag 已存在，不能再发 0.1.4。私钥不变。
 
+2026-10-30：准备 v0.1.6，带上模型渠道探针对内部/非对话模型的候选过滤、主流文本模型优先级，以及 Responses 候选全部失败后才进入 Chat 的修复。四个版本文件统一为 0.1.6；`v0.1.5` 已存在，尚未推送 `main`。
+
 
 ## 验收
 

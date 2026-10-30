@@ -12,12 +12,14 @@ use uuid::Uuid;
 use crate::{
     diagnostics::{CheckStatus, ConnectivityStatus, ProbeSnapshot, ProviderModelOption},
     providers::TransportMode,
+    routing::is_internal_codex_model_id,
     secrets::validate_api_key,
 };
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 const TICKET_TTL_SECS: i64 = 10 * 60;
 const TICKET_LIMIT: usize = 8;
+const MAX_TEXT_PROBE_MODELS: usize = 8;
 
 #[derive(Clone)]
 pub struct ProbeCall {
@@ -119,8 +121,7 @@ pub async fn execute(client: &Client, base_url: &str, api_key: &str) -> ProbeExe
         Ok(models) => models,
         Err(execution) => return execution,
     };
-    let model = models[0].upstream_model_id.clone();
-    classify_text(client, base_url, api_key, model, models, calls).await
+    classify_text(client, base_url, api_key, models, calls).await
 }
 
 async fn load_models(
@@ -314,42 +315,53 @@ async fn classify_text(
     client: &Client,
     base_url: &str,
     api_key: &str,
-    model: String,
     models: Vec<ProviderModelOption>,
     mut calls: Vec<ProbeCall>,
 ) -> ProbeExecution {
+    let probe_models = text_probe_models(&models);
     for target in text_targets(base_url) {
-        match post_text(
-            client,
-            base_url,
-            api_key,
-            &model,
-            target.route,
-            if target.wire_api == "responses" {
-                responses_body(&model)
-            } else {
-                chat_body(&model)
-            },
-            target.transport_mode,
-        )
-        .await
-        {
-            TextAttempt::Ready(call) => {
-                let confirmed = confirmed_base_for_route(base_url, target.route);
-                calls.push(call);
-                return finish(
-                    ConnectivityStatus::Ready,
-                    Some(target.wire_api.to_string()),
-                    Some(confirmed),
-                    Some(model),
-                    models,
-                    CheckStatus::Ready,
-                    CheckStatus::Ready,
-                    None,
-                    calls,
-                );
+        for model in &probe_models {
+            match post_text(
+                client,
+                base_url,
+                api_key,
+                model,
+                target.route,
+                if target.wire_api == "responses" {
+                    responses_body(model)
+                } else {
+                    chat_body(model)
+                },
+                target.transport_mode,
+            )
+            .await
+            {
+                TextAttempt::Ready(call) => {
+                    let confirmed = confirmed_base_for_route(base_url, target.route);
+                    calls.push(call);
+                    return finish(
+                        ConnectivityStatus::Ready,
+                        Some(target.wire_api.to_string()),
+                        Some(confirmed),
+                        Some(model.clone()),
+                        models,
+                        CheckStatus::Ready,
+                        CheckStatus::Ready,
+                        None,
+                        calls,
+                    );
+                }
+                TextAttempt::Failed(call) => {
+                    let stop_model_attempts = matches!(
+                        call.error_code.as_deref(),
+                        Some("upstream_route_unsupported") | Some("upstream_unauthorized")
+                    );
+                    calls.push(call);
+                    if stop_model_attempts {
+                        break;
+                    }
+                }
             }
-            TextAttempt::Failed(call) => calls.push(call),
         }
     }
     let error_code = calls.last().and_then(|call| call.error_code.clone());
@@ -361,7 +373,7 @@ async fn classify_text(
         status,
         None,
         None,
-        Some(model),
+        probe_models.first().cloned(),
         models,
         CheckStatus::Ready,
         CheckStatus::Failed,
@@ -463,6 +475,81 @@ fn chat_body(model: &str) -> Value {
     })
 }
 
+fn text_probe_models(models: &[ProviderModelOption]) -> Vec<String> {
+    let mut candidates = models
+        .iter()
+        .filter(|model| is_text_probe_model(&model.upstream_model_id))
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|model| probe_model_priority(&model.upstream_model_id));
+    let candidates = candidates
+        .into_iter()
+        .map(|model| model.upstream_model_id.clone())
+        .take(MAX_TEXT_PROBE_MODELS)
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        models
+            .iter()
+            .map(|model| model.upstream_model_id.clone())
+            .take(MAX_TEXT_PROBE_MODELS)
+            .collect()
+    } else {
+        candidates
+    }
+}
+
+fn is_text_probe_model(model_id: &str) -> bool {
+    if is_internal_codex_model_id(model_id) {
+        return false;
+    }
+    let normalized = model_id.trim().to_ascii_lowercase();
+    !normalized.contains("imagine")
+        && !normalized.contains("dall-e")
+        && !normalized.contains("dalle")
+        && !normalized.contains("gpt-image")
+        && !normalized.starts_with("image-")
+}
+
+/// Prefer likely mainstream text models as probe candidates without treating
+/// their names as evidence of protocol support. A successful request remains
+/// the only confirmation; this ranking only avoids spending the first probe on
+/// a relay's internal, preview, or non-conversational entry.
+fn probe_model_priority(model_id: &str) -> u8 {
+    let normalized = model_id.trim().to_ascii_lowercase();
+    if normalized.contains("grok-4")
+        || normalized.contains("deepseek-")
+        || normalized.contains("glm-5")
+        || normalized.contains("qwen3.")
+        || normalized.contains("qwen3-")
+        || normalized.contains("claude-sonnet")
+        || normalized.contains("claude-opus")
+        || normalized.contains("anthropic-")
+    {
+        return 0;
+    }
+    if normalized.starts_with("gpt-") {
+        if normalized.contains("terra") {
+            return 1;
+        }
+        if normalized.contains("astra") {
+            return 2;
+        }
+        if normalized.contains("sol") || normalized.contains("luna") {
+            return 3;
+        }
+        return 10;
+    }
+    if normalized.contains("chat")
+        || normalized.contains("reasoner")
+        || normalized.contains("sonnet")
+        || normalized.contains("opus")
+        || normalized.contains("-plus")
+        || normalized.contains("-max")
+    {
+        return 5;
+    }
+    20
+}
+
 fn finish(
     status: ConnectivityStatus,
     wire_api: Option<String>,
@@ -534,7 +621,6 @@ fn call_status(call: &ProbeCall) -> ConnectivityStatus {
     }
 }
 
-#[cfg(test)]
 fn route_is_missing(status: u16, body: &[u8]) -> bool {
     if matches!(status, 404 | 405) {
         return true;
@@ -606,7 +692,9 @@ fn parse_models(value: &Value) -> Vec<ProviderModelOption> {
 }
 
 fn upstream_error_code(status: u16, body: &[u8]) -> &'static str {
-    if matches!(status, 401 | 403) || body_indicates_auth_failure(body) {
+    if route_is_missing(status, body) {
+        "upstream_route_unsupported"
+    } else if matches!(status, 401 | 403) || body_indicates_auth_failure(body) {
         "upstream_unauthorized"
     } else {
         match status {
@@ -735,6 +823,96 @@ mod tests {
         assert_eq!(chat_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
         assert_eq!(execution.calls.len(), 2);
         assert_eq!(execution.calls[1].route, "/responses");
+    }
+
+    #[tokio::test]
+    async fn responses_probe_skips_internal_model_and_retries_another_candidate() {
+        let chat_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let hits = chat_hits.clone();
+        let router = Router::new()
+            .route(
+                "/models",
+                get(|| async {
+                    Json(serde_json::json!({
+                        "data": [
+                            {"id": "codex-auto-review", "owned_by": "openai"},
+                            {"id": "gpt-5.2", "owned_by": "openai"},
+                            {"id": "gpt-5.6-terra", "owned_by": "openai"}
+                        ]
+                    }))
+                }),
+            )
+            .route(
+                "/responses",
+                post(|Json(body): Json<Value>| async move {
+                    let model = body
+                        .get("model")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    if matches!(model, "gpt-5.2" | "codex-auto-review") {
+                        (
+                            StatusCode::BAD_REQUEST,
+                            Json(serde_json::json!({
+                                "error": {"message": "model unavailable"}
+                            })),
+                        )
+                            .into_response()
+                    } else {
+                        Json(serde_json::json!({"ok": true})).into_response()
+                    }
+                }),
+            )
+            .route(
+                "/chat/completions",
+                post(move || {
+                    hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    async { StatusCode::OK.into_response() }
+                }),
+            );
+        let base_url = serve(router).await;
+        let execution = execute(&probe_client().unwrap(), &base_url, "sk-test").await;
+
+        assert_eq!(execution.snapshot.wire_api.as_deref(), Some("responses"));
+        assert_eq!(execution.snapshot.model.as_deref(), Some("gpt-5.6-terra"));
+        assert_eq!(execution.snapshot.models.len(), 3);
+        assert_eq!(chat_hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(execution.calls.len(), 2);
+        assert_eq!(execution.calls[1].model.as_deref(), Some("gpt-5.6-terra"));
+        assert_eq!(execution.calls[1].route, "/responses");
+    }
+
+    #[test]
+    fn text_probe_models_prioritizes_mainstream_text_ids_without_hiding_unknowns() {
+        let models = vec![
+            ProviderModelOption {
+                upstream_model_id: "codex-auto-review".to_string(),
+                display_name: "Codex Auto Review".to_string(),
+                owned_by: Some("openai".to_string()),
+            },
+            ProviderModelOption {
+                upstream_model_id: "gpt-5.2".to_string(),
+                display_name: "GPT-5.2".to_string(),
+                owned_by: Some("openai".to_string()),
+            },
+            ProviderModelOption {
+                upstream_model_id: "gpt-5.6-terra".to_string(),
+                display_name: "GPT-5.6 Terra".to_string(),
+                owned_by: Some("openai".to_string()),
+            },
+            ProviderModelOption {
+                upstream_model_id: "relay-private-chat".to_string(),
+                display_name: "Relay private chat".to_string(),
+                owned_by: None,
+            },
+        ];
+        assert_eq!(
+            text_probe_models(&models),
+            vec![
+                "gpt-5.6-terra".to_string(),
+                "relay-private-chat".to_string(),
+                "gpt-5.2".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]
