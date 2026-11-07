@@ -154,7 +154,7 @@ fn deleting_managed_app_storage_removes_home_sqlite_and_electron_data() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let preset = store
-        .create_preset(single_model_preset("provider", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("provider", "deepseek-chat", None))
         .unwrap();
     let lifecycle = instances_root.join("instance-delete");
     let home = lifecycle.join("codex-home");
@@ -215,12 +215,12 @@ fn deleting_one_managed_app_keeps_shared_electron_data_while_another_record_exis
         Arc::new(MemoryInstanceVault::default()),
     );
     let ended = store
-        .create_preset(single_model_preset("provider", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("provider", "deepseek-chat", None))
         .unwrap();
     let mut running_input = single_model_preset("provider", "deepseek-chat", None);
     running_input.name = "实例 4".to_string();
     running_input.create_new = true;
-    let running = store.create_preset(running_input).unwrap();
+    let running = store.create_exposed_test_preset(running_input).unwrap();
     let ended_lifecycle = instances_root.join("instance-ended");
     let ended_home = ended_lifecycle.join("codex-home");
     let running_lifecycle = instances_root.join("instance-running");
@@ -321,7 +321,7 @@ fn managed_app_migrates_legacy_home_and_rewrites_rollout_paths() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(single_model_preset("provider", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("provider", "deepseek-chat", None))
         .unwrap();
     let fake_codex = write_fake_codex(&root, &["template", "deepseek-chat"]);
     let gateway = Url::parse("http://127.0.0.1:43123/v1").unwrap();

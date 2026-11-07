@@ -24,6 +24,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 - [混合路由执行计划](docs/codex-hybrid-routing-execution-plan.md)：分片进度、验收证据、阻塞项和后续任务。
 - [独立工作区改造计划](docs/designs/2026-09-21-isolated-only-product-plan.md)：当前产品合同、单向导入、API 登录与发布验收。默认 App 快速发版计划已作历史记录。
 - [官网计划](docs/website-plan.md)：Astro + Starlight + Solid.js 官网内容映射、构建和 Pages 发布约束。
+- [项目治理建议（待启用）](docs/project-governance-proposal.md)：记录当前 AI 开发变慢的结构性原因和后续可选治理范围；未获 commander 明确启用前不执行治理迁移。
 
 ## 文档读取顺序
 
@@ -35,6 +36,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 | 按会话记录完整请求、转发链路优化 | `docs/designs/conversation-request-archive-design.md` | 产品原理、Gateway 诊断路线、混合路由执行计划 |
 | 产品、模型切换、会话恢复 | `docs/3rcodex-product-principles.md` | `docs/codex-hybrid-routing-design.md`、`docs/codex-hybrid-routing-execution-plan.md` |
 | Provider、模型目录、协议转换 | `docs/codex-api-protocol-compatibility-plan.md` | `docs/third-party-model-reasoning-levels.md`、`docs/codex-hybrid-routing-design.md` |
+| 模型透出、按模型图片探针 | `docs/designs/2026-11-07-model-exposure-image-probe.md` | 协议兼容方案、产品原理 |
 | Gateway、502、超时、诊断 | `docs/codex-roadmap-and-gateway-diagnostics.md` | `docs/compat-app-loopback-proxy.md`、README 的本地网关章节 |
 | 默认 App、受管理 App、启动隔离 | `docs/designs/2026-09-21-isolated-only-product-plan.md` | `docs/designs/2026-10-17-windows-install-root-launch.md`、混合路由详细设计 |
 | Windows 隔离 App / CLI | `docs/designs/2026-10-17-windows-install-root-launch.md` | `docs/designs/2026-10-11-windows-isolated-app-launch.md` |
@@ -67,6 +69,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 - Gateway 先按公共模型 ID 精确匹配 RouteSet，再替换为 `upstream_model_id`，读取绑定的 Provider revision 和凭据。
 - 第三方请求必须删除官方认证，只在当前请求边界从 R Codex 自有 SQLite `provider_credentials` 表读取对应 Provider revision 的 API Key；运行时不读取系统凭据库。
 - 不按模糊模型名猜渠道，不因 401/502 自动换地址、换模型、换 Provider 或重试 POST。
+- 渠道发现完整模型目录，用户在模型目录勾选透出后空间才可选。透出偏好与图片证据分别保存；新启动的图片能力只取当前渠道修订、模型、协议和探针版本的成功证据，模型族默认不授予图片能力。升级回填旧空间已选模型；取消透出前必须先移除所有未删除空间引用。
 
 ### Gateway
 
@@ -79,6 +82,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 ### 配置与实例
 
 - 受管理 CLI/App 使用实例专属 `CODEX_HOME`、`CODEX_SQLITE_HOME`、Profile 和模型目录；受管理 App 的 `CODEX_SQLITE_HOME` 必须等于启动 `CODEX_HOME`，活动对话库不得再放到 `managed-app-sqlite/<preset>`。启动时生成不可变快照。运行中的实例继续使用那份快照。工作区可以修改渠道、模型、排序和 API 登录渠道，下次启动才生效；保存后提示「当前隔离实例正在运行，重启可应用修改」。
+- 空间 Tab 按固定 A-E 槽位排序，preferred 只表示用户选择；运行回执不得写回选择。彻底删除空间须用户确认且所有所属实例已停止，按空间精确清理配置/隔离数据/档案，保留共享渠道。失败保留删除意图并允许重试；最后一个删除后不自动重建。见 `docs/designs/2026-11-07-workspace-order-and-deletion.md`。
 - 默认 App 兼容投影/恢复已移除，不做清理向导。schema v18 仅更新 R Codex 自有库，停用旧兼容绑定和运行锁并保存模型推理档位，不操作用户文件或进程。
 - 默认 App 不创建 `codex_instances`，不取得运行实例锁，不向默认 App PID 发送停止信号。
 - 不读取原登录或复制 OAuth token。工作区选定的 API 登录渠道 Key 可写入 R Codex 自有 auth.json（0600、原子替换、文件凭据存储）；请求认证仍按精确路由取渠道 Key。不得注入用户直接打开的 Codex。
@@ -109,7 +113,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 - 业务与可复用界面放在 `src/components/<feature>/`。`index.ts` 是唯一对外出口；内部文件不要被其他功能目录直接引用。跨功能纯函数可以留在 `src/components/*.ts`，不要为单个 helper 再套空目录。
 - `src/main.tsx` 与 `src/App.tsx` 只做根组装，不要在根组件里写抽屉或弹层 JSX。仍留在 `src/` 根下的面板下次改动时迁入对应功能目录，不要继续扩大这些文件。
 - React 组件写 `@component` 名称和 `@description` 用途。Hook 用 `@function`。纯函数、类型和常量用普通 JSDoc，不要标成组件。
-- 按钮、菜单、列表、Tab、选择器、通知、抽屉、对话框优先用 Mantine，再用现有 className 覆盖外观，不要再写一套原生弹出层。控制面抽屉走 `ControlDrawer`：避开标题栏、带遮罩。确认和启动弹层走 `ControlDialog`。展示组件通过 `useAppState()` 或父级回调读写，不直接 `invoke` 业务 command，也不改 SQLite 或凭据文件。
+- 按钮、菜单、列表、Tab、选择器、通知、抽屉、对话框优先用 Mantine，再用现有 className 覆盖外观，不要再写一套原生弹出层。Mantine-first 也适用于组件交互：优先使用 Mantine 提供的键盘导航、焦点管理、禁用态、ARIA 语义和响应式行为；只有 Mantine 没有对应能力时才新增自定义交互，并在相关设计记录中说明原因。控制面抽屉走 `ControlDrawer`：避开标题栏、带遮罩。确认和启动弹层走 `ControlDialog`。展示组件通过 `useAppState()` 或父级回调读写，不直接 `invoke` 业务 command，也不改 SQLite 或凭据文件。
 
 ## 安全与隐私
 
@@ -238,3 +242,6 @@ Tauri 构建脚本会先构建 `codex-launcher` 和 `codex-gateway`，再嵌入 
 - 2026-10-10：添加渠道不再确认。下拉选中后直接加入当前隔离空间，并排在第一个。
 - 2026-10-10：系统标题栏不再显示「R Codex」。窗口标题仍保留给系统和菜单，页面里的「R Codex」和重启按钮不动。
 - 2026-10-10：隔离 App 运行时，控制带 App 按钮直接显示停止图标，不再悬停才从播放换成停止。未运行时仍是播放图标。src/workspace-surface.css。
+- 2026-11-07：每个隔离空间 tab 名称后放各自的垃圾桶：可删除时淡色、hover 加深；该空间有活动实例、正在删除或更新时禁用并悬停显示原因；点击直接弹对应空间确认框，不切换选中。行尾独立删除按钮移除；「新增隔离空间」改纯 + 图标。后端删除非选中空间保持当前选中（新回归用例），夹具同步。src/workspace-surface.tsx、src/workspace-surface.css、src/components/isolated-app/isolated-app-info.tsx、src/dev-control-fixture.ts、src-tauri/src/managed_launch/deletion.rs、src-tauri/src/managed_launch/tests_deletion.rs、scripts/workspace-ui-check.mjs、docs/designs/2026-11-07-workspace-order-and-deletion.md。
+- 2026-11-07：「添加渠道」的待分配上游仍列出未透出模型的渠道，但状态列显示「不可用」（红点红字），悬停经 disabled-hint 包装层 + Mantine Tooltip 提示先透出模型；未配置/协议未确认等其他阻塞同样显示不可用并给出各自原因。src/workspace-surface.tsx、src/workspace-surface.css、scripts/workspace-ui-check.mjs、docs/designs/2026-11-07-model-exposure-image-probe.md。
+- 2026-11-07：空间 tab 垃圾桶改为常态隐藏，仅可删除空间 hover tab 时显示（不可删除空间 display:none）；「新增隔离空间」改为创建空空间（无渠道/模型/登录渠道，needs_model_selection 选好前不可启动），不再复制当前空间，createManagedInstance 不传 sourcePresetId，新增 Rust 回归用例 create_new_empty_preset_starts_as_needs_model_selection；+ 按钮去边框。Mantine 9 类名前缀为 rcodex-：hover 选择器须用 rcodex-Tabs-tab，覆盖 Mantine 变体样式须提高特异性（workspace-tabs 三级选择器），已用无头 Chrome 真实鼠标悬停断言验证。src/use-app-controller.ts、src/App.tsx、src/components/isolated-app/isolated-app-info.tsx、src/workspace-surface.css、src-tauri/src/managed_launch/tests_workspace.rs、scripts/workspace-ui-check.mjs、docs/designs/2026-10-04-multiple-managed-instances.md、docs/designs/2026-11-07-workspace-order-and-deletion.md。

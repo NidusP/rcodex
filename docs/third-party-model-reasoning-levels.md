@@ -1,5 +1,7 @@
 # 第三方模型目录 overlay：身份、推理档位与骨架
 
+> 2026-11-07 图片能力合同更新：模型族属性仅作历史提示；新启动的 `supports_images` 与 `input_modalities` 必须读取当前渠道修订、模型、协议和探针版本的成功证据。未检测/失败均保持文本目录。Responses 和 Chat 分别使用实际协议检测，详见[当前实施合同](designs/2026-11-07-model-exposure-image-probe.md)。
+
 > 状态：已实现并通过完整 Rust、前端构建与本机 Codex 目录合同验证（2026-09-18）  
 > 依据：默认 App 兼容目录实测（Grok 4.6 经 uuapi 类中继）、xAI 推理文档、本机 `GET /v1/models` 发现结果、2026-09-17 产品确认（三方模型不得自称 GPT-6）  
 > 相关：[产品原理 §7 模型目录](3rcodex-product-principles.md#7-模型目录原理)、[混合路由详细设计 §6.2](codex-hybrid-routing-design.md)

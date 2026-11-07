@@ -174,6 +174,16 @@ impl CodexControlStore {
         if deleted_at.is_some() {
             return Err("launch_preset_not_found".to_string());
         }
+        let entry_kind: Option<String> = transaction
+            .query_row(
+                "SELECT entry_kind FROM launch_presets WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("无法读取启动入口类型：{error}"))?;
+        if entry_kind.as_deref() == Some("managed_app") {
+            return Err("managed_app_name_fixed".to_string());
+        }
         if version != expected_version {
             return Err("version_conflict".to_string());
         }

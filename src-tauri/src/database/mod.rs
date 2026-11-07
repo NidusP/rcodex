@@ -8,6 +8,7 @@ pub(crate) mod resource_guard;
 
 mod connection;
 mod migrate_legacy;
+mod migrate_v24;
 mod migrate_v7_plus;
 // 文件仍是 migrate.rs。模块不能叫 migrate，否则会挡住测试直接调用的 migrate()。
 #[path = "migrate.rs"]

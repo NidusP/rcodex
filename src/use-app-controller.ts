@@ -26,6 +26,8 @@ import {
   type RuntimeInstanceSummary,
 } from "./codex-control";
 import { desktopChrome } from "./components/title-bar";
+import { useModelExposures } from "./components/model-exposure";
+import { isModelExposed } from "./model-exposure";
 import { FORCE_APP_UPDATE_PREVIEW, previewAppUpdate, checkAppRelease, openAppReleasePage, type AppReleaseUpdate, type AppUpdateProgress } from "./components/app-update";
 
 import {
@@ -224,6 +226,8 @@ export function useAppController() {
     }
   };
 
+  const modelExposures = useModelExposures(showCommandError);
+
   async function refresh(options: { probeInstallation?: boolean } = {}) {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
     const shouldProbeInstallation = options.probeInstallation === true || codexInstallation === null;
@@ -273,6 +277,7 @@ export function useAppController() {
         )),
         invoke<GatewayDiagnosticEvent[]>("gateway_recent_diagnostics").catch(() => []),
         invoke<InstanceRequestDiagnostic[]>("recent_gateway_requests").catch(() => []),
+        modelExposures.refreshModelExposures(snapshot.providers.map((provider) => provider.id)),
       ]);
       setUsageByProvider(Object.fromEntries(summaries.filter((entry): entry is readonly [string, ProviderUsageSummary] => entry !== null)));
       setConnectivityByProvider(Object.fromEntries(reports.filter((entry): entry is ProviderConnectivityReport => entry !== null).map((entry) => [entry.providerId, entry])));
@@ -586,7 +591,7 @@ export function useAppController() {
       endPending(key);
     }
   }
-  function workspaceInput(preset: LaunchPresetSummary, changes: Partial<{ providerIds: string[]; models: ManagedPresetModel[]; createNew: boolean; name: string }> = {}) {
+  function workspaceInput(preset: LaunchPresetSummary, changes: Partial<{ providerIds: string[]; models: ManagedPresetModel[]; name: string }> = {}) {
     return {
       name: changes.name ?? preset.name,
       entryKind: "managed_app",
@@ -596,7 +601,7 @@ export function useAppController() {
       models: managedModelPayload(changes.models ?? preset.models),
       autoReviewPublicModelId: preset.autoReviewPublicModelId ?? null,
       defaultWorkspacePath: null,
-      ...(changes.createNew ? { createNew: true } : { launchPresetId: preset.id }),
+      launchPresetId: preset.id,
     };
   }
   async function saveWorkspace(preset: LaunchPresetSummary, changes: Parameters<typeof workspaceInput>[1], success: string) {
@@ -635,7 +640,14 @@ export function useAppController() {
     const wireApi = connectivityByProvider[providerId]?.wireApi;
     return wireApi === "responses" || wireApi === "chat_completions";
   }
+  function providerHasExposedModels(providerId: string) {
+    return !modelExposures.exposureErrorsByProvider[providerId] && (modelExposures.exposuresByProvider[providerId] ?? []).some((model) => model.exposed && isWorkspaceSelectableModelId(model.upstreamModelId));
+  }
   function addProviderToWorkspace(preset: LaunchPresetSummary, providerId: string) {
+    if (!providerHasExposedModels(providerId)) {
+      showInfo("请先在模型渠道中选择要透出的模型。");
+      return;
+    }
     if (!providerProtocolConfirmed(providerId)) {
       showInfo("协议未确认，不能加入隔离工作区。");
       return;
@@ -644,6 +656,41 @@ export function useAppController() {
       void saveWorkspace(preset, { providerIds: [providerId, ...preset.providerIds] }, "模型渠道已加入隔离工作区。");
     }
   }
+  function addProviderToNewWorkspace(providerId: string) {
+    if (!providerHasExposedModels(providerId)) {
+      showInfo("请先在模型渠道中选择要透出的模型。");
+      return;
+    }
+    if (!providerProtocolConfirmed(providerId)) {
+      showInfo("协议未确认，不能加入隔离工作区。");
+      return;
+    }
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider) {
+      showInfo("模型渠道不存在或已被移除，请刷新后重试。");
+      return;
+    }
+    const key = "preset:create";
+    beginPending(key);
+    void invokeControl("create_managed_launch_preset", {
+      input: {
+        name: "隔离空间",
+        entryKind: "managed_app",
+        officialAccountId: null,
+        apiKeyProviderIds: [providerId],
+        transportMode: "gateway_passthrough",
+        models: [],
+        autoReviewPublicModelId: null,
+        defaultWorkspacePath: null,
+      },
+    })
+      .then(async () => {
+        await refresh();
+        showInfo(`模型渠道“${provider.name}”已加入隔离工作区，请选择模型。`);
+      })
+      .catch((error: unknown) => showCommandError(error, "无法配置隔离工作区"))
+      .finally(() => endPending(key));
+  }
   function reorderProvidersInWorkspace(preset: LaunchPresetSummary, providerIds: string[]) {
     if (providerIds.length === preset.providerIds.length) {
       void saveWorkspace(preset, { providerIds }, "模型渠道顺序已保存。");
@@ -651,14 +698,15 @@ export function useAppController() {
   }
   function toggleWorkspaceModelSelection(preset: LaunchPresetSummary, providerId: string, upstreamModelId: string) {
     const current = preset.models.find((item) => item.sourceId === providerId && item.upstreamModelId === upstreamModelId);
-    if (isImageGenerationModelId(upstreamModelId)) {
-      if (!current) {
-        return showInfo("这个模型用于图像生成，不会显示在工作区勾选中，也不能作为对话模型加入工作区。");
-      }
-      void saveWorkspace(preset, {
-        models: preset.models.filter((item) => item !== current),
-      }, "已从工作区移除图像生成模型。");
+    if (current) {
+      void saveWorkspace(preset, { models: preset.models.filter((item) => item !== current) }, "工作区模型已移除。");
       return;
+    }
+    if (!isModelExposed(modelExposures.exposuresByProvider, providerId, upstreamModelId)) {
+      return showInfo("请先在模型渠道中选择要透出的模型。");
+    }
+    if (isImageGenerationModelId(upstreamModelId)) {
+      return showInfo("这个模型用于图像生成，不能作为对话模型加入工作区。");
     }
     if (isInternalCodexModelId(upstreamModelId)) {
       return showInfo("这个模型是 Codex 系统角色，用于自动审核或子代理等特殊调用，不能作为普通模型加入工作区。");
@@ -667,12 +715,10 @@ export function useAppController() {
       return showInfo("协议未确认，不能把这个渠道的模型加入隔离工作区。");
     }
     const provider = providers.find((item) => item.id === providerId);
-    const option = buildDiscoveredModelOptions([{ providerId, providerName: provider?.name ?? "模型渠道", models: selectableProviderModels(connectivityByProvider[providerId]?.models ?? []) }])
+    const option = buildDiscoveredModelOptions([{ providerId, providerName: provider?.name ?? "模型渠道", models: selectableProviderModels(connectivityByProvider[providerId]?.models ?? []).filter((model) => isModelExposed(modelExposures.exposuresByProvider, providerId, model.upstreamModelId)) }])
       .find((item) => item.upstreamModelId === upstreamModelId);
     if (!option) return showInfo("请先刷新模型目录，再选择该模型。");
-    const models = current
-      ? preset.models.filter((item) => item !== current)
-      : [...preset.models, {
+    const models = [...preset.models, {
           routeIdentityId: "",
           sourceKind: "api_provider" as const,
           sourceId: providerId,
@@ -702,40 +748,73 @@ export function useAppController() {
     }
   }
   async function selectManagedWorkspace(preset: LaunchPresetSummary) {
-    setScopedPresetId(preset.id);
+    const previous = scopedPresetId;
+    const key = "workspace:select";
+    beginPending(key);
     try {
       await invokeControl("select_managed_launch_preset", { input: { launchPresetId: preset.id } });
       await refresh();
+      setScopedPresetId(preset.id);
+      return true;
     } catch (error) {
-      showCommandError(error, "无法切换隔离实例");
+      setScopedPresetId(previous);
+      showCommandError(error, "无法切换隔离空间");
+      return false;
+    } finally {
+      endPending(key);
     }
   }
-  async function createManagedInstance(source?: LaunchPresetSummary) {
-    const preset = source ?? presets.find((item) => item.entryKind === "managed_app");
-    if (!preset) return null;
+  async function createManagedInstance() {
     const key = "preset:create";
     beginPending(key);
     try {
-      const saved = await invokeControl<{ id: string }>("create_managed_launch_preset", { input: workspaceInput(preset, { name: "R Codex", createNew: true }) });
+      // 新空间不复制当前空间的渠道、模型或登录渠道，由用户自行选择；
+      // 后端将空方案标记为 needs_model_selection，选好前不可启动。
+      // 不传 sourcePresetId：它会继承源空间 profile_options 的登录渠道回填，
+      // 导致空方案报 login_provider_not_in_workspace。
+      const input = {
+        name: "隔离空间",
+        entryKind: "managed_app",
+        officialAccountId: null,
+        apiKeyProviderIds: [],
+        transportMode: "gateway_passthrough",
+        models: [],
+        autoReviewPublicModelId: null,
+        defaultWorkspacePath: null,
+        createNew: true,
+      };
+      const saved = await invokeControl<{ id: string }>("create_managed_launch_preset", { input });
       await refresh();
-      showInfo("已新增隔离实例。会话目录和 Electron 桌面数据都独立，可以和其他实例同时运行。");
+      setScopedPresetId(saved.id);
+      showInfo("已新增隔离空间，会话与桌面数据独立；请先添加模型渠道和模型。");
       return saved.id;
     } catch (error) {
-      showCommandError(error, "无法新增实例");
+      showCommandError(error, "无法新增空间");
       return null;
     } finally {
       endPending(key);
     }
   }
-  async function renameManagedInstance(preset: LaunchPresetSummary, name: string) {
-    const key = `preset:${preset.id}`;
+  async function deleteManagedWorkspace(preset: LaunchPresetSummary) {
+    const key = `workspace:delete:${preset.id}`;
     beginPending(key);
     try {
-      await invokeControl("rename_launch_preset", { launchPresetId: preset.id, input: { expectedVersion: preset.version, name } });
-      await refresh();
-      showInfo("实例名称已更新。");
+      const result = await invokeControl<{ deletedPresetId: string; selectedPresetId: string | null }>("delete_managed_workspace", { input: { launchPresetId: preset.id, expectedVersion: preset.version } });
+      // Install removal immediately so a refresh failure cannot keep a deleted
+      // space visible or allow it to be submitted a second time.
+      setPresets((current) => current.filter((item) => item.id !== result.deletedPresetId).map((item) => ({ ...item, isPreferred: item.id === result.selectedPresetId })));
+      setInstances((current) => current.filter((item) => item.launchPresetId !== result.deletedPresetId));
+      setScopedPresetId(result.selectedPresetId);
+      try {
+        await refresh();
+        showInfo(`已永久删除${preset.name}。`);
+      } catch (error) {
+        showCommandError(error, "空间已删除，但刷新状态失败");
+      }
+      return result;
     } catch (error) {
-      showCommandError(error, "无法更新实例名称");
+      showCommandError(error, "删除隔离空间未完成");
+      throw error;
     } finally {
       endPending(key);
     }
@@ -977,6 +1056,7 @@ export function useAppController() {
   }));
 
   return {
+    ...modelExposures,
     utilityDrawer, setUtilityDrawer, scopedPresetId, openUtility, themeMode, setThemeMode, accent, setAccent, systemDark, setSystemDark,
     dismissedIncidentAt, setDismissedIncidentAt, gateway, setGateway, providers, setProviders,
     accounts, setAccounts, presets, setPresets, instances, setInstances, compatibility,
@@ -1000,9 +1080,9 @@ export function useAppController() {
     renameProvider,
     clearDiagnostics, loadInstanceDiagnostics, clearInstanceDiagnostics, openDefaultCodex,
     openIsolatedCodexHome, requestLaunchPreset, launchPreset, testProvider,
-    removeProviderFromWorkspace, addProviderToWorkspace, reorderProvidersInWorkspace,
+    removeProviderFromWorkspace, addProviderToWorkspace, addProviderToNewWorkspace, reorderProvidersInWorkspace,
     toggleWorkspaceModelSelection, setDefaultWorkspaceModel, setManagedLoginProvider,
-    selectManagedWorkspace, createManagedInstance, renameManagedInstance, stopInstance,
+    selectManagedWorkspace, createManagedInstance, deleteManagedWorkspace, stopInstance,
     restartInstance, reconcileInstance, deleteInstance, clearSafeInstances, viewInstances,
     openAddProvider, gatewayStopReason, providerNames, latestFailure,
     diagnosticCount, gatewayEndpoint, activeManagedAppInstanceCount, visibleManagedInstances,

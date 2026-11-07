@@ -26,8 +26,7 @@ use crate::managed_codex_config::{
 };
 use crate::model_family_profile::{
     allowed_reasoning_levels_for_model, default_auto_compact_token_limit,
-    family_context_limits_for_route, family_image_support_for_route,
-    family_reasoning_levels_for_route,
+    family_context_limits_for_route, family_reasoning_levels_for_route,
 };
 use crate::routing::{
     looks_like_gpt_model_id, CapabilitySet, CompactionSupport, GatewayServiceRevision,
@@ -188,6 +187,13 @@ impl ManagedLaunchStore {
         if preset_version != expected_version {
             return Err("version_conflict".to_string());
         }
+        {
+            let connection = self
+                .connection
+                .lock()
+                .map_err(|_| "managed_launch_database_lock_failed".to_string())?;
+            super::assert_workspace_not_deleting(&connection, launch_preset_id)?;
+        }
         if state != "ready" {
             return Err("launch_preset_needs_model_selection".to_string());
         }
@@ -228,6 +234,21 @@ impl ManagedLaunchStore {
         let selections = composition.models;
         if selections.is_empty() {
             return Err("route_set_has_no_models".to_string());
+        }
+        {
+            let connection = self
+                .connection
+                .lock()
+                .map_err(|_| "managed_launch_database_lock_failed".to_string())?;
+            for selection in &selections {
+                if selection.source_kind == RouteKind::ApiProvider {
+                    crate::model_exposure::assert_model_exposed(
+                        &connection,
+                        &selection.source_id,
+                        &selection.upstream_model_id,
+                    )?;
+                }
+            }
         }
         // A verified official login may be used as the App's client identity
         // while every selected model is still routed to an API Provider. This
@@ -408,7 +429,23 @@ impl ManagedLaunchStore {
                             && (official_family_levels.contains(&default) || default == "high")
                     })
                 });
-            if family_image_support_for_route(&route) {
+            let image_supported = {
+                let connection = self
+                    .connection
+                    .lock()
+                    .map_err(|_| "managed_launch_database_lock_failed".to_string())?;
+                crate::model_exposure::image_supported(
+                    &connection,
+                    &provider.provider_id,
+                    &provider.revision_id,
+                    &route.upstream_model_id,
+                    match wire_api {
+                        WireApi::Responses => "responses",
+                        WireApi::ChatCompletions => "chat_completions",
+                    },
+                )?
+            };
+            if image_supported {
                 route.capabilities.supports_images = true;
                 route.capabilities.input_modalities = vec!["text".to_string(), "image".to_string()];
             }

@@ -44,9 +44,8 @@ pub struct ModelFamilyProfile {
     pub context_window: Option<u64>,
     /// Official recommended auto-compact threshold. `None` means `context_window × 95%`.
     pub auto_compact_token_limit: Option<u64>,
-    /// Responses image-input for this family. Grok 4.x is true after a 2026-09-21
-    /// 3rxai probe using the standard Responses `input_image.image_url` data URL.
-    /// Chat Completions uses the same flag and converts input_image to image_url.
+    /// Historical family vision hint. It never grants managed route image
+    /// capability; only current per-provider/model/protocol probe evidence does.
     pub supports_images: bool,
 }
 
@@ -394,13 +393,6 @@ pub fn family_reasoning_levels_for_route(route: &ModelRoute) -> Vec<String> {
 
 pub fn allowed_reasoning_levels_for_model(upstream_model_id: &str) -> Vec<String> {
     resolve_model_family(upstream_model_id).reasoning_levels
-}
-
-/// Responses image input for this route. Chat adapters stay text-only.
-pub fn family_image_support_for_route(route: &ModelRoute) -> bool {
-    !is_internal_codex_model_id(&route.upstream_model_id)
-        && !is_internal_codex_model_id(&route.public_model_id)
-        && resolve_model_family(&route.upstream_model_id).supports_images
 }
 
 /// Family-default client window and compact threshold for a RouteSet snapshot.
@@ -998,11 +990,11 @@ mod tests {
         assert_eq!(entry["web_search_tool_type"], "text_and_image");
     }
     #[test]
-    fn grok_4x_responses_advertises_images_chat_and_grok3_do_not() {
+    fn family_vision_hints_do_not_enable_route_image_capabilities() {
         let responses = sample_route("grok-4.6", "3r-grok", WireApi::Responses);
-        assert!(family_image_support_for_route(&responses));
+        assert!(!responses.capabilities.supports_images);
         let chat = sample_route("grok-4.6", "3r-grok", WireApi::ChatCompletions);
-        assert!(family_image_support_for_route(&chat));
+        assert!(!chat.capabilities.supports_images);
         assert!(resolve_model_family("grok-4.5").supports_images);
         assert!(!resolve_model_family("grok-3-mini").supports_images);
         assert!(!resolve_model_family("deepseek-chat").supports_images);

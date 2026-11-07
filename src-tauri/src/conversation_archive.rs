@@ -18,6 +18,7 @@ use sha2::{Digest, Sha256};
 use crate::support::unix_now_seconds;
 
 mod capture;
+mod deletion;
 pub mod identity;
 pub use capture::{ArchiveCapture, RequestCapture};
 
@@ -134,7 +135,15 @@ impl ConversationArchive {
                     native_thread_id TEXT NOT NULL,
                     created_at INTEGER NOT NULL,
                     PRIMARY KEY(scope_id, native_thread_id)
-                 );",
+                 );
+                 CREATE TABLE IF NOT EXISTS archive_deleted_scopes (
+                    scope_id TEXT PRIMARY KEY,
+                    deleted_at INTEGER NOT NULL
+                 );
+                 CREATE TRIGGER IF NOT EXISTS archive_request_rejects_deleted_scope
+                    BEFORE INSERT ON archive_requests
+                    WHEN EXISTS(SELECT 1 FROM archive_deleted_scopes WHERE scope_id=NEW.scope_id)
+                    BEGIN SELECT RAISE(ABORT, 'conversation_archive_scope_deleted'); END;",
             )
             .map_err(|e| format!("conversation_archive_schema_failed:{e}"))?;
         // Older development archives predate the scoped layout. Keep their
@@ -244,6 +253,9 @@ impl ConversationArchive {
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|e| format!("conversation_archive_request_failed:{e}"))?;
+        if deletion::scope_deleted(&transaction, scope_id)? {
+            return Ok(false);
+        }
         // Admission is decided by `ArchiveCapture::begin` before this event
         // enters the queue. Do not reread the mutable policy here: a user
         // stopping capture while this event is waiting must finish this
@@ -313,7 +325,8 @@ impl ConversationArchive {
             .map_err(|e| format!("conversation_archive_stage_failed:{e}"))?;
         let active: Option<String> = tx
             .query_row(
-                "SELECT capture_status FROM archive_requests WHERE request_id=?1",
+                "SELECT capture_status FROM archive_requests request WHERE request_id=?1
+                 AND NOT EXISTS(SELECT 1 FROM archive_deleted_scopes deleted WHERE deleted.scope_id=request.scope_id)",
                 [request_id],
                 |row| row.get(0),
             )
@@ -394,6 +407,9 @@ impl ConversationArchive {
         let tx = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|e| format!("conversation_archive_stage_failed:{e}"))?;
+        if !deletion::request_writable(&tx, request_id)? {
+            return Err("conversation_archive_request_inactive".into());
+        }
         let relative = relative_stage_path(&tx, request_id, stage)?;
         let path = self.root.join(&relative);
         let part = path.with_extension("body.part");
@@ -606,7 +622,8 @@ impl ConversationArchive {
             .lock()
             .map_err(|_| "conversation_archive_busy")?
             .execute(
-                "UPDATE archive_requests SET partial=1,capture_status='partial' WHERE request_id=?1",
+                "UPDATE archive_requests SET partial=1,capture_status='partial' WHERE request_id=?1
+                 AND NOT EXISTS(SELECT 1 FROM archive_deleted_scopes deleted WHERE deleted.scope_id=archive_requests.scope_id)",
                 [request_id],
             )
             .map_err(|e| format!("conversation_archive_request_failed:{e}"))?;
@@ -620,7 +637,8 @@ impl ConversationArchive {
         metadata: &serde_json::Value,
     ) -> Result<(), String> {
         self.connection.lock().map_err(|_| "conversation_archive_busy")?.execute(
-            "UPDATE archive_requests SET partial=(partial OR ?2),capture_status=CASE WHEN partial=1 OR ?2=1 THEN 'partial' ELSE 'complete' END,metadata_json=?4 WHERE request_id=?1 AND capture_status='recording'",
+            "UPDATE archive_requests SET partial=(partial OR ?2),capture_status=CASE WHEN partial=1 OR ?2=1 THEN 'partial' ELSE 'complete' END,metadata_json=?4 WHERE request_id=?1 AND capture_status='recording'
+             AND NOT EXISTS(SELECT 1 FROM archive_deleted_scopes deleted WHERE deleted.scope_id=archive_requests.scope_id)",
             params![request_id, partial as i64, if partial { "partial" } else { "complete" }, metadata.to_string()],
         ).map_err(|e| format!("conversation_archive_finish_failed:{e}"))?;
         Ok(())
@@ -636,7 +654,8 @@ impl ConversationArchive {
         let tx = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;
-        let mut statement = tx.prepare("SELECT s.request_id,s.stage,s.relative_path,s.stored_bytes FROM archive_stages s JOIN archive_requests r ON r.request_id=s.request_id WHERE r.capture_status='recording'")
+        let mut statement = tx.prepare("SELECT s.request_id,s.stage,s.relative_path,s.stored_bytes FROM archive_stages s JOIN archive_requests r ON r.request_id=s.request_id WHERE r.capture_status='recording'
+            AND NOT EXISTS(SELECT 1 FROM archive_deleted_scopes deleted WHERE deleted.scope_id=r.scope_id)")
             .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;
         let rows: Vec<(String, String, String, i64)> = statement
             .query_map([], |row| {
@@ -694,7 +713,8 @@ impl ConversationArchive {
                 .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;
             }
         }
-        tx.execute("UPDATE archive_requests SET partial=1,capture_status='interrupted' WHERE capture_status='recording'", [])
+        tx.execute("UPDATE archive_requests SET partial=1,capture_status='interrupted' WHERE capture_status='recording'
+            AND NOT EXISTS(SELECT 1 FROM archive_deleted_scopes deleted WHERE deleted.scope_id=archive_requests.scope_id)", [])
             .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;
         tx.commit()
             .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;

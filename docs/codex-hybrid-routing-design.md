@@ -5,6 +5,8 @@
 > 产品依据：[R Codex 产品原理](3rcodex-product-principles.md)  
 > 当前代码：独立 App/CLI、多渠道 Gateway、独立 API 登录、按项目单向导入、请求档案已实施。默认 App 配置投影/恢复、原配置快照、原地历史修复和默认上游 fallback 已删除。
 
+> 2026-11-07：当前 schema v24 新增独立透出偏好与模型图片证据；新启动只用当前渠道修订、模型、协议、探针版本的成功证据开启图片能力。旧空间选择迁移保留，取消透出须先解除空间引用。流程、并发与回退按[实施合同](designs/2026-11-07-model-exposure-image-probe.md)。
+
 ## 当前生效的独立环境合同
 
 [独立工作区改造与验收](designs/2026-09-21-isolated-only-product-plan.md) 是本代启动和导入的完整合同。以下历史章节中默认 App、双入口、原配置快照、偏好种子化、兼容 fallback 的内容均已作废；RouteSet、精确认证、资源锁、模型能力和错误分层继续有效。

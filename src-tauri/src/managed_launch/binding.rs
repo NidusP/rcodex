@@ -236,6 +236,15 @@ impl ManagedLaunchStore {
             return Err("version_conflict".to_string());
         }
         ensure_resources_available(&transaction, route_set)?;
+        for route in &route_set.routes {
+            if let crate::routing::RouteSource::ApiProvider { provider_id, .. } = &route.source {
+                crate::model_exposure::assert_model_exposed(
+                    &transaction,
+                    provider_id,
+                    &route.upstream_model_id,
+                )?;
+            }
+        }
         let existing_bound_instance: Option<String> =
             if LaunchTarget::wire_is_managed_app(&launch_target) {
                 transaction

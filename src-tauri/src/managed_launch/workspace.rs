@@ -23,6 +23,28 @@ use super::preset_validation::{
 };
 use super::validation::{normalize_optional_path, validate_name};
 
+pub const MAX_MANAGED_APP_WORKSPACES: usize = 5;
+const MANAGED_APP_WORKSPACE_NAMES: [&str; MAX_MANAGED_APP_WORKSPACES] = [
+    "隔离空间 A",
+    "隔离空间 B",
+    "隔离空间 C",
+    "隔离空间 D",
+    "隔离空间 E",
+];
+
+fn managed_app_workspace_name(slot: usize) -> Result<&'static str, String> {
+    MANAGED_APP_WORKSPACE_NAMES
+        .get(slot)
+        .copied()
+        .ok_or_else(|| "managed_app_limit_reached".to_string())
+}
+
+fn managed_app_workspace_slot(name: &str) -> Option<usize> {
+    MANAGED_APP_WORKSPACE_NAMES
+        .iter()
+        .position(|candidate| *candidate == name)
+}
+
 pub(super) fn login_provider_id_from_profile_options(raw: &str) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(raw)
         .ok()
@@ -109,17 +131,56 @@ impl ManagedLaunchStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| format!("initial_workspace_transaction_failed:{error}"))?;
-        let exists: bool = transaction
-            .query_row(
-                "SELECT EXISTS(
-                   SELECT 1 FROM launch_presets
-                   WHERE entry_kind='managed_app' AND deleted_at IS NULL
-                 )",
-                [],
-                |row| row.get(0),
+        let mut workspace_statement = transaction
+            .prepare(
+                "SELECT id, name
+                 FROM launch_presets
+                 WHERE entry_kind='managed_app' AND deleted_at IS NULL
+                 ORDER BY is_preferred DESC, created_at ASC, id ASC",
             )
             .map_err(|error| format!("initial_workspace_lookup_failed:{error}"))?;
-        if !exists {
+        let workspaces = workspace_statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|error| format!("initial_workspace_lookup_failed:{error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("initial_workspace_lookup_failed:{error}"))?;
+        drop(workspace_statement);
+        if workspaces.len() > MAX_MANAGED_APP_WORKSPACES {
+            return Err("managed_app_legacy_overflow".to_string());
+        }
+        let mut used_slots = [false; MAX_MANAGED_APP_WORKSPACES];
+        let mut pending_names = Vec::new();
+        for (id, name) in &workspaces {
+            if let Some(slot) = managed_app_workspace_slot(name) {
+                if !used_slots[slot] {
+                    used_slots[slot] = true;
+                    continue;
+                }
+            }
+            pending_names.push(id);
+        }
+        for id in pending_names {
+            let Some(slot) = used_slots.iter().position(|used| !*used) else {
+                return Err("managed_app_legacy_overflow".to_string());
+            };
+            used_slots[slot] = true;
+            let name = managed_app_workspace_name(slot)?;
+            transaction
+                .execute(
+                    "UPDATE launch_presets SET name=?1, updated_at=?2
+                     WHERE id=?3 AND deleted_at IS NULL",
+                    params![name, now, id],
+                )
+                .map_err(|error| format!("initial_workspace_name_normalize_failed:{error}"))?;
+        }
+        let exists = !workspaces.is_empty();
+        let explicitly_empty: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM provider_migration_state WHERE key=?1 AND value='true')",
+            [super::deletion::EXPLICITLY_EMPTY_WORKSPACE_KEY], |row| row.get(0),
+        ).map_err(|error| format!("initial_workspace_empty_state_read_failed:{error}"))?;
+        if !exists && !explicitly_empty {
             // The schema permits exactly one preferred preset. A fresh
             // workspace has none; clear a stale preference before creating
             // the product-owned App workspace.
@@ -137,7 +198,7 @@ impl ManagedLaunchStore {
                         codex_account_id, gateway_policy, profile_options,
                         default_workspace_path, version, is_preferred,
                         created_at, updated_at
-                     ) VALUES (?1, 'managed_app', 'R Codex', 'none', NULL, NULL,
+                     ) VALUES (?1, 'managed_app', '隔离空间 A', 'none', NULL, NULL,
                         NULL, '{}', NULL, 1, 1, ?2, ?2)",
                     params![id, now],
                 )
@@ -166,7 +227,7 @@ impl ManagedLaunchStore {
         if !EntryKind::is_managed_workspace(input.entry_kind.as_deref()) {
             return Err("invalid_launch_target".to_string());
         }
-        let name = validate_name(&input.name)?;
+        let _requested_name = validate_name(&input.name)?;
         let provider_ids = validate_sources(
             input.official_account_id.as_deref(),
             input.api_key_provider_ids,
@@ -211,7 +272,18 @@ impl ManagedLaunchStore {
         if input.create_new && input.launch_preset_id.is_some() {
             return Err("invalid_launch_preset".to_string());
         }
-        let existing_workspace: Option<(String, i64)> = if input.create_new {
+        let existing_workspace: Option<(String, i64, String)> = if input.create_new {
+            let active_count: i64 = transaction
+                .query_row(
+                    "SELECT COUNT(*) FROM launch_presets
+                     WHERE entry_kind='managed_app' AND deleted_at IS NULL",
+                    [],
+                    |row| row.get(0),
+                )
+                .map_err(|error| format!("managed_workspace_count_failed:{error}"))?;
+            if active_count >= MAX_MANAGED_APP_WORKSPACES as i64 {
+                return Err("managed_app_limit_reached".to_string());
+            }
             None
         } else if let Some(preset_id) = input
             .launch_preset_id
@@ -222,11 +294,11 @@ impl ManagedLaunchStore {
             Some(
                 transaction
                     .query_row(
-                        "SELECT id, version FROM launch_presets
+                        "SELECT id, version, name FROM launch_presets
                          WHERE id=?1 AND deleted_at IS NULL
                            AND (?2 IS NULL OR entry_kind = ?2)",
                         params![preset_id, input.entry_kind.as_deref()],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                     )
                     .optional()
                     .map_err(|error| format!("managed_workspace_lookup_failed:{error}"))?
@@ -235,18 +307,50 @@ impl ManagedLaunchStore {
         } else {
             transaction
                 .query_row(
-                    "SELECT id, version FROM launch_presets
+                    "SELECT id, version, name FROM launch_presets
                      WHERE deleted_at IS NULL
                        AND (?1 IS NULL OR entry_kind = ?1)
                      ORDER BY is_preferred DESC, created_at ASC
                      LIMIT 1",
                     [input.entry_kind.as_deref()],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
                 .optional()
                 .map_err(|error| format!("managed_workspace_lookup_failed:{error}"))?
         };
-        if let Some((workspace_id, _)) = existing_workspace.as_ref() {
+        let source_profile_options = if let Some(source_id) = input.source_preset_id.as_deref() {
+            super::deletion::assert_workspace_not_deleting(&transaction, source_id)?;
+            let options = transaction
+                .query_row(
+                    "SELECT COALESCE(profile_options, '{}')
+                     FROM launch_presets
+                     WHERE id=?1 AND entry_kind='managed_app' AND deleted_at IS NULL",
+                    [source_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(|error| format!("managed_source_workspace_lookup_failed:{error}"))?;
+            if options.is_none() {
+                return Err("launch_preset_not_found".to_string());
+            }
+            options
+        } else {
+            None
+        };
+        let source_login_provider = source_profile_options
+            .as_deref()
+            .and_then(login_provider_id_from_profile_options);
+        let requested_login_provider = input
+            .login_provider_id
+            .as_deref()
+            .or(source_login_provider.as_deref());
+        if let Some(login_provider_id) = requested_login_provider {
+            if !provider_ids.iter().any(|id| id == login_provider_id) {
+                return Err("login_provider_not_in_workspace".to_string());
+            }
+        }
+        if let Some((workspace_id, _, _)) = existing_workspace.as_ref() {
+            super::deletion::assert_workspace_not_deleting(&transaction, workspace_id)?;
             // Running instances keep the launch snapshot. Workspace edits are
             // allowed and apply the next time this isolated instance starts.
             let leased: bool = transaction
@@ -264,7 +368,7 @@ impl ManagedLaunchStore {
             }
         }
         let previous_provider_ids: Vec<String> = match existing_workspace.as_ref() {
-            Some((workspace_id, _)) => {
+            Some((workspace_id, _, _)) => {
                 let mut statement = transaction
                     .prepare(
                         "SELECT provider_id FROM launch_preset_api_providers
@@ -336,6 +440,11 @@ impl ManagedLaunchStore {
             }
             match model.source_kind {
                 RouteKind::ApiProvider if selected_providers.contains(model.source_id.as_str()) => {
+                    crate::model_exposure::assert_model_exposed(
+                        &transaction,
+                        &model.source_id,
+                        &model.upstream_model_id,
+                    )?;
                 }
                 RouteKind::Official
                     if input.official_account_id.as_deref() == Some(model.source_id.as_str()) => {}
@@ -395,71 +504,93 @@ impl ManagedLaunchStore {
                     Some(gateway_policy),
                 )
             };
-        let (id, version) = if let Some((workspace_id, current_version)) = existing_workspace {
-            let next_version = current_version
-                .checked_add(1)
-                .ok_or_else(|| "managed_workspace_version_overflow".to_string())?;
-            transaction
-                .execute(
-                    "UPDATE launch_presets
+        let (id, version) =
+            if let Some((workspace_id, current_version, current_name)) = existing_workspace {
+                let next_version = current_version
+                    .checked_add(1)
+                    .ok_or_else(|| "managed_workspace_version_overflow".to_string())?;
+                transaction
+                    .execute(
+                        "UPDATE launch_presets
                      SET entry_kind=?1, name=?2, credential_kind=?3, api_key_provider_id=?4,
                          codex_account_id=?5, gateway_policy=?6,
                          default_workspace_path=?7, version=?8, is_preferred=1,
                          updated_at=?9
                      WHERE id=?10 AND deleted_at IS NULL",
-                    params![
-                        input.entry_kind,
-                        name,
-                        credential_kind,
-                        projected_provider,
-                        projected_account,
-                        gateway_policy,
-                        normalize_optional_path(input.default_workspace_path.as_deref()),
-                        next_version,
-                        now,
-                        workspace_id,
-                    ],
-                )
-                .map_err(|error| format!("managed_preset_update_failed:{error}"))?;
-            for table in [
-                "launch_preset_role_models",
-                "launch_preset_model_selections",
-                "launch_preset_api_providers",
-                "launch_preset_compositions",
-            ] {
+                        params![
+                            input.entry_kind,
+                            current_name,
+                            credential_kind,
+                            projected_provider,
+                            projected_account,
+                            gateway_policy,
+                            normalize_optional_path(input.default_workspace_path.as_deref()),
+                            next_version,
+                            now,
+                            workspace_id,
+                        ],
+                    )
+                    .map_err(|error| format!("managed_preset_update_failed:{error}"))?;
+                for table in [
+                    "launch_preset_role_models",
+                    "launch_preset_model_selections",
+                    "launch_preset_api_providers",
+                    "launch_preset_compositions",
+                ] {
+                    transaction
+                        .execute(
+                            &format!("DELETE FROM {table} WHERE launch_preset_id=?1"),
+                            [&workspace_id],
+                        )
+                        .map_err(|error| format!("managed_composition_replace_failed:{error}"))?;
+                }
+                (workspace_id, next_version)
+            } else {
+                let workspace_id = Uuid::new_v4().to_string();
+                let existing_names = transaction
+                    .prepare(
+                        "SELECT name FROM launch_presets
+                     WHERE entry_kind='managed_app' AND deleted_at IS NULL",
+                    )
+                    .map_err(|error| format!("managed_workspace_count_failed:{error}"))?
+                    .query_map([], |row| row.get::<_, String>(0))
+                    .map_err(|error| format!("managed_workspace_count_failed:{error}"))?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| format!("managed_workspace_count_failed:{error}"))?;
+                let mut used_slots = [false; MAX_MANAGED_APP_WORKSPACES];
+                for name in existing_names {
+                    if let Some(slot) = managed_app_workspace_slot(&name) {
+                        used_slots[slot] = true;
+                    }
+                }
+                let slot = used_slots
+                    .iter()
+                    .position(|used| !*used)
+                    .ok_or_else(|| "managed_app_limit_reached".to_string())?;
+                let name = managed_app_workspace_name(slot)?.to_string();
                 transaction
                     .execute(
-                        &format!("DELETE FROM {table} WHERE launch_preset_id=?1"),
-                        [&workspace_id],
-                    )
-                    .map_err(|error| format!("managed_composition_replace_failed:{error}"))?;
-            }
-            (workspace_id, next_version)
-        } else {
-            let workspace_id = Uuid::new_v4().to_string();
-            transaction
-                .execute(
-                    "INSERT INTO launch_presets (
+                        "INSERT INTO launch_presets (
                         id, entry_kind, name, credential_kind, api_key_provider_id,
                         codex_account_id, gateway_policy, profile_options,
                         default_workspace_path, version, is_preferred,
                         created_at, updated_at
                      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '{}', ?8, 1, 1, ?9, ?9)",
-                    params![
-                        workspace_id,
-                        input.entry_kind,
-                        name,
-                        credential_kind,
-                        projected_provider,
-                        projected_account,
-                        gateway_policy,
-                        normalize_optional_path(input.default_workspace_path.as_deref()),
-                        now,
-                    ],
-                )
-                .map_err(|error| format!("managed_preset_insert_failed:{error}"))?;
-            (workspace_id, 1)
-        };
+                        params![
+                            workspace_id,
+                            input.entry_kind,
+                            name,
+                            credential_kind,
+                            projected_provider,
+                            projected_account,
+                            gateway_policy,
+                            normalize_optional_path(input.default_workspace_path.as_deref()),
+                            now,
+                        ],
+                    )
+                    .map_err(|error| format!("managed_preset_insert_failed:{error}"))?;
+                (workspace_id, 1)
+            };
         let profile_options: String = transaction
             .query_row(
                 "SELECT COALESCE(profile_options, '{}') FROM launch_presets WHERE id=?1",
@@ -467,8 +598,10 @@ impl ManagedLaunchStore {
                 |row| row.get(0),
             )
             .map_err(|_| "managed_preset_lookup_failed".to_string())?;
-        let login_provider = login_provider_id_from_profile_options(&profile_options)
-            .filter(|provider| provider_ids.contains(provider));
+        let login_provider = requested_login_provider.map(str::to_string).or_else(|| {
+            login_provider_id_from_profile_options(&profile_options)
+                .filter(|provider| provider_ids.contains(provider))
+        });
         // A workspace with one channel shows that channel as the login even
         // before it is stored. Adding another channel must keep that choice.
         let login_provider = login_provider.or_else(|| {
@@ -547,6 +680,12 @@ impl ManagedLaunchStore {
                 )
                 .map_err(|error| format!("managed_role_model_insert_failed:{error}"))?;
         }
+        transaction
+            .execute(
+                "DELETE FROM provider_migration_state WHERE key=?1",
+                [super::deletion::EXPLICITLY_EMPTY_WORKSPACE_KEY],
+            )
+            .map_err(|error| format!("managed_workspace_empty_state_clear_failed:{error}"))?;
         transaction
             .commit()
             .map_err(|error| format!("managed_preset_commit_failed:{error}"))?;
@@ -635,6 +774,7 @@ impl ManagedLaunchStore {
         if version != expected_version {
             return Err("version_conflict".to_string());
         }
+        super::deletion::assert_workspace_not_deleting(&transaction, launch_preset_id)?;
         // Login channel is workspace config. A running instance keeps its
         // launch snapshot until the user restarts it.
         let leased: bool = transaction

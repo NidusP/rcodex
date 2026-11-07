@@ -157,20 +157,22 @@ pub fn seed_default_codex_preferences(
     if managed_home.canonicalize().ok() == source_home.canonicalize().ok() && source_home.exists() {
         return Ok(());
     }
+    let config_path = managed_home.join("config.toml");
+    reject_link(&config_path)?;
+    let mut config = read_regular_toml(&config_path)?.unwrap_or_default();
     if let Some(source_config) = read_regular_toml(&source_home.join("config.toml"))? {
-        let config_path = managed_home.join("config.toml");
-        reject_link(&config_path)?;
-        let mut config = read_regular_toml(&config_path)?.unwrap_or_default();
         merge_codex_preferences(&mut config, &source_config);
-        ensure_collaboration_feature(&mut config);
-        let encoded = toml::to_string(&config)
-            .map_err(|_| "managed_preference_seed_encode_failed".to_string())?;
-        write_private_atomically_overwrite(
-            &config_path,
-            encoded.as_bytes(),
-            "managed_preference_seed",
-        )?;
     }
+    // The default App may never have been opened. Keep a deterministic
+    // collaboration baseline before the generated routing profile is merged.
+    ensure_collaboration_feature(&mut config);
+    let encoded = toml::to_string(&config)
+        .map_err(|_| "managed_preference_seed_encode_failed".to_string())?;
+    write_private_atomically_overwrite(
+        &config_path,
+        encoded.as_bytes(),
+        "managed_preference_seed",
+    )?;
     seed_onboarding_state(managed_home, source_home)?;
     seed_user_guidance(managed_home, source_home)?;
     write_private_atomically_overwrite(&marker, b"1\n", "managed_preference_seed_marker")

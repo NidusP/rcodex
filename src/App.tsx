@@ -60,6 +60,7 @@ function CodexInstallationGate({
 function AppView() {
   const {
     openUtility,
+    openAddProvider,
     providers,
     accounts,
     presets,
@@ -70,7 +71,6 @@ function AppView() {
     testingProviderId,
     uiBusy,
     pendingKey,
-    showInfo,
     refresh,
     openDefaultCodex,
     openIsolatedCodexHome,
@@ -78,13 +78,13 @@ function AppView() {
     testProvider,
     removeProviderFromWorkspace,
     addProviderToWorkspace,
+    addProviderToNewWorkspace,
     reorderProvidersInWorkspace,
     toggleWorkspaceModelSelection,
     setDefaultWorkspaceModel,
     setManagedLoginProvider,
     selectManagedWorkspace,
     createManagedInstance,
-    renameManagedInstance,
     instances,
     stopInstance,
   } = useAppState();
@@ -129,25 +129,23 @@ function AppView() {
               )
             }
             onAddProvider={addProviderToWorkspace}
+            onAddProviderToNewWorkspace={addProviderToNewWorkspace}
             onRemoveProvider={removeProviderFromWorkspace}
             onDefaultModelChange={setDefaultWorkspaceModel}
             onLoginProviderChange={setManagedLoginProvider}
             onOpenUtility={(view, preset) => openUtility(view, preset?.id)}
+            onOpenAddProvider={openAddProvider}
             onOpenInstances={(preset) => openUtility("instances", preset.id)}
             onOpenDefaultCodex={() => void openDefaultCodex()}
             onOpenCodexHome={(preset) =>
               void openIsolatedCodexHome(preset)
             }
-            onSyncResult={showInfo}
             onTestProvider={(providerId) => void testProvider(providerId)}
             onReorderChannels={(preset, providerIds) =>
               void reorderProvidersInWorkspace(preset, providerIds)
             }
-            onSelectInstance={(preset) => void selectManagedWorkspace(preset)}
-            onCreateInstance={(preset) => createManagedInstance(preset)}
-            onRenameInstance={(preset, name) =>
-              void renameManagedInstance(preset, name)
-            }
+            onSelectInstance={selectManagedWorkspace}
+            onCreateInstance={() => createManagedInstance()}
             instances={instances}
             onStopInstance={(instance) => void stopInstance(instance)}
           />

@@ -21,6 +21,112 @@ fn startup_log_redacts_credentials_before_ui_exposure() {
     assert!(safe.contains("[redacted]"));
 }
 
+#[test]
+fn workspace_snapshot_keeps_slot_order_when_preferred_selection_changes() {
+    let database = Database::in_memory();
+    let root = std::env::temp_dir().join(format!("rcodex-tab-order-{}", Uuid::new_v4()));
+    {
+        let connection = database.connection();
+        let connection = connection.lock().unwrap();
+        // Creation time and insertion order deliberately oppose fixed slots.
+        for (id, name, created) in [
+            ("c", "隔离空间 C", 1),
+            ("a", "隔离空间 A", 3),
+            ("b", "隔离空间 B", 2),
+        ] {
+            connection.execute(
+                "INSERT INTO launch_presets (id,entry_kind,name,credential_kind,profile_options,version,is_preferred,created_at,updated_at)
+                 VALUES (?1,'managed_app',?2,'none','{}',1,0,?3,?3)",
+                rusqlite::params![id, name, created],
+            ).unwrap();
+        }
+    }
+    let store = CodexControlStore::for_test(database.clone(), root.clone());
+    for preferred in ["c", "b", "a", "c"] {
+        {
+            let connection = database.connection();
+            let connection = connection.lock().unwrap();
+            connection
+                .execute("UPDATE launch_presets SET is_preferred=0", [])
+                .unwrap();
+            connection
+                .execute(
+                    "UPDATE launch_presets SET is_preferred=1 WHERE id=?1",
+                    [preferred],
+                )
+                .unwrap();
+        }
+        let snapshot = store.snapshot().unwrap();
+        let ids: Vec<_> = snapshot
+            .presets
+            .iter()
+            .map(|preset| preset.id.as_str())
+            .collect();
+        assert_eq!(ids, ["a", "b", "c"]);
+        assert_eq!(
+            snapshot
+                .presets
+                .iter()
+                .find(|preset| preset.is_preferred)
+                .unwrap()
+                .id,
+            preferred
+        );
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn replaying_running_receipts_preserves_the_users_selected_workspace() {
+    use crate::launcher_protocol::{process_start_identity, LauncherReceipt};
+    let (store, root) = seeded_official_store();
+    let prepared = store
+        .prepare_official_launch(
+            &LaunchCodexInput {
+                launch_preset_id: "official-preset-a".to_string(),
+                expected_version: 1,
+                workspace_path: None,
+                launch_target: None,
+            },
+            Path::new("/bin/sh"),
+            "test-codex",
+        )
+        .unwrap();
+    {
+        let connection = store.connection.lock().unwrap();
+        connection
+            .execute("UPDATE launch_presets SET is_preferred=0", [])
+            .unwrap();
+        connection.execute(
+            "INSERT INTO launch_presets(id,entry_kind,name,credential_kind,profile_options,version,is_preferred,created_at,updated_at)
+             VALUES ('selected-space','managed_app','隔离空间 B','none','{}',1,1,2,2)", [],
+        ).unwrap();
+    }
+    let receipt = LauncherReceipt::running(
+        prepared.instance_id,
+        prepared.launch_nonce,
+        std::process::id(),
+        process_start_identity(std::process::id()).unwrap(),
+        "/bin/sh".to_string(),
+        prepared.managed_codex_home.display().to_string(),
+    );
+    for _ in 0..2 {
+        store.apply_receipt(&receipt).unwrap();
+        let preferred: String = store
+            .connection
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT id FROM launch_presets WHERE is_preferred=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(preferred, "selected-space");
+    }
+    let _ = std::fs::remove_dir_all(root);
+}
+
 fn seeded_store() -> (CodexControlStore, PathBuf) {
     let database = Database::in_memory();
     let root = std::env::temp_dir().join(format!("3r-control-{}", Uuid::new_v4()));
@@ -151,6 +257,60 @@ fn deleting_preset_tombstones_it_without_removing_history() {
         )
         .unwrap();
     assert!(deleted_at.is_some());
+}
+
+#[test]
+fn snapshot_keeps_undeleted_workspace_when_provider_credential_is_missing() {
+    let (store, root) = seeded_store();
+    {
+        let connection = store.connection.lock().unwrap();
+        connection
+            .execute(
+                "UPDATE api_key_providers
+                 SET configured=0
+                 WHERE id='provider-a'",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE api_key_provider_revisions
+                 SET state='credential_missing'
+                 WHERE id='revision-a'",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO launch_preset_api_providers (launch_preset_id, provider_id, position)
+                 VALUES ('preset-a', 'provider-a', 0)",
+                [],
+            )
+            .unwrap();
+    }
+
+    let snapshot = store.snapshot().unwrap();
+    assert_eq!(snapshot.presets.len(), 1);
+    assert_eq!(snapshot.presets[0].id, "preset-a");
+    assert_eq!(snapshot.providers.len(), 1);
+    assert_eq!(snapshot.providers[0].id, "provider-a");
+    assert!(!snapshot.providers[0].configured);
+
+    {
+        let connection = store.connection.lock().unwrap();
+        connection
+            .execute(
+                "UPDATE api_key_providers SET current_revision_id=NULL WHERE id='provider-a'",
+                [],
+            )
+            .unwrap();
+    }
+    let snapshot = store.snapshot().unwrap();
+    assert_eq!(snapshot.presets.len(), 1);
+    assert_eq!(snapshot.providers.len(), 1);
+    assert!(!snapshot.providers[0].configured);
+
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

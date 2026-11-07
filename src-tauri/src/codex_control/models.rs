@@ -64,7 +64,7 @@ pub struct CodexProviderSummary {
     pub is_default: bool,
     pub configured: bool,
     pub transport_mode: String,
-    pub current_revision_id: String,
+    pub current_revision_id: Option<String>,
     pub locked_by_instances: Vec<String>,
 }
 

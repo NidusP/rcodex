@@ -16,6 +16,10 @@ import {
   type WorkspaceInstanceTab,
 } from "../../workspace-surface";
 import { HintedButton } from "../hinted-button";
+import { useAppState } from "../app-state";
+import { isModelExposed } from "../../model-exposure";
+import { compareWorkspaceOrder } from "../../workspace-order";
+import { WorkspaceDeleteDialog } from "../workspace-delete";
 import {
   buildDiscoveredModelOptions,
 } from "../../workspace-model-selection";
@@ -67,18 +71,18 @@ function IsolatedAppBody({
   onLaunchCli,
   onToggleModel,
   onAddProvider,
+  onAddProviderToNewWorkspace,
   onRemoveProvider,
   onDefaultModelChange,
   onLoginProviderChange,
   onOpenUtility,
+  onOpenAddProvider,
   onOpenDefaultCodex,
   onOpenCodexHome,
-  onSyncResult,
   onTestProvider,
   onReorderChannels,
   onSelectInstance,
   onCreateInstance,
-  onRenameInstance,
   instances,
   onStopInstance,
 }: {
@@ -97,6 +101,7 @@ function IsolatedAppBody({
     upstreamModelId: string,
   ) => void;
   onAddProvider: (preset: LaunchPresetSummary, providerId: string) => void;
+  onAddProviderToNewWorkspace: (providerId: string) => void;
   onRemoveProvider: (preset: LaunchPresetSummary, providerId: string) => void;
   onDefaultModelChange: (preset: LaunchPresetSummary, modelId: string) => void;
   onLoginProviderChange: (
@@ -104,65 +109,128 @@ function IsolatedAppBody({
     providerId: string,
   ) => void;
   onOpenUtility: (view: UtilityDrawerView, preset?: LaunchPresetSummary) => void;
+  onOpenAddProvider: () => void;
   onOpenInstances: (preset: LaunchPresetSummary) => void;
   onOpenDefaultCodex: () => void;
   onOpenCodexHome: (preset: LaunchPresetSummary) => void;
-  onSyncResult: (message: string) => void;
   onTestProvider: (providerId: string) => void;
   onReorderChannels: (
     preset: LaunchPresetSummary,
     providerIds: string[],
   ) => void;
-  onSelectInstance: (preset: LaunchPresetSummary) => void;
-  onCreateInstance: (preset?: LaunchPresetSummary) => Promise<string | null>;
-  onRenameInstance: (preset: LaunchPresetSummary, name: string) => void;
+  onSelectInstance: (preset: LaunchPresetSummary) => Promise<boolean>;
+  onCreateInstance: () => Promise<string | null>;
   instances: RuntimeInstanceSummary[];
   onStopInstance: (instance: RuntimeInstanceSummary) => void;
 }) {
+  const { exposuresByProvider, exposureErrorsByProvider, deleteManagedWorkspace } = useAppState();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<LaunchPresetSummary | null>(null);
   const workspaces = presets.filter(
     (candidate) => candidate.entryKind === "managed_app",
-  );
+  ).sort(compareWorkspaceOrder);
   const preset =
     workspaces.find((candidate) => candidate.id === selectedId) ??
     workspaces.find((candidate) => candidate.isPreferred) ??
     workspaces[0];
+  const availableChannelChoices: WorkspaceChannelChoice[] = providers
+    .filter((provider) => !preset?.providerIds.includes(provider.id))
+    .sort((left, right) => compareModelSortText(left.name, right.name))
+    .map((provider) => {
+      const report = connectivityByProvider[provider.id];
+      const protocolConfirmed =
+        report?.wireApi === "responses" || report?.wireApi === "chat_completions";
+      const exposedCount = (exposuresByProvider[provider.id] ?? []).filter((model) => model.exposed && isWorkspaceSelectableModelId(model.upstreamModelId)).length;
+      const exposureError = exposureErrorsByProvider[provider.id];
+      const selectable = provider.configured && protocolConfirmed && !exposureError && exposedCount > 0;
+      return {
+        id: provider.id,
+        label: provider.name,
+        host: providerHost(provider.baseUrl),
+        statusLabel: report
+          ? connectivityLabels[report.status]
+          : provider.configured
+            ? "未检测"
+            : "未配置",
+        discoveredModelCount: exposedCount,
+        protocolLabel: protocolText(report?.wireApi),
+        usageLabel: usageObservationLabel(
+          provider.transportMode,
+          usageByProvider[provider.id],
+        ),
+        disabled: !selectable,
+        disabledReason: !provider.configured
+          ? "请先补全此模型渠道的 API Key。"
+          : !protocolConfirmed
+            ? "请先检测此模型渠道并确认支持的协议。"
+            : exposureError
+              ? exposureError
+              : exposuresByProvider[provider.id] === undefined
+                ? "正在读取模型透出状态。"
+                : exposedCount === 0
+                  ? "请先在模型渠道中选择要透出的模型。"
+                  : undefined,
+      };
+    });
   const creating = pendingKey("preset:create");
-  const instanceTabs: WorkspaceInstanceTab[] = workspaces.map((workspace, index) => {
+  const deleting = Boolean(deleteTarget && pendingKey(`workspace:delete:${deleteTarget.id}`));
+  const deletionReason = (workspace: LaunchPresetSummary | null | undefined) => {
+    if (!workspace) return "当前没有可删除的隔离空间。";
+    if (instances.some((instance) => instance.launchPresetId === workspace.id && isActiveInstanceState(instance.state))) return "请先停止此空间的所有 App 和 CLI 实例，并核验已退出，再删除空间。";
+    if (pendingKey(`workspace:delete:${workspace.id}`)) return "正在删除此隔离空间，请等待完成。";
+    if (pendingKey(`preset:${workspace.id}`) || creating || switching) return "正在更新隔离空间，请稍候。";
+    return undefined;
+  };
+  const instanceTabs: WorkspaceInstanceTab[] = workspaces.map((workspace) => {
+    const running = instances.some(
+      (instance) =>
+        instance.launchPresetId === workspace.id &&
+        isManagedAppTarget(instance.launchTarget) &&
+        isActiveInstanceState(instance.state),
+    );
+    const deleteReason = deletionReason(workspace);
     return {
       id: workspace.id,
-      label:
-        workspace.name === "R Codex"
-          ? index === 0
-            ? "独立隔离空间"
-            : `独立隔离空间 ${index + 1}`
-          : workspace.name,
+      label: workspace.name,
+      running,
+      deleteDisabled: Boolean(deleteReason),
+      deleteReason,
     };
   });
+  const atWorkspaceLimit = workspaces.length >= 5;
   const instanceCardProps = {
     instances: instanceTabs,
     selectedInstanceId: preset?.id ?? "",
-    createDisabled: creating,
-    createReason: creating ? "正在新增实例，请稍候。" : undefined,
+    createDisabled: creating || atWorkspaceLimit || deleting || switching,
+    tabsDisabled: creating || deleting || switching,
+    onDeleteInstance: (id: string) => {
+      const target = workspaces.find((candidate) => candidate.id === id);
+      if (!target || deletionReason(target)) return;
+      setDeleteTarget(target);
+    },
+    createReason: deleting || switching
+      ? "正在处理隔离空间，请稍候。"
+      : creating
+      ? "正在新增隔离空间，请稍候。"
+      : atWorkspaceLimit
+        ? "最多只能创建 5 个隔离空间。"
+        : undefined,
     onSelectInstance: (id: string) => {
       const next = workspaces.find((candidate) => candidate.id === id);
-      if (!next) return;
+      if (!next || switching || deleting || id === preset?.id) return;
+      const previousId = preset?.id ?? null;
       setSelectedId(id);
-      onSelectInstance(next);
+      setSwitching(true);
+      void onSelectInstance(next).then((saved) => {
+        if (!saved) setSelectedId(previousId);
+      }).catch(() => setSelectedId(previousId)).finally(() => setSwitching(false));
     },
     onCreateInstance: () => {
-      void onCreateInstance(preset).then((id) => {
+      void onCreateInstance().then((id) => {
         if (id) setSelectedId(id);
       });
     },
-    onRenameInstance: (id: string, name: string) => {
-      const next = workspaces.find((candidate) => candidate.id === id);
-      if (next) onRenameInstance(next, name);
-    },
-    onRenameBlocked: () =>
-      onSyncResult("当前不能修改实例名称。"),
-    onRenameInvalid: () =>
-      onSyncResult("实例名称不能为空，最长 80 字节，也不能包含控制字符。"),
   };
   const missingInstanceReason = preset
     ? undefined
@@ -225,6 +293,20 @@ function IsolatedAppBody({
       >
         <AppWindow size={18} aria-hidden="true" />
       </HintedButton>
+      {deleteTarget ? (
+        <WorkspaceDeleteDialog
+          key={deleteTarget.id}
+          workspace={deleteTarget}
+          busy={deleting}
+          blockedReason={deleting ? undefined : deletionReason(deleteTarget)}
+          onClose={() => { if (!deleting) setDeleteTarget(null); }}
+          onConfirm={async () => {
+            const result = await deleteManagedWorkspace(deleteTarget);
+            setSelectedId(result.selectedPresetId);
+            setDeleteTarget(null);
+          }}
+        />
+      ) : null}
     </>
   );
   if (!preset)
@@ -233,7 +315,7 @@ function IsolatedAppBody({
         <ChannelWorkspaceCard
           configured={false}
           rows={[]}
-          choices={[]}
+          choices={availableChannelChoices}
           modelOptions={[]}
           defaultModelId=""
           loginProviderId=""
@@ -241,14 +323,16 @@ function IsolatedAppBody({
           loading={creating}
           launchDisabled
           launchReason="请先配置模型渠道和模型。"
-          configureDisabled={false}
+          configureDisabled={creating}
+          configureReason={creating ? "正在配置隔离工作区，请稍候。" : undefined}
           cliDisabled
           cliReason="请先配置模型渠道和模型。"
           testingChannelId={null}
           onOpenChannels={() => onOpenUtility("credentials")}
           onToggleModel={() => undefined}
           moreActions={spaceActions}
-          onAddChannel={() => undefined}
+          onAddChannel={onAddProviderToNewWorkspace}
+          onOpenAddProvider={onOpenAddProvider}
           onRemoveChannel={() => undefined}
           onDefaultModelChange={() => undefined}
           onLoginProviderChange={() => undefined}
@@ -275,7 +359,7 @@ function IsolatedAppBody({
         isWorkspaceSelectableModelId(model.publicModelId),
     )?.publicModelId ?? visibleModels[0]?.publicModelId ?? "";
   const modelCount = visibleModels.length;
-  const cardLoading = pendingKey(`preset:${preset.id}`) || creating;
+  const cardLoading = pendingKey(`preset:${preset.id}`) || creating || deleting || switching;
   const runningApp = instances.find(
     (instance) =>
       instance.launchPresetId === preset.id &&
@@ -287,7 +371,10 @@ function IsolatedAppBody({
       (runningApp.state === "stopping" ||
         pendingKey("instance:" + runningApp.id)),
   );
-  const launchReason = cardLoading
+  const exposureReadError = preset.providerIds.some((id) => exposureErrorsByProvider[id]);
+  const launchReason = exposureReadError
+    ? "模型透出状态读取失败，请在模型渠道中重试读取。"
+    : cardLoading
     ? "正在更新工作区，请稍候。"
     : modelCount === 0
       ? "请先为这个启动入口选择至少一个模型。"
@@ -312,7 +399,7 @@ function IsolatedAppBody({
         providerName: source?.name ?? "模型渠道",
         models: selectableProviderModels(
           connectivityByProvider[id]?.models ?? [],
-        ).map((model) => ({
+        ).filter((model) => isModelExposed(exposuresByProvider, id, model.upstreamModelId)).map((model) => ({
           upstreamModelId: model.upstreamModelId,
           displayName: model.displayName,
           ownedBy: model.ownedBy,
@@ -386,59 +473,34 @@ function IsolatedAppBody({
           upstreamModelId: model.upstreamModelId,
           label: model.displayName || model.upstreamModelId,
         })),
-      probed: Boolean(report),
-      modelChoices:
-        report?.wireApi === "responses" || report?.wireApi === "chat_completions"
-          ? discoveredOptions
-              .filter((option) => option.providerId === providerId)
-              .map((option) => ({
-                upstreamModelId: option.upstreamModelId,
-                label: option.displayLabel,
-                detail: [
-                  option.upstreamModelId,
-                  option.ownedBy,
-                  option.duplicate ? "同名模型已按渠道区分" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · "),
-                selected: preset.models.some(
-                  (model) =>
-                    model.sourceKind === "api_provider" &&
-                    model.sourceId === providerId &&
-                    model.upstreamModelId === option.upstreamModelId,
-                ),
-              }))
-          : [],
+      probed: Boolean(report) || models.length > 0,
+      modelSelectionHint: exposureErrorsByProvider[providerId]
+        ?? (exposuresByProvider[providerId] === undefined
+          ? "正在读取模型透出状态。"
+          : !(exposuresByProvider[providerId] ?? []).some((model) => model.exposed)
+            ? "请先在模型渠道中选择要透出的模型。"
+            : undefined),
+      modelChoices: [
+        ...(report?.wireApi === "responses" || report?.wireApi === "chat_completions"
+          ? discoveredOptions.filter((option) => option.providerId === providerId).map((option) => ({
+              upstreamModelId: option.upstreamModelId,
+              label: option.displayLabel,
+              detail: [option.upstreamModelId, option.ownedBy, option.duplicate ? "同名模型已按渠道区分" : ""].filter(Boolean).join(" · "),
+              selected: models.some((model) => model.upstreamModelId === option.upstreamModelId),
+            }))
+          : []),
+        ...models.filter((model) => !discoveredOptions.some((option) => option.providerId === providerId && option.upstreamModelId === model.upstreamModelId)
+          || !(report?.wireApi === "responses" || report?.wireApi === "chat_completions"))
+          .map((model) => ({
+            upstreamModelId: model.upstreamModelId,
+            label: model.displayName || model.upstreamModelId,
+            detail: "当前空间已保存的模型；取消勾选可将它移出空间。",
+            selected: true,
+          })),
+      ],
       recover: health.recover,
     };
   });
-  const choices: WorkspaceChannelChoice[] = providers
-    .filter((provider) => !preset.providerIds.includes(provider.id))
-    .filter((provider) => {
-      const wireApi = connectivityByProvider[provider.id]?.wireApi;
-      return wireApi === "responses" || wireApi === "chat_completions";
-    })
-    .sort((left, right) => compareModelSortText(left.name, right.name))
-    .map((provider) => {
-      const report = connectivityByProvider[provider.id];
-      return {
-        id: provider.id,
-        label: provider.name,
-        host: providerHost(provider.baseUrl),
-        statusLabel: report
-          ? connectivityLabels[report.status]
-          : provider.configured
-            ? "未检测"
-            : "未配置",
-        discoveredModelCount: visibleProviderModels(report?.models ?? [])
-          .length,
-        protocolLabel: protocolText(report?.wireApi),
-        usageLabel: usageObservationLabel(
-          provider.transportMode,
-          usageByProvider[provider.id],
-        ),
-      };
-    });
   const modelOptions = visibleModels.map((model) => ({
     id: model.publicModelId,
     label: qualifiedModelLabel(model, providers, accounts),
@@ -452,7 +514,7 @@ function IsolatedAppBody({
       <ChannelWorkspaceCard
         configured
         rows={rows}
-        choices={choices}
+        choices={availableChannelChoices}
         modelOptions={modelOptions}
         defaultModelId={configuredDefaultModelId}
         loginProviderId={preset.loginProviderId ?? ""}
@@ -476,6 +538,7 @@ function IsolatedAppBody({
         }
         moreActions={spaceActions}
         onAddChannel={(providerId) => onAddProvider(preset, providerId)}
+        onOpenAddProvider={onOpenAddProvider}
         onRemoveChannel={(providerId) => onRemoveProvider(preset, providerId)}
         onDefaultModelChange={(modelId) =>
           onDefaultModelChange(preset, modelId)

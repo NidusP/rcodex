@@ -94,7 +94,7 @@ export function catalogModelPurpose(modelId: string) {
   if (kind === "image_generation") {
     return "图像生成模型，走单独的生图接口，不是对话模型。不会显示在工作区勾选中，也不会进入 Codex 模型目录。";
   }
-  return "对话模型。可以在工作区勾选，启动后显示在 Codex 模型目录。";
+  return "对话模型。勾选透出后可加入隔离空间，启动后显示在 Codex 模型目录。";
 }
 
 /** 探测结果里图像生成模型的一句汇总。没有这类模型时返回 null。 */

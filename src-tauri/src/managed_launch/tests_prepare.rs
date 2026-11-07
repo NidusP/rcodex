@@ -35,14 +35,11 @@ fn grok_prepare_launch_uses_family_windows_when_selection_is_empty() {
         capabilities.auto_compact_token_limit,
         Some(GROK_AUTO_COMPACT_TOKEN_LIMIT)
     );
-    assert!(capabilities.supports_images);
-    assert_eq!(
-        capabilities.input_modalities,
-        vec!["text".to_string(), "image".to_string()]
-    );
+    assert!(!capabilities.supports_images);
+    assert_eq!(capabilities.input_modalities, vec!["text".to_string()]);
     let grok = catalog_model(Path::new(&prepared.route_set.catalog_path), "grok-4.6");
     assert_eq!(grok["input_modalities"][0], "text");
-    assert_eq!(grok["input_modalities"][1], "image");
+    assert_eq!(grok["input_modalities"].as_array().unwrap().len(), 1);
     assert_eq!(grok["context_window"], GROK_CONTEXT_WINDOW);
     assert_eq!(grok["max_context_window"], GROK_CONTEXT_WINDOW);
     assert_eq!(
@@ -93,7 +90,7 @@ fn unknown_family_prepare_launch_strips_cloned_gpt_windows() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: Some(EntryKind::ManagedApp.as_wire().to_string()),
             name: "Isolated".to_string(),
             official_account_id: None,
@@ -112,6 +109,8 @@ fn unknown_family_prepare_launch_strips_cloned_gpt_windows() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let fake_codex = write_fake_codex(&root, &["template", "mystery-model"]);
@@ -152,7 +151,7 @@ fn official_account_api_model_launch_binds_official_revision_in_route_set() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Hybrid launch".to_string(),
             official_account_id: Some("account-official".to_string()),
@@ -171,6 +170,8 @@ fn official_account_api_model_launch_binds_official_revision_in_route_set() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let fake_codex = root.join("fake-codex");
@@ -233,7 +234,7 @@ fn managed_app_reopens_the_same_runtime_binding_after_exit() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(single_model_preset("provider", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("provider", "deepseek-chat", None))
         .unwrap();
     let legacy_sqlite = store.managed_app_sqlite_path(&saved.id).unwrap();
     std::fs::create_dir_all(&legacy_sqlite).unwrap();
@@ -365,7 +366,7 @@ fn prepare_launch_publishes_route_set_binding_and_instance_atomically() {
     let vault = Arc::new(MemoryInstanceVault::default());
     let store = ManagedLaunchStore::for_test(database.clone(), root.clone(), vault.clone());
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "DeepSeek".to_string(),
             official_account_id: None,
@@ -384,6 +385,8 @@ fn prepare_launch_publishes_route_set_binding_and_instance_atomically() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let connection = database.connection();
@@ -563,7 +566,7 @@ fn prepare_launch_uses_gateway_when_auto_review_is_enabled() {
     let vault = Arc::new(MemoryInstanceVault::default());
     let store = ManagedLaunchStore::for_test(database.clone(), root.clone(), vault.clone());
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Direct".to_string(),
             official_account_id: None,
@@ -582,6 +585,8 @@ fn prepare_launch_uses_gateway_when_auto_review_is_enabled() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let connection = database.connection();
@@ -658,7 +663,7 @@ fn failed_cli_prepare_removes_empty_lifecycle_home() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "DeepSeek".to_string(),
             official_account_id: None,
@@ -676,6 +681,8 @@ fn failed_cli_prepare_removes_empty_lifecycle_home() {
             default_workspace_path: None,
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let missing = root.join("missing-codex");

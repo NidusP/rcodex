@@ -375,6 +375,14 @@ const legacyErrorMessages: Record<string, string> = {
   route_set_has_no_models: "请至少添加一个模型路由。",
   duplicate_model_selection: "模型路由存在重复的公共 ID 或上游来源。",
   reserved_internal_model: "Codex 内部审核/编排模型不能作为普通模型加入启动方案。",
+  workspace_delete_active_instances: "请先停止并核验此空间的全部运行实例，再删除空间。",
+  workspace_has_active_instances: "请先停止并核验此空间的全部 App 和命令行实例，再删除空间。",
+  workspace_delete_in_progress: "删除尚未完成，请重试完成删除。",
+  workspace_delete_path_invalid: "隔离数据路径归属检查失败，未能完成删除，请检查目录后重试。",
+  workspace_delete_failed: "空间数据删除未完成，请检查错误并重试。",
+  model_not_exposed: "请先在模型渠道中勾选透出该模型，再加入隔离空间。",
+  model_exposure_in_use: "请先从使用此模型的隔离空间移除它，再取消透出。",
+  model_exposure_not_allowed: "这个模型不属于可透出的普通对话模型。",
   invalid_model_window: "上下文窗口和自动压缩阈值必须是 1 到 1000000 的整数，且压缩阈值不能大于窗口。空值表示使用族默认。大于 1000000 不能保存。",
   auto_review_model_not_selected: "自动审核模型必须来自当前启动方案已经选择的普通模型。",
   auto_review_model_requires_api_provider: "自动审核模型当前只支持 API Key 模型渠道。",
@@ -445,11 +453,26 @@ function parseLegacyError(error: string): CommandError {
   const separator = error.indexOf(":");
   const code = separator === -1 ? error : error.slice(0, separator);
   const suffix = separator === -1 ? "" : error.slice(separator + 1);
+  if (code.startsWith("workspace_delete_") && !Object.hasOwn(legacyErrorMessages, code)) {
+    const reason = /path|directory|home|lifecycle|link|shared|layout/.test(code)
+      ? "隔离数据目录的归属或访问检查未通过，请检查目录后重试。"
+      : /storage|remaining/.test(code)
+        ? "隔离数据清理尚未完成，请重试完成删除。"
+        : "空间删除尚未完成，请修复问题后重试。";
+    return { code, message: suffix ? `${reason}原因：${suffix}` : reason, conflictingInstances: [] };
+  }
+  if (code.startsWith("conversation_archive_scope_") || code === "conversation_archive_invalid_reference") {
+    return { code, message: "空间请求档案的目录检查或清理未完成，请检查后重试删除。", conflictingInstances: [] };
+  }
+  if (code.startsWith("managed_path_")) {
+    return { code, message: "隔离数据目录检查未通过，为保护其他数据已停止删除。请检查目录后重试。", conflictingInstances: [] };
+  }
   if (Object.hasOwn(legacyErrorMessages, code)) {
     const conflictingInstances = code === "configuration_in_use"
       ? suffix.split(",").map((instanceId) => instanceId.trim()).filter(Boolean).map((instanceId) => ({ instanceId, state: "running" as const }))
       : [];
-    return { code, message: legacyErrorMessages[code], conflictingInstances };
+    const message = (code === "model_exposure_in_use" || code.startsWith("workspace_delete")) && suffix ? `${legacyErrorMessages[code]}${code === "model_exposure_in_use" ? "使用中的空间：" : "原因："}${suffix}` : legacyErrorMessages[code];
+    return { code, message, conflictingInstances };
   }
   return { code: "legacy_command_failed", message: error, conflictingInstances: [] };
 }

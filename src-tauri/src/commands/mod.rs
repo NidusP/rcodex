@@ -9,18 +9,22 @@ mod diagnostics;
 mod gateway;
 mod instances;
 mod launch;
+mod model_exposure;
 mod official;
 mod providers;
 mod system;
+mod workspaces;
 
 pub(crate) use archive::*;
 pub(crate) use diagnostics::*;
 pub(crate) use gateway::*;
 pub(crate) use instances::*;
 pub(crate) use launch::*;
+pub(crate) use model_exposure::*;
 pub(crate) use official::*;
 pub(crate) use providers::*;
 pub(crate) use system::*;
+pub(crate) use workspaces::*;
 
 /// A launch must not prepare or reopen the target while an import owns its files.
 pub(crate) static CODEX_LAUNCH_IMPORT_LOCK: tokio::sync::Mutex<()> =

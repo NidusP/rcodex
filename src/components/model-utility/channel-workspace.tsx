@@ -26,7 +26,6 @@ import {
 } from "../../codex-control";
 import {
   catalogModelKind,
-  catalogModelPurpose,
   connectivityLabels,
   hiddenCodexRoleModelCount,
   hiddenCodexRoleModelNote,
@@ -37,6 +36,7 @@ import {
 } from "../model-labels";
 import { usageObservationLabel } from "../../workspace-surface";
 import { AddChannelDialog } from "./add-channel-dialog";
+import { ProviderModelExposureList } from "./provider-model-exposure-list";
 import { HintedButton } from "../hinted-button";
 import { ControlDialog } from "../control-dialog";
 import { ControlDrawer } from "./drawer-layout";
@@ -144,7 +144,7 @@ function ConnectivityPanel({
       </div>
       {visibleModels.length > 0 && (
         <div className="discovered-model-summary">
-          <strong>已发现 {visibleModels.length} 个可选模型</strong>
+          <strong>已发现 {visibleModels.length} 个对话模型</strong>
           <div>
             {visibleModels.slice(0, 8).map((model) => (
               <span key={model.upstreamModelId} title={model.upstreamModelId}>
@@ -326,32 +326,12 @@ export function ProviderModelCatalogDrawer({
             <span className="mode-pill">{protocolText(report.wireApi)}</span>
           </div>
           <p className="drawer-intro">
-            这是最近一次检测保存的 /models 快照。查看不会访问上游、读取 API Key
-            或修改工作区。对话模型可以在工作区勾选，启动后显示在 Codex
-            模型目录。图像生成模型（例如
-            grok-imagine-image-2.0）走单独的生图接口，不会显示在工作区勾选中。Codex
-            系统角色用于自动审核或子代理，也不会进入普通模型目录。
+            勾选「透出」后，模型才可加入隔离空间。首次勾选会发送一次小图片请求来检测看图能力，可能产生少量费用；检测失败仍可作为文本模型使用。
+            取消后重新勾选会复用检测结果，只有点击刷新图片探针才会再次请求。更新渠道目录不会触发图片检测。
+            图像生成模型和 Codex 系统角色不进入普通对话目录。
           </p>
-          {models.length > 0 ? (
-            <div
-              className="provider-model-catalog-list"
-              aria-label={provider.name + " 支持的模型列表"}
-            >
-              {models.map((model) => (
-                <div
-                  className="provider-model-catalog-row"
-                  key={model.upstreamModelId}
-                >
-                  <strong>{model.displayName || model.upstreamModelId}</strong>
-                  <code>{model.upstreamModelId}</code>
-                  <small>{catalogModelPurpose(model.upstreamModelId)}</small>
-                  {model.ownedBy && <small>{model.ownedBy}</small>}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-detail">最近一次检测没有读到模型</p>
-          )}
+          <ProviderModelExposureList provider={provider} models={models} wireApi={report.wireApi} />
+          {models.length === 0 ? <p className="empty-detail">最近一次检测没有读到模型</p> : null}
           <small className="provider-model-catalog-meta">
             {"快照时间：" + formatTime(report.checkedAt)}
             {report.errorCode ? " · 最近错误：" + report.errorCode : ""}

@@ -109,7 +109,7 @@ fn model_reasoning_contract_is_validated_and_persisted_per_provider_model() {
     );
     let mut preset = grok_preset("relay", None, None);
     preset.models[0] = model;
-    let saved = store.create_preset(preset).unwrap();
+    let saved = store.create_exposed_test_preset(preset).unwrap();
     let composition = store
         .compositions()
         .unwrap()
@@ -138,7 +138,7 @@ fn create_preset_persists_nullable_window_overrides() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(grok_preset("relay", Some(200_000), Some(180_000)))
+        .create_exposed_test_preset(grok_preset("relay", Some(200_000), Some(180_000)))
         .unwrap();
     let composition = store
         .compositions()
@@ -152,7 +152,7 @@ fn create_preset_persists_nullable_window_overrides() {
         Some(180_000)
     );
     let cleared = store
-        .create_preset(grok_preset("relay", None, None))
+        .create_exposed_test_preset(grok_preset("relay", None, None))
         .unwrap();
     let composition = store
         .compositions()
@@ -184,7 +184,7 @@ fn create_preset_rejects_invalid_window_overrides() {
     ] {
         assert_eq!(
             store
-                .create_preset(grok_preset(
+                .create_exposed_test_preset(grok_preset(
                     "relay",
                     context_window,
                     auto_compact_token_limit
@@ -216,7 +216,7 @@ fn initial_workspace_seed_is_idempotent_and_preserves_configured_workspace() {
     assert!(initial[0].models.is_empty());
 
     let configured = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: Some(EntryKind::ManagedApp.as_wire().to_string()),
             name: "R Codex".to_string(),
             official_account_id: None,
@@ -235,6 +235,8 @@ fn initial_workspace_seed_is_idempotent_and_preserves_configured_workspace() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     assert_eq!(configured.id, initial[0].launch_preset_id);
@@ -247,6 +249,42 @@ fn initial_workspace_seed_is_idempotent_and_preserves_configured_workspace() {
     assert_eq!(after_repeat[0].api_key_provider_ids, vec!["relay"]);
 
     assert_eq!(after_repeat[0].models[0].public_model_id, "deepseek-chat");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn initial_workspace_is_renamed_to_isolated_space_a_without_replacing_data() {
+    let database = Database::in_memory();
+    let root = std::env::temp_dir().join(format!("rcodex-initial-name-{}", Uuid::new_v4()));
+    let store = ManagedLaunchStore::for_test(
+        database.clone(),
+        root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    store.ensure_initial_workspace().unwrap();
+    let connection = database.connection();
+    let connection = connection.lock().unwrap();
+    let (id, name): (String, String) = connection
+        .query_row(
+            "SELECT id, name FROM launch_presets WHERE entry_kind='managed_app' AND deleted_at IS NULL",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(name, "隔离空间 A");
+    drop(connection);
+    store.ensure_initial_workspace().unwrap();
+    let connection = database.connection();
+    let connection = connection.lock().unwrap();
+    let repeated_id: String = connection
+        .query_row(
+            "SELECT id FROM launch_presets WHERE entry_kind='managed_app' AND deleted_at IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(repeated_id, id);
+    drop(connection);
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -270,7 +308,7 @@ fn unconfirmed_provider_cannot_join_workspace() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let error = store
-        .create_preset(single_model_preset("relay", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("relay", "deepseek-chat", None))
         .unwrap_err();
     assert_eq!(error, "protocol_unconfirmed");
     let _ = std::fs::remove_dir_all(root);
@@ -288,7 +326,7 @@ fn official_account_can_be_combined_with_api_models() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Official identity + API models".to_string(),
             official_account_id: Some("account-official".to_string()),
@@ -307,6 +345,8 @@ fn official_account_can_be_combined_with_api_models() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let composition = store
@@ -340,11 +380,11 @@ fn managed_preset_write_updates_the_single_primary_workspace() {
     );
 
     let first = store
-        .create_preset(single_model_preset("provider-a", "model-a", None))
+        .create_exposed_test_preset(single_model_preset("provider-a", "model-a", None))
         .unwrap();
     let mut second_input = single_model_preset("provider-b", "model-b", None);
     second_input.name = "主工作区".to_string();
-    let second = store.create_preset(second_input).unwrap();
+    let second = store.create_exposed_test_preset(second_input).unwrap();
 
     assert_eq!(first.id, second.id);
     assert_eq!(second.version, 2);
@@ -380,15 +420,26 @@ fn create_new_managed_preset_inserts_an_additional_workspace() {
     );
 
     let first = store
-        .create_preset(single_model_preset("provider-a", "model-a", None))
+        .create_exposed_test_preset(single_model_preset("provider-a", "model-a", None))
         .unwrap();
     let mut second_input = single_model_preset("provider-b", "model-b", None);
     second_input.name = "实例 2".to_string();
     second_input.create_new = true;
-    let second = store.create_preset(second_input).unwrap();
+    let second = store.create_exposed_test_preset(second_input).unwrap();
 
     assert_ne!(first.id, second.id);
     assert_eq!(second.version, 1);
+    let connection = database.connection();
+    let connection = connection.lock().unwrap();
+    let second_name: String = connection
+        .query_row(
+            "SELECT name FROM launch_presets WHERE id=?1",
+            [&second.id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(second_name, "隔离空间 B");
+    drop(connection);
     let compositions = store.compositions().unwrap();
     assert_eq!(compositions.len(), 2);
     let second_composition = compositions
@@ -399,6 +450,90 @@ fn create_new_managed_preset_inserts_an_additional_workspace() {
     let selected = store.select_preset(&first.id).unwrap();
     assert_eq!(selected.id, first.id);
     assert_eq!(selected.version, first.version);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn new_workspace_copies_explicit_login_provider_and_stops_at_five() {
+    let database = Database::in_memory();
+    seed_provider(&database, "provider-a", "provider-a-r1", "responses");
+    seed_provider(&database, "provider-b", "provider-b-r1", "responses");
+    let root = std::env::temp_dir().join(format!("rcodex-workspace-limit-{}", Uuid::new_v4()));
+    let store = ManagedLaunchStore::for_test(
+        database.clone(),
+        root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    let mut first_input = single_model_preset("provider-a", "model-a", None);
+    first_input
+        .api_key_provider_ids
+        .push("provider-b".to_string());
+    let first = store.create_exposed_test_preset(first_input).unwrap();
+    let first_id = first.id.clone();
+    store
+        .set_managed_login_provider(&first.id, first.version, Some("provider-b"))
+        .unwrap();
+    let composition = store
+        .compositions()
+        .unwrap()
+        .into_iter()
+        .find(|item| item.launch_preset_id == first_id)
+        .unwrap();
+    assert_eq!(
+        composition.api_key_provider_ids,
+        vec!["provider-a", "provider-b"]
+    );
+
+    for _ in 0..4 {
+        let mut input = single_model_preset("provider-a", "model-a", None);
+        input.api_key_provider_ids.push("provider-b".to_string());
+        input.create_new = true;
+        input.source_preset_id = Some(first_id.clone());
+        input.login_provider_id = Some("provider-b".to_string());
+        let saved = store.create_exposed_test_preset(input).unwrap();
+        let profile_options: String = database
+            .connection()
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT profile_options FROM launch_presets WHERE id=?1",
+                [&saved.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            login_provider_id_from_profile_options(&profile_options).as_deref(),
+            Some("provider-b")
+        );
+    }
+    let mut sixth = single_model_preset("provider-a", "model-a", None);
+    sixth.api_key_provider_ids.push("provider-b".to_string());
+    sixth.create_new = true;
+    sixth.login_provider_id = Some("provider-b".to_string());
+    assert_eq!(
+        store.create_exposed_test_preset(sixth).unwrap_err(),
+        "managed_app_limit_reached"
+    );
+    let names: Vec<String> = database
+        .connection()
+        .lock()
+        .unwrap()
+        .prepare("SELECT name FROM launch_presets WHERE entry_kind='managed_app' AND deleted_at IS NULL ORDER BY created_at")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(
+        names,
+        vec![
+            "隔离空间 A",
+            "隔离空间 B",
+            "隔离空间 C",
+            "隔离空间 D",
+            "隔离空间 E"
+        ]
+    );
     let _ = std::fs::remove_dir_all(root);
 }
 
@@ -414,7 +549,7 @@ fn managed_preset_persists_multiple_providers_and_stable_models() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "DeepSeek + Grok".to_string(),
             official_account_id: None,
@@ -443,6 +578,8 @@ fn managed_preset_persists_multiple_providers_and_stable_models() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let composition = store
@@ -503,7 +640,7 @@ fn workspace_edits_apply_on_next_launch_while_instance_is_running() {
     );
     let mut input = single_model_preset("first", "deepseek-chat", None);
     input.api_key_provider_ids.push("second".to_string());
-    let saved = store.create_preset(input).unwrap();
+    let saved = store.create_exposed_test_preset(input).unwrap();
     {
         let connection = database.connection();
         let connection = connection.lock().unwrap();
@@ -550,7 +687,7 @@ fn workspace_edits_apply_on_next_launch_while_instance_is_running() {
     }
     let mut next = single_model_preset("second", "deepseek-chat", None);
     next.launch_preset_id = Some(saved.id.clone());
-    let updated = store.create_preset(next).unwrap();
+    let updated = store.create_exposed_test_preset(next).unwrap();
     assert_eq!(updated.id, saved.id);
     assert!(updated.version > saved.version);
     let login = store
@@ -573,7 +710,7 @@ fn login_selection_is_versioned_and_cleared_when_channel_is_removed() {
     );
     let mut input = single_model_preset("first", "deepseek-chat", None);
     input.api_key_provider_ids.push("second".to_string());
-    let saved = store.create_preset(input).unwrap();
+    let saved = store.create_exposed_test_preset(input).unwrap();
     assert_eq!(
         store
             .set_managed_login_provider(&saved.id, saved.version, Some("outside"))
@@ -604,7 +741,7 @@ fn login_selection_is_versioned_and_cleared_when_channel_is_removed() {
     };
     assert_eq!(read_selection().as_deref(), Some("second"));
     let removed = store
-        .create_preset(single_model_preset("first", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("first", "deepseek-chat", None))
         .unwrap();
     assert_eq!(removed.id, saved.id);
     assert!(removed.version > selected.version);
@@ -634,12 +771,12 @@ fn adding_a_channel_keeps_the_existing_login_and_default_model() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(single_model_preset("first", "deepseek-chat", None))
+        .create_exposed_test_preset(single_model_preset("first", "deepseek-chat", None))
         .unwrap();
     let mut added = single_model_preset("first", "deepseek-chat", None);
     added.launch_preset_id = Some(saved.id.clone());
     added.api_key_provider_ids.insert(0, "second".to_string());
-    let updated = store.create_preset(added).unwrap();
+    let updated = store.create_exposed_test_preset(added).unwrap();
     assert_eq!(updated.id, saved.id);
     let connection = database.connection();
     let connection = connection.lock().unwrap();
@@ -696,7 +833,7 @@ fn managed_preset_qualifies_public_id_when_another_provider_owns_it() {
     );
 
     store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Relay workspace".to_string(),
             official_account_id: None,
@@ -715,11 +852,13 @@ fn managed_preset_qualifies_public_id_when_another_provider_owns_it() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
 
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Grok workspace".to_string(),
             official_account_id: None,
@@ -738,6 +877,8 @@ fn managed_preset_qualifies_public_id_when_another_provider_owns_it() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let composition = store
@@ -761,7 +902,7 @@ fn managed_preset_can_remove_last_provider_without_invalid_credentials_error() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let initial = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: Some(EntryKind::ManagedApp.as_wire().to_string()),
             name: "R Codex".to_string(),
             official_account_id: None,
@@ -780,11 +921,13 @@ fn managed_preset_can_remove_last_provider_without_invalid_credentials_error() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
 
     let updated = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: Some(EntryKind::ManagedApp.as_wire().to_string()),
             name: "R Codex".to_string(),
             official_account_id: None,
@@ -796,6 +939,8 @@ fn managed_preset_can_remove_last_provider_without_invalid_credentials_error() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
 
@@ -825,7 +970,7 @@ fn managed_preset_can_start_with_provider_and_no_model_selection() {
     );
 
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: Some(EntryKind::ManagedApp.as_wire().to_string()),
             name: "R Codex".to_string(),
             official_account_id: None,
@@ -837,6 +982,8 @@ fn managed_preset_can_start_with_provider_and_no_model_selection() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
 
@@ -864,7 +1011,7 @@ fn auto_review_role_persists_and_forces_gateway_for_direct_provider() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(single_model_preset(
+        .create_exposed_test_preset(single_model_preset(
             "grok",
             "grok-4.6-latest",
             Some("grok-4.6-latest"),
@@ -911,7 +1058,7 @@ fn auto_review_role_rejects_unselected_and_chat_only_models() {
     );
     assert_eq!(
         store
-            .create_preset(single_model_preset(
+            .create_exposed_test_preset(single_model_preset(
                 "responses",
                 "grok-4.6-latest",
                 Some("other-model"),
@@ -921,7 +1068,7 @@ fn auto_review_role_rejects_unselected_and_chat_only_models() {
     );
     assert_eq!(
         store
-            .create_preset(single_model_preset(
+            .create_exposed_test_preset(single_model_preset(
                 "chat",
                 "grok-4.6-latest",
                 Some("grok-4.6-latest"),
@@ -944,7 +1091,7 @@ fn multiple_direct_providers_always_use_gateway_transport() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Multiple Direct Providers".to_string(),
             official_account_id: None,
@@ -973,6 +1120,8 @@ fn multiple_direct_providers_always_use_gateway_transport() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     assert_eq!(
@@ -994,7 +1143,7 @@ fn same_upstream_model_across_providers_requires_distinct_public_routes() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "同名模型分流".to_string(),
             official_account_id: None,
@@ -1023,6 +1172,8 @@ fn same_upstream_model_across_providers_requires_distinct_public_routes() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap();
     let composition = store
@@ -1076,7 +1227,7 @@ fn model_source_must_belong_to_the_preset() {
         Arc::new(MemoryInstanceVault::default()),
     );
     let error = store
-        .create_preset(CreateManagedLaunchPresetInput {
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
             entry_kind: None,
             name: "Invalid".to_string(),
             official_account_id: None,
@@ -1095,8 +1246,54 @@ fn model_source_must_belong_to_the_preset() {
 
             create_new: false,
             launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
         })
         .unwrap_err();
     assert_eq!(error, "route_source_not_selected");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn create_new_empty_preset_starts_as_needs_model_selection() {
+    let database = Database::in_memory();
+    let root = std::env::temp_dir().join(format!("3r-workspace-empty-create-{}", Uuid::new_v4()));
+    let store = ManagedLaunchStore::for_test(
+        database.clone(),
+        root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+
+    // New workspaces start empty: the user picks channels and models. The
+    // backend marks the composition needs_model_selection until then, and the
+    // slot name is still assigned.
+    let mut input = single_model_preset("provider-a", "model-a", None);
+    input.api_key_provider_ids.clear();
+    input.models.clear();
+    input.name = "隔离空间".to_string();
+    input.entry_kind = Some(EntryKind::ManagedApp.as_wire().to_string());
+    input.create_new = true;
+    let saved = store.create_preset(input).unwrap();
+
+    assert_eq!(saved.version, 1);
+    let connection = database.connection();
+    let connection = connection.lock().unwrap();
+    let (name, preferred): (String, i64) = connection
+        .query_row(
+            "SELECT name, is_preferred FROM launch_presets WHERE id=?1",
+            [&saved.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    drop(connection);
+    assert_eq!(name, "隔离空间 A");
+    assert_eq!(preferred, 1);
+    let compositions = store.compositions().unwrap();
+    let composition = compositions
+        .iter()
+        .find(|item| item.launch_preset_id == saved.id)
+        .unwrap();
+    assert_eq!(composition.state, "needs_model_selection");
+    assert!(composition.api_key_provider_ids.is_empty());
     let _ = std::fs::remove_dir_all(root);
 }

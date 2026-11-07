@@ -38,7 +38,7 @@ function ChannelModelChoices({ row, actions }: { row: WorkspaceChannelRow; actio
     return (
       <div className="channel-row-models">
         <span className="channel-row-model-empty">
-          {row.probed ? "这次探测没有可勾选的对话模型。" : "尚未探测"}
+          {row.modelSelectionHint ?? (row.probed ? "请先在模型渠道中选择要透出的模型。" : "尚未探测")}
         </span>
         <HintedButton className="text-button" type="button" disabled={testing} onClick={() => actions.onTestChannel(row.id)}>
           刷新模型目录
@@ -48,6 +48,7 @@ function ChannelModelChoices({ row, actions }: { row: WorkspaceChannelRow; actio
   }
   return (
     <div className="channel-row-models" role="group" aria-label={row.label + " 的模型"}>
+      {row.modelSelectionHint ? <span className="channel-row-model-empty" role="status">{row.modelSelectionHint}</span> : null}
       {row.modelChoices.map((choice) => (
         <Checkbox
           key={choice.upstreamModelId}

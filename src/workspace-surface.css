@@ -14,6 +14,53 @@ min-height: 100%;
 display: flex; align-items: center; justify-content: space-between; gap: 8px;
 }
 
+.workspace-tabs {
+display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%;
+}
+
+.workspace-tabs > .rcodex-Tabs-root {
+min-width: 0; flex: 0 0 auto; overflow-x: auto;
+}
+
+.workspace-tabs-running {
+color: var(--mantine-color-green-6); font-size: .65rem; line-height: 1;
+}
+
+.workspace-tab-tools {
+display: inline-flex; align-items: center; gap: 4px;
+}
+
+/* 垃圾桶常态隐藏；仅在可删除空间的 tab 悬停时出现。不可删除空间完全隐藏。
+   Mantine 9 类名带 rcodex- 前缀，必须用 rcodex-Tabs-tab，mantine-Tabs-tab 不存在。 */
+.workspace-tab-delete {
+display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 4px; color: #789287; opacity: .55; visibility: hidden; cursor: pointer;
+}
+
+.rcodex-Tabs-tab:hover .workspace-tab-delete {
+visibility: visible;
+}
+
+.workspace-tab-delete:hover {
+opacity: 1; color: #527263; background: rgba(120, 146, 135, .14);
+}
+
+.workspace-tab-delete.is-disabled {
+display: none;
+}
+
+.workspace-tabs-create-wrap {
+display: inline-flex; flex: 0 0 auto;
+}
+
+/* 提高特异性压过 Mantine 9 的 data-variant 规则，否则 border/background 覆盖不生效。 */
+.workspace-tabs .workspace-tabs-create {
+display: inline-flex; align-items: center; justify-content: center; padding-inline: 6px; border: 0; color: var(--mantine-color-text); background: transparent;
+}
+
+.workspace-tabs .workspace-tabs-create:hover:not(:disabled) {
+background: rgba(120, 146, 135, .14);
+}
+
 .runtime-target-route-heading .provider-icon-action {
 width: 26px; height: 26px; flex-basis: 26px;
 }
@@ -210,7 +257,7 @@ flex-wrap: wrap; align-items: center; gap: 12px; padding-bottom: 8px; border-bot
 }
 
 .channel-section-title {
-display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
+display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
 }
 
 .channel-add-trigger small,
@@ -288,6 +335,18 @@ background: #d4534a;
 
 .channel-add-menu i[data-tone="无法连接"] {
 background: var(--mantine-color-yellow-6);
+}
+
+.channel-add-menu i[data-tone="不可用"] {
+background: #d4534a;
+}
+
+.channel-add-menu small[data-tone="不可用"] {
+color: #b04c44;
+}
+
+.channel-add-menu .disabled-hint {
+display: block; width: 100%;
 }
 
 .channel-add-menu small {

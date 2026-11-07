@@ -239,6 +239,14 @@ fn explicit_projectless_flag_is_kept_and_unused_home_skips_welcome() {
         unused_state["electron-persisted-atom-state"]["electron:onboarding-projectless-completed"],
         true
     );
+    let unused_config: toml::Table = fs::read_to_string(unused_managed.join("config.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        unused_config["features"]["multi_agent_v2"].as_bool(),
+        Some(true)
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

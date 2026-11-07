@@ -15,9 +15,7 @@ use crate::database::{
 use crate::secrets::{validate_api_key, ApiKeyVault};
 use crate::support::unix_now_seconds;
 
-use super::models::{
-    CreateProviderInput, ProviderSummary, UpdateProviderInput, PROVIDER_RECORD_COLUMNS,
-};
+use super::models::{CreateProviderInput, ProviderSummary, TransportMode, UpdateProviderInput};
 use super::operations::{
     command_error_string, provider_operation_resources, revision_secret_ref,
     save_gateway_timeout_in_transaction, validate_gateway_timeout, validate_name, wire_api,
@@ -47,27 +45,46 @@ impl ProviderStore {
         Self::from_database(database, vault).unwrap()
     }
     pub fn list(&self) -> Result<Vec<ProviderSummary>, String> {
-        let records = self.records(
-            &format!(
-                "SELECT {PROVIDER_RECORD_COLUMNS} FROM api_key_providers
-             WHERE current_revision_id IS NOT NULL
-             ORDER BY is_default DESC, created_at ASC"
-            ),
-            [],
-        )?;
-        records
-            .into_iter()
-            .map(|record| {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "本地数据库锁已损坏。".to_string())?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, name, base_url, is_default, transport_mode, configured
+                 FROM api_key_providers
+                 WHERE current_revision_id IS NOT NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM launch_preset_api_providers binding
+                        JOIN launch_presets workspace
+                          ON workspace.id = binding.launch_preset_id
+                        WHERE binding.provider_id = api_key_providers.id
+                          AND workspace.deleted_at IS NULL
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM launch_presets workspace
+                        WHERE workspace.api_key_provider_id = api_key_providers.id
+                          AND workspace.deleted_at IS NULL
+                    )
+                 ORDER BY is_default DESC, created_at ASC",
+            )
+            .map_err(|error| error.to_string())?;
+        let providers = statement
+            .query_map([], |row| {
                 Ok(ProviderSummary {
-                    configured: record.configured,
-                    id: record.id,
-                    name: record.name,
-                    base_url: record.base_url,
-                    is_default: record.is_default,
-                    transport_mode: record.transport_mode,
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    base_url: row.get(2)?,
+                    is_default: row.get(3)?,
+                    transport_mode: TransportMode::from_db(row.get(4)?)?,
+                    configured: row.get(5)?,
                 })
             })
-            .collect()
+            .map_err(|error| error.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string());
+        providers
     }
 
     pub fn create(&self, input: CreateProviderInput) -> Result<ProviderSummary, String> {

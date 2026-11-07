@@ -4,6 +4,7 @@
 //! 由 `commands/launch`、`commands/instances` 和 Gateway 绑定装配调用。
 
 mod binding;
+mod deletion;
 mod home_layout;
 mod models;
 mod persistence;
@@ -17,12 +18,18 @@ mod workspace;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
+mod tests_deletion;
+#[cfg(test)]
+mod tests_exposure;
+#[cfg(test)]
 mod tests_home;
 #[cfg(test)]
 mod tests_prepare;
 #[cfg(test)]
 mod tests_workspace;
 
+pub(crate) use deletion::assert_workspace_not_deleting;
+pub use deletion::WorkspaceDeletionPlan;
 pub use models::{
     CreateManagedLaunchPresetInput, ManagedLaunchStore, ManagedLaunchTransport,
     ManagedModelSelectionInput, ManagedPresetCompositionSummary, ManagedPresetSaved,

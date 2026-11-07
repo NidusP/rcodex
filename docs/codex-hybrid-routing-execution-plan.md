@@ -2,6 +2,73 @@
 
 > 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
 
+### 2026-11-07：空间标签重排根因修复与彻底删除
+
+- 目的：commander 实机发现选择空间后标签顺序改变，并要求可永久删除已有空间；授权启动开发服务观察。
+- 根因：snapshot 按 preferred 优先排序，选中后刷新会把目标前移；运行回执重放又会把 preferred 改回运行空间。修复为后端固定 A-E 顺序、前端同槽位排序，运行状态观察不再写选择。
+- 删除：新 command `delete_managed_workspace` 串联租约、停止态预检、网关解绑、精确档案 scope 清理、私有路径预检与清理、数据库关系图事务。UI 标签栏垃圾桶走明确不可恢复确认；活动 App/CLI 先停止。共享渠道和其它空间保留；部分失败持久记录删除意图并允许重试；最后空间可删、重启不重建、空态可新建 A。
+- 文件：`codex_control/{snapshot,lifecycle,launch,tests}.rs`；`managed_launch/deletion.rs`、`tests_deletion.rs`、workspace/prepare；`conversation_archive/deletion/` 与根装配；`commands/workspaces.rs`、lib；前端排序、确认组件、控制器、空间卡和夹具。完整合同与修改边界见[实施与验证](designs/2026-11-07-workspace-order-and-deletion.md)。
+- 验证：424 Rust 库测试通过；all-targets 编译、格式、前端类型/构建、diff 检查通过；无头 Chrome 18 项夹具断言通过。保留既有测试未使用导入和前端 chunk 体积提示。未物理删除本机真实空间。
+- 运行：最终 `pnpm tauri:dev` 已重建 sidecar 并成功运行；开发库 A/B/C 三空间仍在，开发窗口保留给 commander 操作。
+- 未完成：真实用户空间删除和 Windows 桌面验收，未提交或发布。回滚仅撤代码入口，已确认的物理删除无法靠恢复代码撤销。下一步可在开发窗口切换标签和检查垃圾桶确认流程；自动复验 `node scripts/workspace-ui-check.mjs http://localhost:5173`。
+
+### 2026-11-07：模型透出与按模型图片探针完成
+
+- 目的：模型目录显式透出，按当前渠道修订/模型/协议的真实图片识别证据决定新启动看图能力。commander 已确认分表、两协议、旧选择保留、解除空间引用后才能取消透出；当前合同见[实施方案](designs/2026-11-07-model-exposure-image-probe.md)。
+- 修改：schema v24 两表与旧选择回填；`model_exposure/` 偏好/证据服务；`model_image_probe.rs` 与固定安全图片；`commands/model_exposure.rs`、lib 装配与全局两并发；workspace/prepare/binding 后端校验；前端目录、独立功能 Hook、空间筛选与本机夹具；产品原理、协议与 UI 设计同步。
+- 验证：Rust 库 403 passed/0 failed，all-targets 编译、格式、前端检查/构建、diff 检查均通过；无头 Chrome 的 13 项本机夹具断言通过。探针只用本机 mock，没有真实费用。Rust 测试有未使用导入提示，前端保留 chunk 大小提示。
+- 未完成外部验收：commander 的真实 Codex 看图和 Windows 桌面、真实渠道探针。未启动/停止 Tauri，未打包、提交或发布。
+- 回滚：schema v24 高于旧二进制支持版本，不能直接降 user_version；保留升级前自有库备份或向前修复，不删除实例/会话目录。当前未操作生产数据库。
+- 下一步：commander 自行重启开发环境，在「模型渠道 → 模型目录」勾选透出或刷新图片探针；探针成功后重启对应隔离实例应用新目录。自动回归入口 `scripts/model-exposure-ui-check.mjs`，完整命令见实施方案。
+
+### 2026-11-06：模型透出与按模型图片探针方案落档
+
+- 决策：Provider `/models` 继续返回完整目录；用户在模型渠道抽屉选择透出模型。只有透出动作触发图片探针，隔离空间只展示已透出的普通对话模型。
+- 能力边界：Provider 级协议和文本探针保持现状；图片能力改为模型级缓存证据。探针结果按 Provider revision、上游模型、协议和探针合同版本缓存；取消透出不删除结果，显式刷新才重复探测。
+- UI：模型渠道行增加透出复选框、图片能力状态、最后探测时间和刷新按钮；没有透出模型的渠道在添加渠道列表中置灰并提示先透出模型。
+- 数据：建议新增 `provider_model_exposures`，不要把透出状态直接写入会被目录刷新替换的 `provider_model_catalog_entries`。已选但后来取消透出的空间模型保留历史记录并显示冲突态，不能静默删除。
+- 未实现：本条只记录产品方向和后续切片，尚未改 schema、Store、探针、模型渠道抽屉或 RouteSet。下次继续时先读 `docs/designs/2026-11-05-multi-instance-release-plan.md` 本节，再从数据合同和迁移开始。
+
+### 2026-11-06：0.1.7 固定五空间与默认 App 偏好兜底实施
+
+- 变更目的：开放多隔离空间首版。现有未删除空间启动时规范为「隔离空间 A」到「隔离空间 E」；新空间最多创建到 E，新增时复制当前隔离空间的渠道、模型和 API 登录渠道。Provider 定义和凭据继续全局共享，空间绑定独立保存。
+- 后端：`ManagedLaunchStore` 在事务内规范化旧空间名称、分配固定槽位、限制 5 个未删除 `managed_app` 方案；创建输入增加 `source_preset_id` 和 `login_provider_id`；managed_app 改名返回 `managed_app_name_fixed`。新增空间不重建旧 preset、实例或隔离目录。
+- 前端：工作区卡片增加固定 Tab 和新增按钮；达到 5 个时禁用并显示原因；移除 managed_app 自定义改名入口；复制时明确传递源空间和 API 登录渠道。
+- 默认 App 设置：隔离启动仍复制默认 `~/.codex` 的安全偏好；默认 App 未使用、没有 `config.toml` 时，偏好播种会写入 `features.multi_agent_v2=true` 作为稳定兜底，随后与隔离路由 profile 合并。凭据、会话、MCP、浏览器数据不复制。
+- 修改文件：`src-tauri/src/managed_launch/models.rs`、`workspace.rs`、`tests_workspace.rs`、`managed_codex_config/preferences.rs`、`tests_preferences.rs`、`codex_control/presets.rs`、`src/use-app-controller.ts`、`src/workspace-surface.tsx`、`src/workspace-surface.css`、`src/components/isolated-app/isolated-app-info.tsx`、`src/App.tsx`、`src/dev-control-fixture.ts`。
+- 验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、`cargo check --manifest-path src-tauri/Cargo.toml --all-targets`、`cargo test --manifest-path src-tauri/Cargo.toml --lib`（378 passed）、`pnpm run check`、`pnpm run build` 和 `git diff --check` 通过；定向 Rust 测试覆盖旧空间改名、五空间上限、登录渠道复制和默认 App 未使用时的偏好兜底。未启动 Tauri，未执行 `tauri:build`。
+- 未完成项：需要 commander 在 macOS 与 Windows 发布候选上实机确认 A/B 同时运行、单空间停止不影响另一空间、默认 App 已使用和未使用两种设置复制结果，以及在线更新后旧会话连续性。
+- 回滚：隐藏 Tab/新增入口即可回退 UI；不要删除多余 preset、`codex-instances`、隔离 `CODEX_HOME` 或 Electron 数据。后端已创建的新空间保留为可恢复数据。
+
+### 2026-11-05：隔离工作区消失的根因与 0.1.7 发版门槛
+
+- 根因：schema v22 的数据库凭据迁移把旧 Keychain Provider 标记为 `configured=0`、revision `credential_missing`，且按合同不迁移旧 Key。旧控制面快照随后要求 API Key Provider revision 为 `active`，于是仍存在的未删除 managed_app 工作区被整个过滤，UI 看起来像隔离实例消失。在线更新只替换应用包，不删除 `io.rcodex` 数据目录；本机生产时间线显示失效 Provider 在 `2026-10-29 16:59:41` 退役，早于 `0.1.6` 包生成时间，不能把 Provider 状态变化全归因于在线更新。
+- 证据：生产 `rcodex.sqlite3`、`codex-instances`、原 `CODEX_HOME` 和历史实例记录仍在；生产库的 `provider_migration_state.legacy_openai_api_key_attempted=completed`、`provider_credentials` 与 v22 行为一致。更新器配置只指向 GitHub 安装包，应用数据仍由 `app_data_dir` 管理。
+- 修复：控制面快照和 Provider 列表保留绑定到未删除工作区的缺凭据 Provider；UI 显示未配置而不是隐藏工作区。回归测试覆盖 revision=`credential_missing` 和 `current_revision_id=NULL` 两种状态。生产数据已在备份后保留原 `launch_preset_id`/`CODEX_HOME` 做定向修复，未创建新工作区。
+- 发版结论：当前源码修复可以进入下一版，但不能复用 `0.1.6`；四个版本文件必须统一升到未使用的新版本（当前应为 `0.1.7`），并在推送 `main` 前完成 Rust 全库测试、前端检查/构建、版本一致性和 Windows/macOS 发布矩阵验证。不要执行 `tauri:build`，除非 commander 明确要求生成发布包。
+- 发布门槛：当前 UI 对 `configured=false` 的 Provider 只有“编辑渠道名称”，没有接通已有的 `update_api_key_provider` 重新录入 API Key 表单。必须先补齐该恢复入口和前端回归检查，再发布 `0.1.7`；否则旧用户只能看到恢复的工作区，仍无法自行补回 v22 迁移后缺失的凭据。
+- 剩余风险：v22 迁移不会恢复旧 Key，用户仍需重新录入 Provider API Key；真实在线更新后的安装、原实例重启和连续会话需要 commander 在发布候选包上手动验收。
+
+#### 交接记录（2026-11-05）
+
+- 当前状态：生产工作区已恢复；源码修复和 UI 空工作区渠道选择修复仍在工作树中，尚未提交。当前 `HEAD` 为 `9a08b5a`，`v0.1.6` 标签已存在。
+- 重要文件：`src-tauri/src/codex_control/snapshot.rs`、`src-tauri/src/providers/store.rs`、`src-tauri/src/codex_control/tests.rs`；空工作区流程在 `src/workspace-surface.tsx`、`src/components/isolated-app/isolated-app-info.tsx`、`src/use-app-controller.ts`、`src/App.tsx`、`src/dev-control-fixture.ts`。
+- 已验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`；`cargo test --manifest-path src-tauri/Cargo.toml --lib`（376 passed）；`cargo check --manifest-path src-tauri/Cargo.toml --all-targets`；`pnpm run check`；`pnpm run build`；`git diff --check`。未运行 `tauri:build`，未启动生产 App。
+- 当前阻塞：`configured=false` Provider 的 UI 只有改名按钮，尚未接通 `update_api_key_provider` 的 API Key 重新录入表单。后续 agent 应先完成该表单及回归检查，再考虑发版。
+- 下一步：补凭据编辑/保存/失败状态；运行前端和 Rust 验证；将 `package.json`、`website/package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` 统一升到 `0.1.7`（必要时同步 `Cargo.lock` 和发布文档）；提交并推送 `main`，由 CI 生成新 Release。
+- 生产回滚点：`~/Library/Application Support/io.rcodex/rcodex.sqlite3.before-workspace-repair-20261104-213142.bak`，仅在生产 App 完全退出且无 SQLite 锁时使用；不要删除 `io.rcodex/codex-instances` 或隔离 `CODEX_HOME`。
+- 交接约束：不要复用 `v0.1.6`；不要把 schema v22 的缺失凭据改成自动读取 Keychain；不要执行 `tauri:build`，除非 commander 明确要求生成发布包。
+
+### 2026-11-04：生产隔离工作区恢复可见性修复
+
+- 变更目的：生产版 `io.rcodex` 数据库仍保留未删除的「独立隔离空间」、9 次历史受管理实例和隔离 `CODEX_HOME` 会话数据，但当前 API Key Provider 修订已缺失时，控制面快照原先把整个工作区过滤掉，导致 UI 看起来像没有隔离实例。
+- 修改：`src-tauri/src/codex_control/snapshot.rs` 与 `src-tauri/src/providers/store.rs` 保留仍被未删除工作区绑定的渠道元数据和工作区；凭据缺失只显示 `configured=false`，不读取旧 Key、不自动恢复已软删除方案。`src-tauri/src/codex_control/models.rs` 将控制面 Provider 修订 ID 改为可空，以表达缺凭据状态。增加控制面回归测试覆盖未删除工作区保留和凭据缺失。
+- 生产核对：`~/Library/Application Support/io.rcodex/rcodex.sqlite3` 约 10 MB，`codex-instances` 约 531 MB；数据库有 8 条 managed_app 记录，其中 1 条未删除且绑定 4 个渠道、12 个模型选择、9 次历史启动；7 条为软删除。未读取 API Key 或会话正文。
+- 验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、`cargo test --manifest-path src-tauri/Cargo.toml --lib codex_control::tests`（10 passed）、`cargo check --manifest-path src-tauri/Cargo.toml --all-targets`、`pnpm run check`、`pnpm run build` 通过；生产 SQLite `PRAGMA integrity_check` 与 `PRAGMA foreign_key_check` 均为 `ok`。
+- 生产数据修复（2026-11-04）：在确认没有生产 App/Gateway 进程且数据库无锁后，先生成 `~/Library/Application Support/io.rcodex/rcodex.sqlite3.before-workspace-repair-20261104-213142.bak`（权限 `0600`）。事务保留原 `launch_preset_id=926fa0df-b541-443c-b055-f92f9fc78a89`、原 `CODEX_HOME`、原运行实例和会话；移除失效 `3r` Provider 绑定及其 6 个模型选择，保留 `Big`、`Xai`、`siliconflow` 和 6 个有效模型，将投影 Provider/API 登录渠道设为有效的 `Xai`，版本从 73 更新为 74。原运行绑定仍指向实例 `9d6280eb-595b-4ed9-9842-1f7611b90b0d`，没有创建新工作区。
+- 未完成项：commander 仍需手动打开生产版 R Codex，确认 UI 显示「独立隔离空间」、6 个模型和 3 个渠道；启动前需按当前渠道重新确认 API Key 可用。真实 Provider 请求和会话继续使用原隔离目录，尚未在本轮发送。
+- 回滚：在生产 App 完全退出且没有数据库锁时，用上述 `.bak` 文件替换 `rcodex.sqlite3`；代码层恢复 snapshot/provider 列表的 active revision 过滤和 `current_revision_id` 非空类型。不删除隔离目录。
+
 ### 2026-10-29：修复 3R-GPT 探针首模型误判协议
 
 - 变更目的：开发态新增的 `3R-GPT` 被判为 Chat Completions。开发库中的探针事件显示 `/models` 返回的首个模型是 Codex 内部角色 `codex-auto-review`；该模型的 `/responses` 请求返回 400，探针随后用 Chat 成功响应把整个渠道定成 Chat。对同一渠道的 `gpt-5.6-terra` 进行受控文本请求时，`/responses` 返回 200，证明中转 Responses 路径可用。

@@ -371,20 +371,9 @@ impl CodexControlStore {
                         ],
                     )
                     .map_err(|error| format!("无法提交启动回执：{error}"))?;
-                connection
-                    .execute("UPDATE launch_presets SET is_preferred=0", [])
-                    .map_err(|error| format!("无法更新常用启动预设：{error}"))?;
-                connection
-                    .execute(
-                        "UPDATE launch_presets SET is_preferred=1
-                         WHERE id=(
-                           SELECT launch_preset_id FROM launch_configuration_revisions
-                           WHERE id=(SELECT launch_configuration_revision_id
-                                     FROM codex_instances WHERE id=?1)
-                         )",
-                        [&receipt.instance_id],
-                    )
-                    .map_err(|error| format!("无法记录最近启动预设：{error}"))?;
+                // Receipt reconciliation is observation. Replaying a running
+                // instance must not replace the user's selected workspace.
+                // Workspace create/select commands own is_preferred writes.
             }
             LauncherState::Exited => {
                 let connection = self

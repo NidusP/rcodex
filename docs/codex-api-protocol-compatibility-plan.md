@@ -1,5 +1,7 @@
 # Codex API 协议兼容与 Gateway 转发改造方案
 
+> 2026-11-07：模型透出偏好与按渠道修订/模型/协议的图片证据分开持久化。Responses、Chat Completions 均只使用当前已确认协议探测；只有内容识别成功才在新路由快照中声明看图。模型族默认值不授予该能力。当前合同和验证见[实施方案](designs/2026-11-07-model-exposure-image-probe.md)。
+
 > 状态：方案记录；协议适配已落在 Managed Gateway，历史单 Provider Gateway 已删除  
 > 日期：2026-09-14  
 > 相关设计：[Codex 混合模型路由详细设计](codex-hybrid-routing-design.md)、[Codex 混合模型路由执行计划](codex-hybrid-routing-execution-plan.md)

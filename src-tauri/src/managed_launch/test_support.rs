@@ -55,6 +55,8 @@ pub(super) fn grok_preset(
         default_workspace_path: None,
         create_new: false,
         launch_preset_id: None,
+        source_preset_id: None,
+        login_provider_id: None,
     }
 }
 
@@ -105,7 +107,7 @@ pub(super) fn prepare_grok_launch(
         Arc::new(MemoryInstanceVault::default()),
     );
     let saved = store
-        .create_preset(grok_preset(
+        .create_exposed_test_preset(grok_preset(
             "relay",
             context_window,
             auto_compact_token_limit,
@@ -231,5 +233,37 @@ pub(super) fn single_model_preset(
         default_workspace_path: None,
         create_new: false,
         launch_preset_id: None,
+        source_preset_id: None,
+        login_provider_id: None,
+    }
+}
+
+/// Existing launch tests arrange explicitly exposed fixture models before
+/// exercising their unrelated behavior. Exposure rejection tests call the
+/// production create_preset directly.
+impl ManagedLaunchStore {
+    pub(super) fn create_exposed_test_preset(
+        &self,
+        input: CreateManagedLaunchPresetInput,
+    ) -> Result<super::models::ManagedPresetSaved, String> {
+        {
+            let connection = self.connection.lock().unwrap();
+            for model in &input.models {
+                if model.source_kind == RouteKind::ApiProvider
+                    && crate::model_exposure::is_selectable_model_id(&model.upstream_model_id)
+                {
+                    connection
+                        .execute(
+                            "INSERT OR IGNORE INTO provider_model_exposures
+                         (provider_id, upstream_model_id, exposed, updated_at)
+                         SELECT ?1, ?2, 1, 1 WHERE EXISTS
+                         (SELECT 1 FROM api_key_providers WHERE id=?1)",
+                            params![model.source_id, model.upstream_model_id],
+                        )
+                        .unwrap();
+                }
+            }
+        }
+        self.create_preset(input)
     }
 }

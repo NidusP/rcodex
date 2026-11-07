@@ -19,7 +19,9 @@ mod managed_codex_config;
 pub mod managed_gateway;
 mod managed_launch;
 mod managed_spawn;
+mod model_exposure;
 mod model_family_profile;
+mod model_image_probe;
 mod official_accounts;
 mod official_auth;
 mod providers;
@@ -242,6 +244,10 @@ pub fn run() {
             app.manage(BalanceStore::from_database(database.clone()));
             app.manage(diagnostics_store);
             app.manage(ProbeTicketStore::default());
+            app.manage(model_exposure::ModelExposureStore::from_database(
+                database.clone(),
+            ));
+            app.manage(commands::ModelImageProbeJobs::default());
             app.manage(SettingsStore::from_database(database));
             Ok(())
         })
@@ -264,6 +270,9 @@ pub fn run() {
             test_api_key_provider,
             probe_channel_draft,
             get_provider_connectivity_report,
+            list_provider_model_exposures,
+            set_provider_model_exposure,
+            refresh_model_image_probe,
             gateway_recent_diagnostics,
             clear_gateway_diagnostics,
             instance_request_diagnostics,
@@ -280,6 +289,7 @@ pub fn run() {
             create_managed_launch_preset,
             set_managed_login_provider,
             select_managed_launch_preset,
+            delete_managed_workspace,
             list_importable_session_projects,
             import_sessions_from_default,
             get_managed_launch_preset_compositions,

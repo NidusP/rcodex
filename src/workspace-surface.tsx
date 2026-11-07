@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import {
   AppWindow,
   ChevronDown,
@@ -6,8 +6,9 @@ import {
   Play,
   Square,
   Terminal,
+  Trash2,
 } from "lucide-react";
-import { Button, Menu, Select, Tooltip } from "@mantine/core";
+import { Button, Menu, Select, Tabs, Tooltip } from "@mantine/core";
 import { ChannelRowList } from "./channel-sort-list";
 import { HintedButton } from "./components/hinted-button";
 import { AppUpdateButton, GatewayRestartButton } from "./components/title-bar";
@@ -31,6 +32,7 @@ export type WorkspaceChannelRow = {
     label: string;
   }>;
   probed: boolean;
+  modelSelectionHint?: string;
   modelChoices: Array<{
     upstreamModelId: string;
     label: string;
@@ -50,12 +52,18 @@ export type WorkspaceChannelChoice = {
   discoveredModelCount: number;
   protocolLabel: string;
   usageLabel: string;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export type WorkspaceInstanceTab = {
   id: string;
   label: string;
-  renameDisabled?: boolean;
+  running?: boolean;
+  /** 该空间当前不可删除时为 true，例如仍有活动实例。 */
+  deleteDisabled?: boolean;
+  /** 不可删除的原因，悬停垃圾桶时展示。 */
+  deleteReason?: string;
 };
 
 type Option = { id: string; label: string };
@@ -79,14 +87,22 @@ function ChannelAddMenu({
   disabled,
   disabledReason,
   onSelect,
+  onCreate,
+  label = "添加渠道",
 }: {
   choices: WorkspaceChannelChoice[];
   disabled: boolean;
   disabledReason?: string;
   onSelect: (id: string) => void;
+  onCreate?: () => void;
+  label?: string;
 }) {
-  const unavailable = disabled || choices.length === 0;
-  const hint = choices.length ? "[选择一个未加入的渠道]" : "[没有可加入的渠道]";
+  const unavailable = disabled || (choices.length === 0 && !onCreate);
+  const hint = choices.length
+    ? "[选择一个未加入的渠道]"
+    : onCreate
+      ? "[或新建一个模型渠道]"
+      : "[没有可加入的渠道]";
   return (
     <Menu
       position="bottom-end"
@@ -99,7 +115,7 @@ function ChannelAddMenu({
           className="channel-add-trigger"
           type="button"
           variant="default"
-          aria-label="添加渠道"
+          aria-label={label}
           disabled={unavailable}
           title={
             unavailable
@@ -110,7 +126,7 @@ function ChannelAddMenu({
         >
           <span className="channel-add-label">
             <CirclePlus size={18} aria-hidden="true" />
-            <b>添加渠道</b>
+            <b>{label}</b>
             <small>{hint}</small>
           </span>
           <ChevronDown
@@ -121,19 +137,61 @@ function ChannelAddMenu({
         </Button>
       </Menu.Target>
       <Menu.Dropdown aria-label="未加入的渠道">
-        <Menu.Label>待分配上游</Menu.Label>
-        {choices.map((choice) => (
-          <Menu.Item
-            key={choice.id}
-            onClick={() => onSelect(choice.id)}
-            rightSection={<small>{choice.statusLabel}</small>}
-          >
-            <span>
-              <i data-tone={choice.statusLabel} aria-hidden="true" />
-              {choice.label}
-            </span>
-          </Menu.Item>
-        ))}
+        {choices.length > 0 ? <Menu.Label>待分配上游</Menu.Label> : null}
+        {choices.map((choice) => {
+          // 未透出模型、未配置等原因导致暂不可加入的渠道仍列出，
+          // 但状态列显示不可用，悬停展示具体原因。
+          const statusTone = choice.disabled ? "不可用" : choice.statusLabel;
+          const item = (
+            <Menu.Item
+              disabled={choice.disabled}
+              onClick={() => {
+                if (!choice.disabled) onSelect(choice.id);
+              }}
+              rightSection={<small data-tone={statusTone}>{statusTone}</small>}
+            >
+              <span>
+                <i data-tone={statusTone} aria-hidden="true" />
+                {choice.label}
+              </span>
+            </Menu.Item>
+          );
+          if (!choice.disabled || !choice.disabledReason) {
+            return <Fragment key={choice.id}>{item}</Fragment>;
+          }
+          return (
+            <Tooltip
+              key={choice.id}
+              label={choice.disabledReason}
+              multiline
+              maw={280}
+              withArrow
+              openDelay={300}
+              zIndex={450}
+              events={{ hover: true, focus: true, touch: true }}
+              classNames={{ tooltip: "control-tooltip" }}
+            >
+              <span
+                className="disabled-hint channel-choice-blocked"
+                tabIndex={0}
+                aria-label={"当前不可用：" + choice.disabledReason}
+              >
+                {item}
+              </span>
+            </Tooltip>
+          );
+        })}
+        {onCreate ? (
+          <>
+            {choices.length > 0 ? <Menu.Divider /> : null}
+            <Menu.Item
+              onClick={onCreate}
+              leftSection={<CirclePlus size={15} aria-hidden="true" />}
+            >
+              新建模型渠道
+            </Menu.Item>
+          </>
+        ) : null}
       </Menu.Dropdown>
     </Menu>
   );
@@ -211,6 +269,114 @@ function CalibrationSelect({
 }
 
 /**
+ * @component WorkspaceTabs
+ * @description 使用 Mantine Tabs 切换固定名称的隔离空间；每个 tab 名称后带各自的删除入口。
+ */
+function WorkspaceTabs({
+  instances,
+  selectedInstanceId,
+  createDisabled,
+  createReason,
+  tabsDisabled = false,
+  onDeleteInstance,
+  onSelectInstance,
+  onCreateInstance,
+}: {
+  instances: WorkspaceInstanceTab[];
+  selectedInstanceId: string;
+  createDisabled: boolean;
+  createReason?: string;
+  tabsDisabled?: boolean;
+  onDeleteInstance: (id: string) => void;
+  onSelectInstance: (id: string) => void;
+  onCreateInstance: () => void;
+}) {
+  return (
+    <div className="workspace-tabs">
+      <Tabs
+        value={selectedInstanceId || null}
+        onChange={(value) => {
+          if (value) onSelectInstance(value);
+        }}
+      >
+        <Tabs.List aria-label="隔离空间">
+          {instances.map((instance) => (
+            <Tabs.Tab
+              key={instance.id}
+              value={instance.id}
+              disabled={tabsDisabled}
+              rightSection={
+                <span className="workspace-tab-tools">
+                  <Tooltip
+                    label={instance.deleteReason ?? `永久删除${instance.label}`}
+                    withArrow
+                    openDelay={300}
+                  >
+                    <span
+                      className={
+                        "workspace-tab-delete" +
+                        (instance.deleteDisabled ? " is-disabled" : "")
+                      }
+                      role="button"
+                      aria-label={
+                        instance.deleteDisabled
+                          ? (instance.deleteReason ?? "当前不能删除该隔离空间")
+                          : `删除${instance.label}`
+                      }
+                      aria-disabled={instance.deleteDisabled || undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        event.preventDefault();
+                        if (!instance.deleteDisabled) {
+                          onDeleteInstance(instance.id);
+                        }
+                      }}
+                    >
+                      <Trash2 size={12} aria-hidden="true" />
+                    </span>
+                  </Tooltip>
+                  {instance.running ? (
+                    <span
+                      className="workspace-tabs-running"
+                      aria-label="运行中"
+                      title="运行中"
+                    >
+                      ●
+                    </span>
+                  ) : null}
+                </span>
+              }
+            >
+              {instance.label}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+      </Tabs>
+      <Tooltip
+        label={createReason ?? "新增隔离空间"}
+        withArrow
+        openDelay={300}
+        disabled={!createDisabled && !createReason}
+      >
+        <span className="workspace-tabs-create-wrap">
+          <Button
+            className="workspace-tabs-create"
+            type="button"
+            variant="default"
+            size="xs"
+            disabled={createDisabled}
+            onClick={onCreateInstance}
+            aria-label="新增隔离空间"
+          >
+            <CirclePlus size={15} aria-hidden="true" />
+          </Button>
+        </span>
+      </Tooltip>
+    </div>
+  );
+}
+
+/**
  * @component ChannelWorkspaceCard
  * @description 工作区主卡片：品牌行、当前实例渠道和启动控制带。
  */
@@ -232,6 +398,7 @@ export function ChannelWorkspaceCard({
   cliReason,
   testingChannelId,
   onAddChannel,
+  onOpenAddProvider,
   onRemoveChannel,
   onDefaultModelChange,
   onLoginProviderChange,
@@ -247,6 +414,12 @@ export function ChannelWorkspaceCard({
   moreActions,
   instances,
   selectedInstanceId,
+  createDisabled,
+  createReason,
+  tabsDisabled = false,
+  onDeleteInstance,
+  onSelectInstance,
+  onCreateInstance,
 }: {
   configured: boolean;
   rows: WorkspaceChannelRow[];
@@ -265,6 +438,7 @@ export function ChannelWorkspaceCard({
   cliReason?: string;
   testingChannelId: string | null;
   onAddChannel: (providerId: string) => void;
+  onOpenAddProvider: () => void;
   onRemoveChannel: (providerId: string) => void;
   onDefaultModelChange: (modelId: string) => void;
   onLoginProviderChange: (providerId: string) => void;
@@ -282,15 +456,11 @@ export function ChannelWorkspaceCard({
   selectedInstanceId: string;
   createDisabled: boolean;
   createReason?: string;
+  tabsDisabled?: boolean;
+  onDeleteInstance: (id: string) => void;
   onSelectInstance: (id: string) => void;
   onCreateInstance: () => void;
-  onRenameInstance: (id: string, name: string) => void;
-  onRenameBlocked?: () => void;
-  onRenameInvalid?: () => void;
 }) {
-  const instanceName =
-    instances.find((instance) => instance.id === selectedInstanceId)?.label ||
-    "独立隔离空间";
   return (
     <article
       className={`runtime-target-card${loading ? " is-loading" : ""}`}
@@ -324,19 +494,28 @@ export function ChannelWorkspaceCard({
       <div className="runtime-target-route">
         <div className="runtime-target-route-heading channel-section-heading">
           <div className="channel-section-title">
-            <strong>{instanceName}</strong>
+            <WorkspaceTabs
+              instances={instances}
+              selectedInstanceId={selectedInstanceId}
+              createDisabled={createDisabled}
+              createReason={createReason}
+              tabsDisabled={tabsDisabled}
+              onDeleteInstance={onDeleteInstance}
+              onSelectInstance={onSelectInstance}
+              onCreateInstance={onCreateInstance}
+            />
             {lockNotice ? (
               <small className="channel-lock-note">{lockNotice}</small>
             ) : null}
           </div>
-          {configured && (
+          {configured ? (
             <ChannelAddMenu
               choices={choices}
               disabled={configureDisabled}
               disabledReason={configureReason}
               onSelect={onAddChannel}
             />
-          )}
+          ) : null}
         </div>
         {configured ? (
           rows.length === 0 ? (
@@ -344,13 +523,14 @@ export function ChannelWorkspaceCard({
               <p className="empty-detail">
                 尚未加入模型渠道。使用上方“添加渠道”选择已有渠道，或新建一个模型渠道。
               </p>
-              <HintedButton
-                className="secondary-action"
-                type="button"
-                onClick={onOpenChannels}
-              >
-                选择或新建模型渠道
-              </HintedButton>
+              <ChannelAddMenu
+                choices={choices}
+                disabled={configureDisabled}
+                disabledReason={configureReason}
+                label="选择或新建模型渠道"
+                onSelect={onAddChannel}
+                onCreate={onOpenAddProvider}
+              />
             </div>
           ) : (
             <ChannelRowList
@@ -371,13 +551,14 @@ export function ChannelWorkspaceCard({
             <p className="empty-detail">
               尚未配置工作区。请选择已有模型渠道，或新建一个模型渠道。
             </p>
-            <HintedButton
-              className="secondary-action"
-              type="button"
-              onClick={onOpenChannels}
-            >
-              选择或新建模型渠道
-            </HintedButton>
+            <ChannelAddMenu
+              choices={choices}
+              disabled={configureDisabled}
+              disabledReason={configureReason}
+              label="选择或新建模型渠道"
+              onSelect={onAddChannel}
+              onCreate={onOpenAddProvider}
+            />
           </div>
         )}
       </div>

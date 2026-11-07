@@ -332,6 +332,9 @@ pub(super) fn ensure_no_operation_lease(
     resources: &[(&str, &str)],
 ) -> Result<(), String> {
     for (kind, id) in resources {
+        if *kind == "launch_preset" {
+            crate::managed_launch::assert_workspace_not_deleting(transaction, id)?;
+        }
         let operation: Option<String> = transaction
             .query_row(
                 "SELECT operation_id FROM resource_operation_leases

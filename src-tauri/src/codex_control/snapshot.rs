@@ -35,10 +35,7 @@ impl CodexControlStore {
                    AND COALESCE(p.entry_kind, 'managed_app') = 'managed_app'
                    AND (p.credential_kind = 'none' OR (p.credential_kind = 'api_key' AND EXISTS (
                         SELECT 1 FROM api_key_providers provider
-                        JOIN api_key_provider_revisions revision
-                          ON revision.id = provider.current_revision_id
                         WHERE provider.id = p.api_key_provider_id
-                          AND revision.state = 'active'
                     )) OR (p.credential_kind = 'official' AND EXISTS (
                         SELECT 1 FROM codex_accounts account
                         WHERE account.id = p.codex_account_id
@@ -48,7 +45,11 @@ impl CodexControlStore {
                               AND deleted.auth_error_code = 'official_account_deleted'
                           )
                  )))
-                 ORDER BY is_preferred DESC, created_at ASC",
+                 ORDER BY CASE p.name
+                    WHEN '隔离空间 A' THEN 0 WHEN '隔离空间 B' THEN 1
+                    WHEN '隔离空间 C' THEN 2 WHEN '隔离空间 D' THEN 3
+                    WHEN '隔离空间 E' THEN 4 ELSE 5 END,
+                    p.created_at ASC, p.id ASC",
             )
             .map_err(|error| format!("无法读取启动预设：{error}"))?;
         let presets = presets_statement
@@ -63,9 +64,22 @@ impl CodexControlStore {
                         provider.is_default, provider.configured,
                         provider.transport_mode, provider.current_revision_id
                  FROM api_key_providers provider
-                 JOIN api_key_provider_revisions revision
+                 LEFT JOIN api_key_provider_revisions revision
                    ON revision.id = provider.current_revision_id
-                 WHERE revision.state = 'active'
+                 WHERE provider.current_revision_id IS NOT NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM launch_preset_api_providers binding
+                        JOIN launch_presets workspace
+                          ON workspace.id = binding.launch_preset_id
+                        WHERE binding.provider_id = provider.id
+                          AND workspace.deleted_at IS NULL
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM launch_presets workspace
+                        WHERE workspace.api_key_provider_id = provider.id
+                          AND workspace.deleted_at IS NULL
+                    )
                  ORDER BY provider.is_default DESC, provider.created_at ASC",
             )
             .map_err(|error| format!("无法读取 API Key Provider：{error}"))?;

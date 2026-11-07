@@ -45,6 +45,12 @@ pub struct CreateManagedLaunchPresetInput {
     /// Update this preset. Empty falls back to the preferred managed_app row.
     #[serde(default)]
     pub launch_preset_id: Option<String>,
+    /// Source preset used when creating a new isolated workspace.
+    #[serde(default)]
+    pub source_preset_id: Option<String>,
+    /// Explicit API login Provider copied from the source workspace.
+    #[serde(default)]
+    pub login_provider_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
