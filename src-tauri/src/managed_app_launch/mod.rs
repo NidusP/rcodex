@@ -148,14 +148,24 @@ mod tests {
         }
         let no_proxy = environment
             .get("NO_PROXY")
+            .or_else(|| environment.get("no_proxy"))
             .and_then(|value| value.as_deref())
             .unwrap();
-        assert_eq!(
-            environment
-                .get("no_proxy")
-                .and_then(|value| value.as_deref()),
-            Some(no_proxy)
-        );
+        if cfg!(windows) {
+            // Windows 环境键不区分大小写：两个拼写会折叠成一份，功能等价。
+            let spellings = [
+                environment.get("NO_PROXY").is_some(),
+                environment.get("no_proxy").is_some(),
+            ];
+            assert_eq!(spellings.iter().filter(|present| **present).count(), 1);
+        } else {
+            assert_eq!(
+                environment
+                    .get("no_proxy")
+                    .and_then(|value| value.as_deref()),
+                Some(no_proxy)
+            );
+        }
         for entry in ["127.0.0.1", "localhost", "::1"] {
             assert!(no_proxy.split(',').any(|current| current == entry));
         }

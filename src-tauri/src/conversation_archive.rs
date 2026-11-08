@@ -372,7 +372,12 @@ impl ConversationArchive {
                 // stale tail. Truncate it before retrying the same event;
                 // otherwise every restart would permanently mark the request
                 // partial even though the queued event is still available.
-                file.set_len(old_stored as u64)
+                // Windows：append 句柄没有 FILE_WRITE_DATA，set_len 会 Access
+                // denied，必须走独立可写句柄。
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(&part)
+                    .and_then(|handle| handle.set_len(old_stored as u64))
                     .map_err(|e| format!("conversation_archive_write_failed:{e}"))?;
             }
             file.write_all(&bytes[..saved])
@@ -433,10 +438,15 @@ impl ConversationArchive {
         {
             return Err("conversation_archive_stage_length_conflict".into());
         }
-        file.sync_all()
-            .map_err(|e| format!("conversation_archive_write_failed:{e}"))?;
         let digest = hash_reader(&mut file)?;
         drop(file);
+        // Windows：append/只读句柄上的 FlushFileBuffers 会返回 Access denied
+        //（需要 FILE_WRITE_DATA），改用独立可写句柄落盘后再改名。
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&part)
+            .and_then(|handle| handle.sync_all())
+            .map_err(|e| format!("conversation_archive_write_failed:{e}"))?;
         fs::rename(&part, &path).map_err(|e| format!("conversation_archive_publish_failed:{e}"))?;
         tx.execute(
             "UPDATE archive_stages SET sha256=?3,partial=?4 WHERE request_id=?1 AND stage=?2",
@@ -681,8 +691,15 @@ impl ConversationArchive {
             };
             if let Some((source, rename)) = actual {
                 let mut file = open_archive_file(&self.root, source)?;
-                file.sync_all()
-                    .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;
+                // Windows：只读句柄上的 FlushFileBuffers 会 Access denied。仅在把
+                // .part 落盘改名前用可写句柄 sync（已发布的 final 文件此前已 sync）。
+                if rename {
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .open(source)
+                        .and_then(|handle| handle.sync_all())
+                        .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?;
+                }
                 let size = file
                     .metadata()
                     .map_err(|e| format!("conversation_archive_recovery_failed:{e}"))?

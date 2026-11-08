@@ -433,23 +433,47 @@ fn supervise_child(
         log_error(log_file, "codex_spawn_failed", &message);
         message
     })?;
-    log_event(log_file, &format!("codex_spawned pid={}", child.id()));
-    let running_receipt = if let Some(target) = receipt_target {
-        let identity = match process_start_identity(child.id()) {
-            Ok(identity) => identity,
-            Err(error) => {
+    let child_pid = child.id();
+    log_event(log_file, &format!("codex_spawned pid={child_pid}"));
+    // 读取进程启动身份。子进程可能在读取前就已经退出（例如启动即失败的可执行文件），
+    // 此时不应让启动失败：跳过 running 回执，等 wait 后直接落 exited 回执。
+    let mut identity_result = process_start_identity(child_pid);
+    if identity_result.is_err() {
+        for _ in 0..3 {
+            if let Ok(Some(_)) = child.try_wait() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            identity_result = process_start_identity(child_pid);
+            if identity_result.is_ok() {
+                break;
+            }
+        }
+    }
+    let identity = match identity_result {
+        Ok(identity) => Some(identity),
+        Err(error) => {
+            let exited_early = child
+                .try_wait()
+                .map_err(|wait_error| format!("无法等待 Codex 退出：{wait_error}"))?;
+            if exited_early.is_none() {
                 log_error(log_file, "process_identity_failed", &error);
                 terminate_and_wait(&mut child);
                 return Err(error);
             }
-        };
+            log_event(log_file, "process_identity_skipped_child_already_exited");
+            None
+        }
+    };
+    let mut running_receipt: Option<LauncherReceipt> = None;
+    if let (Some(target), Some(identity)) = (receipt_target.as_ref(), identity.as_ref()) {
         let receipt = LauncherReceipt::running(
-            target.instance_id,
-            target.launch_nonce,
-            child.id(),
-            identity,
-            target.codex_executable,
-            target.codex_home,
+            target.instance_id.clone(),
+            target.launch_nonce.clone(),
+            child_pid,
+            identity.clone(),
+            target.codex_executable.clone(),
+            target.codex_home.clone(),
         );
         if let Err(error) = write_receipt_atomically(&target.status_file, &receipt) {
             log_error(log_file, "running_receipt_write_failed", &error);
@@ -457,10 +481,8 @@ fn supervise_child(
             return Err(error);
         }
         log_event(log_file, "running_receipt_written");
-        Some((target.status_file, receipt))
-    } else {
-        None
-    };
+        running_receipt = Some(receipt);
+    }
 
     let status = child.wait().map_err(|error| {
         let message = format!("无法等待 Codex 退出：{error}");
@@ -475,9 +497,24 @@ fn supervise_child(
             status.code()
         ),
     );
-    if let Some((status_file, running)) = running_receipt {
-        let exited = LauncherReceipt::exited_from(&running, status.code());
-        if let Err(error) = write_receipt_atomically(&status_file, &exited) {
+    if let Some(target) = receipt_target {
+        let exited = match &running_receipt {
+            Some(running) => LauncherReceipt::exited_from(running, status.code()),
+            None => {
+                // 子进程在身份读取前已退出：synthesized running 仅作为
+                // exited 回执的字段来源，不落盘；identity 留空表示未观测到。
+                let synthesized = LauncherReceipt::running(
+                    target.instance_id.clone(),
+                    target.launch_nonce.clone(),
+                    child_pid,
+                    String::new(),
+                    target.codex_executable.clone(),
+                    target.codex_home.clone(),
+                );
+                LauncherReceipt::exited_from(&synthesized, status.code())
+            }
+        };
+        if let Err(error) = write_receipt_atomically(&target.status_file, &exited) {
             log_error(log_file, "exited_receipt_write_failed", &error);
             return Err(error);
         }
@@ -661,13 +698,23 @@ mod tests {
         }
         let upper = environment
             .get("NO_PROXY")
+            .or_else(|| environment.get("no_proxy"))
             .and_then(|value| value.as_deref())
             .unwrap();
-        let lower = environment
-            .get("no_proxy")
-            .and_then(|value| value.as_deref())
-            .unwrap();
-        assert_eq!(upper, lower);
+        if cfg!(windows) {
+            // Windows 环境键不区分大小写：两个拼写会折叠成一份，功能等价。
+            let spellings = [
+                environment.get("NO_PROXY").is_some(),
+                environment.get("no_proxy").is_some(),
+            ];
+            assert_eq!(spellings.iter().filter(|present| **present).count(), 1);
+        } else {
+            let lower = environment
+                .get("no_proxy")
+                .and_then(|value| value.as_deref())
+                .unwrap();
+            assert_eq!(upper, lower);
+        }
         for entry in ["127.0.0.1", "localhost", "::1"] {
             assert!(upper.split(',').any(|current| current == entry));
         }

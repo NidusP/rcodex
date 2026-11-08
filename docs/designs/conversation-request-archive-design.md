@@ -229,3 +229,4 @@ Token 只使用上游实际 usage，保留 cached/reasoning 等明细的原结�
 - 文档验证：本次新增/同步的 6 份 Markdown 本地链接存在性、代码围栏闭合及旧 Provider 修复“待评审”状态清理检查通过；未执行无关的全量构建。
 - 实施回滚：关闭完整采集即可恢复摘要模式，转发协议仍保持兼容；停止 writer 后保留既有档案可读。格式/数据库版本只做加法迁移，旧版本不支持新 schema 时明确拒读；禁止回滚时删除档案或原生历史。
 - 下一步：从 A 的原生身份探针和 B 的流式回归开始，再接 C 的正文 writer；不要先往当前同步 SQLite 路径灌入完整正文。
+- 2026-11-09 Windows 修复（CI run #16 日志定位）：`finalize_stage` 在 append 句柄、`recover_interrupted` 在只读句柄上调用 `sync_all`——Windows 的 `FlushFileBuffers` 需要 FILE_WRITE_DATA，返回 Access denied (os error 5)，导致 11 项 archive 测试失败且真实 Windows 档案写入全挂；`append_stage` 崩溃尾截断的 `set_len` 同理。三处改为独立可写句柄执行 sync/set_len，Unix 语义不变。macOS 本地 CI 同款命令全过；Windows 路径由 CI 验证。

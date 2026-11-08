@@ -63,7 +63,7 @@ pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposu
 
 ## 6. 最近任务交接
 
-- **2026-11-08 文档维护规则**：AGENTS.md 新增「文档维护规则」节（新文档必须有状态标记、状态页条目上限、生命周期与归档批量搬运）；`check-doc-links` 扩展缺标记检查、状态页条目上限检查，`--strict` 覆盖三类失败。
 - **2026-11-08 子项目 AGENTS.md**（commander 批准）：新增 `src/AGENTS.md`、`src-tauri/AGENTS.md`、`website/AGENTS.md`（agents.md 嵌套规范，就近生效）；根 AGENTS.md 149 行只留跨端合同，子项目约定见各文件。
+- **2026-11-09 修复 CI 测试**（CI run #16 日志定位，Test 工作流自首次 run 起从未通过）：① macOS supervisor 在子进程瞬间退出时读取进程身份失败导致启动报错，改为跳过 running 回执直接落 exited 回执；② Windows archive 在 append/只读句柄上 sync_all/set_len 被 Access denied（FlushFileBuffers 需要 FILE_WRITE_DATA），12 项测试与真实 Windows 档案写入全挂，改为独立可写句柄；③ Windows Command 环境键不区分大小写，NO_PROXY 双拼写折叠为一份，断言改为平台感知。本地 CI 同款命令 371 项全过（supervisor 压测 5/5）；Windows 路径由 CI 验证。
 - **2026-11-08 归档迁移**（commander 批准）：38 份 historical/archived 文档与 stitch 设计资产 `git mv` 至 `docs/archive/`（镜像 designs 子层，git 历史保留）；读取面收敛为约 20 份 active 文档；链接修复 134 处，`check-doc-links` active 0 失效。回滚：git mv 逆操作。
-- 更早（2026-11-08）：发版 0.1.7（产物见 GitHub Release v0.1.7；多隔离空间/空间删除/模型透出，schema v24）与治理第一轮（本状态页、UI 留痕页、AGENTS 瘦身、聚合验证命令）——详细记录见 [治理提案实施记录](project-governance-proposal.md) 与 git 历史。
+- 更早（2026-11-08）：发版 0.1.7（产物见 GitHub Release v0.1.7；多隔离空间/空间删除/模型透出，schema v24）与治理第一轮（本状态页、UI 留痕页、AGENTS 瘦身、聚合验证命令）与文档维护规则（AGENTS 规则节 + check-doc-links 缺标记/状态页/strict 门禁）——详细记录见 [治理提案实施记录](project-governance-proposal.md) 与 git 历史。
