@@ -1,5 +1,7 @@
 # R Codex 产品原理：独立工作区与多渠道模型
 
+> 状态：active（最后核对 2026-11-08）
+
 > 2026-11-07 模型目录新增显式透出：偏好与图片证据分别保存，旧空间已选模型自动保留；新启动的看图能力只取当前渠道修订、模型、协议和探针版本的成功证据。取消透出须先移除未删除空间引用。旧模型族默认看图记录由[当前实施合同](designs/2026-11-07-model-exposure-image-probe.md)替代。
 
 > 当前合同：2026-10-04 独立工作区，schema v20。默认 App 兼容投影、原配置快照与原地会话修复全部取消；安全白名单偏好种子化仍保留。
@@ -407,7 +409,7 @@ schema v20、单一 R Codex 工作区、独立 API 登录、多渠道模型、�
 - [Cockpit Tools README](https://github.com/jlcodes99/cockpit-tools)
 - [Cockpit Tools：Codex instance command](https://github.com/jlcodes99/cockpit-tools/blob/main/src-tauri/src/commands/codex_instance.rs)
 - [R Codex：Codex 多账户、API Key 与启动隔离方案](codex-official-auth-authorization-design.md)
-- [R Codex：Codex 多账户与受管理启动执行计划](codex-auth-launch-execution-plan.md)
+- [R Codex：Codex 多账户与受管理启动执行计划](archive/codex-auth-launch-execution-plan.md)
 
 ## 历史：显式会话 Provider 修复（2026-09-16，已移除）
 
@@ -415,7 +417,7 @@ schema v20、单一 R Codex 工作区、独立 API 登录、多渠道模型、�
 
 用户主动进入会话修复工具后，允许对选定默认环境或已有隔离 App 环境进行 Provider 名称扫描、预览及停机修复。此权限独立于默认 App 的路由配置投影，不意味着启动/配置流程可以改历史。只写 JSONL `session_meta.payload.model_provider`、SQLite `threads.model_provider` 和已识别本机的 `local_thread_catalog.model_provider`。支持用户输入该环境已定义的自定义名称；不会凭空写入未定义的 ID。
 
-写入前创建私有会话备份和 SQLite 行级日志；支持重启后的恢复，冲突时保留外部修改。为精确保留历史，允许在修复边界流式读取记录并备份受影响文件，消息内容不进入日志、控制数据库或前端。配置、认证、模型、工具和推理内容不变。该工具只解决身份引用，第三方旧会话协议兼容仍属独立待办。默认 App ↔ 隔离 App 的会话同步暂缓，详见[会话修复设计](designs/codex-history-provider-migration-design.md)。
+写入前创建私有会话备份和 SQLite 行级日志；支持重启后的恢复，冲突时保留外部修改。为精确保留历史，允许在修复边界流式读取记录并备份受影响文件，消息内容不进入日志、控制数据库或前端。配置、认证、模型、工具和推理内容不变。该工具只解决身份引用，第三方旧会话协议兼容仍属独立待办。默认 App ↔ 隔离 App 的会话同步暂缓，详见[会话修复设计](archive/designs/codex-history-provider-migration-design.md)。
 
 ## 显式完整请求档案（2026-09-17；首版已接入）
 

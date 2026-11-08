@@ -2,9 +2,11 @@
 
 > 2026-11-07 图片能力合同更新：模型族属性仅作历史提示；新启动的 `supports_images` 与 `input_modalities` 必须读取当前渠道修订、模型、协议和探针版本的成功证据。未检测/失败均保持文本目录。Responses 和 Chat 分别使用实际协议检测，详见[当前实施合同](designs/2026-11-07-model-exposure-image-probe.md)。
 
-> 状态：已实现并通过完整 Rust、前端构建与本机 Codex 目录合同验证（2026-09-18）  
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：已实现并通过完整 Rust、前端构建与本机 Codex 目录合同验证（2026-09-18）  
 > 依据：默认 App 兼容目录实测（Grok 4.6 经 uuapi 类中继）、xAI 推理文档、本机 `GET /v1/models` 发现结果、2026-09-17 产品确认（三方模型不得自称 GPT-6）  
 > 相关：[产品原理 §7 模型目录](3rcodex-product-principles.md#7-模型目录原理)、[混合路由详细设计 §6.2](codex-hybrid-routing-design.md)
+<!-- doc-links-allow: src-tauri/src/proxy/providers/codex.rs -->
 
 产品原理第 8 条要求「能力如实展示」：模型目录只声明已验证的上下文、推理、图像、工具和传输能力，不把第三方模型伪装成具备全部官方能力。当前实现继续用官方 bundled 条目当版本安全骨架，再由 family profile（模型系列配置）覆盖身份、推理档位、速度档和审核路由。本文固定：身份从哪来、档位从哪来、`/v1/models` 能信什么、目录该怎么生成。
 
@@ -72,8 +74,8 @@ App 里能选出 Extra high，同时又默认显示 low，根因是这份合同�
 
 代码位置：
 
-- `src-tauri/src/managed_codex_config.rs`：`build_version_matched_catalog_for_version`、`model_entry_from_template`
-- `src-tauri/src/managed_launch.rs`：接入时写入 `CapabilitySet`
+- `src-tauri/src/managed_codex_config/`：`build_version_matched_catalog_for_version`、`model_entry_from_template`
+- `src-tauri/src/managed_launch/`：接入时写入 `CapabilitySet`
 - `src-tauri/src/connectivity.rs`：`parse_models`
 - `src-tauri/src/diagnostics.rs`：`provider_model_catalog_entries.capabilities_json`
 
@@ -207,7 +209,7 @@ Use only the local workspace tools provided in this session.
 
 未知 family：仍可用 GPT 骨架，但必须写入保守 overlay（第 5 节身份句 + 只声明文本、不声明 GPT 推理阶梯），或在 UI 强制用户选择档位后再生成目录。空 overlay 不是合法默认。
 
-图像/搜索广告：目录按上游模型 ID 的系列名处理 `supports_image_detail_original`。`gpt-` 或含 `openai` 的系列保留该开关；Grok、DeepSeek、Claude 和未知族删除，不论 `supports_images`，也不看这条路由是官方账户还是 API 渠道。`supports_web_search=false` 时删除 `web_search_tool_type`。这不改推理档，也不要把 `xhigh` 映射成 `high`，Gateway 不改写出站正文。Grok 4.x Responses 看图仍是 family.supports_images=true，依据是标准 `input_image.image_url` 的 `detail=auto` / `high`。`original` 是 Codex 扩展档，不是三方模型族的档；某条渠道探针接受这个字符串，也不据此给非 GPT 系列广告该字段。用户把三方中转标成 GPT 系列后，如果中转拒绝 original，不在 R Codex 范围。不要把 grok-imagine 生图写进 grok-4.6 聊天能力。待办见[Grok 会话问题与下一步](designs/2026-09-19-grok-session-followups.md)。
+图像/搜索广告：目录按上游模型 ID 的系列名处理 `supports_image_detail_original`。`gpt-` 或含 `openai` 的系列保留该开关；Grok、DeepSeek、Claude 和未知族删除，不论 `supports_images`，也不看这条路由是官方账户还是 API 渠道。`supports_web_search=false` 时删除 `web_search_tool_type`。这不改推理档，也不要把 `xhigh` 映射成 `high`，Gateway 不改写出站正文。Grok 4.x Responses 看图仍是 family.supports_images=true，依据是标准 `input_image.image_url` 的 `detail=auto` / `high`。`original` 是 Codex 扩展档，不是三方模型族的档；某条渠道探针接受这个字符串，也不据此给非 GPT 系列广告该字段。用户把三方中转标成 GPT 系列后，如果中转拒绝 original，不在 R Codex 范围。不要把 grok-imagine 生图写进 grok-4.6 聊天能力。待办见[Grok 会话问题与下一步](archive/designs/2026-09-19-grok-session-followups.md)。
 
 ## 7. 诊断时不要把三件事揉成一个 bug
 

@@ -1,6 +1,7 @@
 # Codex 混合模型路由详细设计
 
-> 状态：独立工作区合同（2026-10-05），schema v22；官方订阅模型透传保持关闭
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：独立工作区合同（2026-10-05），schema v22；官方订阅模型透传保持关闭
 > 日期：2026-08-25  
 > 产品依据：[R Codex 产品原理](3rcodex-product-principles.md)  
 > 当前代码：独立 App/CLI、多渠道 Gateway、独立 API 登录、按项目单向导入、请求档案已实施。默认 App 配置投影/恢复、原配置快照、原地历史修复和默认上游 fallback 已删除。
@@ -30,7 +31,7 @@
 
 ### 2026-09-04 默认 App 兼容会话边界
 
-`compat_app` 是默认 Codex App 的用户拥有路由投影，与 `managed_app` 完全分开：它只写入独立的 `compatibility_gateway_bindings`，不创建或更新 `codex_instances`、运行锁、Electron 数据或 SQLite 根目录。该表中的固定 compatibility subject 仅是 Gateway 准入命名空间，不是进程身份。默认 App 的进程由用户和操作系统拥有，R Codex 不强制关闭、重启或管理它，也不把它加入受管理运行实例。兼容启动写入配置投影并派发打开请求；从 R Codex 派发时启动器额外给该进程注入回环 `NO_PROXY`，Finder 直开没有这一步。兼容模型目录以原生/ bundled 目录为基底合并第三方路由，第三方同 slug 路由才覆盖原生条目。系统代理与回环 502 见[默认 App 回环 Gateway 与系统代理](compat-app-loopback-proxy.md)。
+`compat_app` 是默认 Codex App 的用户拥有路由投影，与 `managed_app` 完全分开：它只写入独立的 `compatibility_gateway_bindings`，不创建或更新 `codex_instances`、运行锁、Electron 数据或 SQLite 根目录。该表中的固定 compatibility subject 仅是 Gateway 准入命名空间，不是进程身份。默认 App 的进程由用户和操作系统拥有，R Codex 不强制关闭、重启或管理它，也不把它加入受管理运行实例。兼容启动写入配置投影并派发打开请求；从 R Codex 派发时启动器额外给该进程注入回环 `NO_PROXY`，Finder 直开没有这一步。兼容模型目录以原生/ bundled 目录为基底合并第三方路由，第三方同 slug 路由才覆盖原生条目。系统代理与回环 502 见[默认 App 回环 Gateway 与系统代理](archive/compat-app-loopback-proxy.md)。
 
 ### 2026-09-13 Gateway binding 合同收敛
 
@@ -93,7 +94,7 @@ Gateway 和渠道连接入口共享 API Base URL 规范化：裸域名/根路径
 
 未选 GPT 族时：`merge_compatibility_catalog` 去掉原生 GPT 行（三方生成行已能填选择器）；`compatibility_fallback_from_config` 不得把 GPT slug 写入 `model_ids`；对已知 ephemeral slug（现为 `gpt-5.6-luna`）写入隐藏目录行，并在 Gateway 快照 `ephemeralFamilyAliases` 映射到工作区默认 Responses 站桩；出站换成该站桩 upstream，账本记站桩渠道。没有 Responses 站桩则 `model_not_in_route_set`，仍不得官方转发。选了 GPT 族（官方或三方 GPT slug）时保持 2026-09-05 回退。这不是 401/502 换路，也不是改用户点名的聊天模型。
 
-完整合同与验收见 [F 当前模型族-only](designs/2026-09-21-f-family-only-ephemeral.md)。别名不进 RouteSet 身份表，而走 Gateway 快照 `ephemeralFamilyAliases`。须应用配置后生效。
+完整合同与验收见 [F 当前模型族-only](archive/designs/2026-09-21-f-family-only-ephemeral.md)。别名不进 RouteSet 身份表，而走 Gateway 快照 `ephemeralFamilyAliases`。须应用配置后生效。
 
 ### 2026-09-05 已迁移 Provider 的空当前修订
 
@@ -752,7 +753,7 @@ MCP 过滤由 `managed_codex_config` 负责，是唯一的配置写入边界；l
 
 ## 显式历史维护边界（2026-09-16）
 
-`HistoryRepairService` 处理用户主动的 Provider 元数据修复，复用控制数据库登记的隔离 App 目录，但不创建新的路由、凭据或启动方案。Tauri 后台任务承担扫描与文件 I/O；启动、默认配置应用/移除、实例删除/退出清理与修复/恢复共享维护互斥锁，存在未恢复的中断任务时阻止新启动/配置写入；维护期间状态轮询仍可读，跳过有写入副作用的清理。普通扫描只读。默认 App 所有权规则继续适用于路由投影；显式停机维护例外见[专项设计](designs/codex-history-provider-migration-design.md)。跨文件采用持久日志和补偿恢复，不宣称与多 SQLite 数据库构成单事务。
+`HistoryRepairService` 处理用户主动的 Provider 元数据修复，复用控制数据库登记的隔离 App 目录，但不创建新的路由、凭据或启动方案。Tauri 后台任务承担扫描与文件 I/O；启动、默认配置应用/移除、实例删除/退出清理与修复/恢复共享维护互斥锁，存在未恢复的中断任务时阻止新启动/配置写入；维护期间状态轮询仍可读，跳过有写入副作用的清理。普通扫描只读。默认 App 所有权规则继续适用于路由投影；显式停机维护例外见[专项设计](archive/designs/codex-history-provider-migration-design.md)。跨文件采用持久日志和补偿恢复，不宣称与多 SQLite 数据库构成单事务。
 
 ## 按会话记录完整请求（2026-09-17；首版已接入，持续验收）
 

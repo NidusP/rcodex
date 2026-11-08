@@ -34,6 +34,12 @@
     "website:dev": "pnpm --dir website dev",
     "build": "tsc -b && vite build",
     "check": "tsc -b --pretty false",
+    "check:ui": "tsc -b --pretty false",
+    "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo check --manifest-path src-tauri/Cargo.toml --all-targets",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib --bins -- --skip managed_gateway",
+    "check:docs": "node scripts/check-doc-links.mjs",
+    "ui-check": "node scripts/run-ui-checks.mjs",
+    "check:all": "pnpm run check:ui && pnpm run check:rust && pnpm run check:docs",
     "tauri": "node scripts/tauri.mjs",
     "tauri:dev": "node scripts/tauri.mjs dev",
     "tauri:build": "node scripts/tauri.mjs build"

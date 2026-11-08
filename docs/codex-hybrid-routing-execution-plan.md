@@ -1,6 +1,8 @@
 # Codex 混合模型路由执行计划
 
-> 状态：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：2026-09-22 独立工作区改造已实施，自动化与浏览器夹具验证通过；真实 Codex 桌面/API 登录、会话导入恢复及 Windows 合同仍为发布前实机验收。历史默认 App 兼容入口已移除。
+<!-- doc-links-allow: src/surface.css, src/styles.css -->
 
 ### 2026-11-07：空间标签重排根因修复与彻底删除
 
@@ -27,7 +29,7 @@
 - 能力边界：Provider 级协议和文本探针保持现状；图片能力改为模型级缓存证据。探针结果按 Provider revision、上游模型、协议和探针合同版本缓存；取消透出不删除结果，显式刷新才重复探测。
 - UI：模型渠道行增加透出复选框、图片能力状态、最后探测时间和刷新按钮；没有透出模型的渠道在添加渠道列表中置灰并提示先透出模型。
 - 数据：建议新增 `provider_model_exposures`，不要把透出状态直接写入会被目录刷新替换的 `provider_model_catalog_entries`。已选但后来取消透出的空间模型保留历史记录并显示冲突态，不能静默删除。
-- 未实现：本条只记录产品方向和后续切片，尚未改 schema、Store、探针、模型渠道抽屉或 RouteSet。下次继续时先读 `docs/designs/2026-11-05-multi-instance-release-plan.md` 本节，再从数据合同和迁移开始。
+- 未实现：本条只记录产品方向和后续切片，尚未改 schema、Store、探针、模型渠道抽屉或 RouteSet。下次继续时先读 `docs/archive/designs/2026-11-05-multi-instance-release-plan.md` 本节，再从数据合同和迁移开始。
 
 ### 2026-11-06：0.1.7 固定五空间与默认 App 偏好兜底实施
 
@@ -73,7 +75,7 @@
 
 - 变更目的：开发态新增的 `3R-GPT` 被判为 Chat Completions。开发库中的探针事件显示 `/models` 返回的首个模型是 Codex 内部角色 `codex-auto-review`；该模型的 `/responses` 请求返回 400，探针随后用 Chat 成功响应把整个渠道定成 Chat。对同一渠道的 `gpt-5.6-terra` 进行受控文本请求时，`/responses` 返回 200，证明中转 Responses 路径可用。
 - 合同：文本探针排除 Codex 内部角色和图像生成模型；按模型族主流文本 ID 优先级排序后，最多尝试 8 个普通文本候选。该排序只减少无效请求，不证明协议或可用性；模型级失败继续下一个候选，路径明确不存在或认证失败不重复撞同一路径。第一个可解析的 Responses/Chat JSON 成功响应决定协议和确认前缀，完整模型目录仍照常保存。
-- 修改文件：`src-tauri/src/channel_probe.rs`、`docs/designs/2026-10-12-probe-url-ladder.md`。
+- 修改文件：`src-tauri/src/channel_probe.rs`、`docs/archive/designs/2026-10-12-probe-url-ladder.md`。
 - 验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、`cargo check --manifest-path src-tauri/Cargo.toml --all-targets` 通过；探针定向测试 11 passed，`cargo test --manifest-path src-tauri/Cargo.toml --lib` 为 375 passed。新增回归覆盖内部角色首位、主流候选优先级、普通模型先失败后由后续模型确认 Responses，且确认后不打 Chat。
 - 未完成项：开发库里已有的 `3R-GPT` 报告仍保留旧的 `chat_completions` 快照；代码不会静默改写已保存探针结果。热加载后在模型渠道页面对该渠道执行一次「刷新模型目录」，再按新的探针合同写入 Responses 修订。
 - 回滚：恢复 `channel_probe::classify_text` 单模型探针和文档中的第一模型合同；保留既有协议报告与修订，不需要数据库降级。
@@ -266,7 +268,7 @@
 
 - 变更目的：跨境电商等三方模型会话开场大量出现 node_repl is unavailable for this model，Browser、Computer Use 和其它依赖本机 Node REPL 的插件无法使用。
 - 合同：目录 overlay 不再把三方条目的 node_repl_disabled 写成 true。该开关会被 Codex 写进回合元数据，本机 node_repl 读到 true 就拒绝。三方条目保持 node_repl_disabled=false，官方 ChatGPT 自动审核仍不要求（node_repl_auto_review_required=false）。隔离实例继续写入本机 node_repl/cua_repl。已启动实例要重新启动后才生成新目录。这份改动未进 0.1.2。
-- 修改文件：src-tauri/src/model_family_profile.rs，docs/designs/2026-10-13-responses-third-party-contract.md，本计划。
+- 修改文件：src-tauri/src/model_family_profile.rs，docs/archive/designs/2026-10-13-responses-third-party-contract.md，本计划。
 - 验证：cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check 通过。cargo test --manifest-path src-tauri/Cargo.toml --lib -- model_family_profile:: 为 19 passed。未启动 Tauri，未打真实 Provider。
 - 回滚：恢复 overlay 把 node_repl_disabled 写成 true，并删除 node_repl_auto_review_required。
 - 下一步：用当前源码跑 tauri:dev，退出隔离实例再启动。
@@ -283,7 +285,7 @@
 
 - 变更目的：Chat Completions 不再只转发纯文本。函数工具、apply_patch 式 custom 工具和 namespace 里的 function 子工具可以往返。
 - 合同：web_search 与 tool_search 删除；点名它们则本机 unsupported_tools。previous_response_id 仍拒绝。正文里的 DSML 且没有 tool_calls 时失败，不执行。看图按模型族合同，Chat 不再因为协议被强制成纯文本。supports_tools 在下次启动时写入。Responses 的 namespace 原样转发和 previous_response_id 原样转发不变。
-- 修改文件：managed_gateway/chat_bridge.rs、forward.rs、stream.rs、errors.rs，managed_launch/prepare.rs，model_family_profile.rs，tests_forward.rs，docs/designs/2026-10-12-chat-completions-function-tools.md。
+- 修改文件：managed_gateway/chat_bridge.rs、forward.rs、stream.rs、errors.rs，managed_launch/prepare.rs，model_family_profile.rs，tests_forward.rs，docs/archive/designs/2026-10-12-chat-completions-function-tools.md。
 - 验证：cargo fmt --check 通过。chat_adapter_accepts、chat_adapter_maps_function_custom_and_namespace_tools、chat_completion_tool_call_round_trip_and_dsml_failure、grok_4x 看图合同、压缩历史转 Chat 通过。未打真实 Chat 上游。
 - 回滚：Chat 路由 supports_tools 改回 false，chat_bridge 恢复只复制文本。
 
@@ -291,7 +293,7 @@
 
 - 变更目的：非 GPT 的 Responses 改写不再散落在 http 的两处调用里，也和 Chat 文本转换分开。
 - 合同：prepare_responses_relay 一次完成删可选工具、删 metadata、能力预检和 agent_message 归一。发给上游的 JSON 与整理前一致。GPT 不进入删改。Chat Completions 仍只走 chat_bridge 的文本转换；函数工具和 apply_patch 转换留在该文件，这次不实现。换渠道的 previous_response_id 本机失败和 namespace 摊平不做。
-- 修改文件：managed_gateway 的 responses_compat.rs、chat_bridge.rs、protocol.rs、http.rs、forward.rs、stream.rs、compaction.rs，以及对应测试。设计见 docs/designs/2026-10-13-responses-third-party-contract.md。
+- 修改文件：managed_gateway 的 responses_compat.rs、chat_bridge.rs、protocol.rs、http.rs、forward.rs、stream.rs、compaction.rs，以及对应测试。设计见 docs/archive/designs/2026-10-13-responses-third-party-contract.md。
 - 验证：cargo fmt 通过。responses_relay_pipeline_keeps_current_non_gpt_body、relay_compat、搜索工具删除和 agent_message 形状测试通过。两条真实转发测试因当前工作区不再给空 Base URL 自动加 /v1，打到 /responses 得到 404，与这次管道无关。
 - 回滚：把准备逻辑移回 http 的两处调用，并把 chat_bridge 的函数移回 protocol.rs。
 
@@ -299,7 +301,7 @@
 
 - 变更目的：常见三方模型不再套未知族的 low / medium / high / xhigh。档位、窗口和看图以厂商公开卡片为准，不探针，也不读中继的模型列表。
 - 合同：DeepSeek 当前模型用 none / low / high / max，默认 high；flash 可看图，v4-pro 不可，二者窗口 1,000,000。不在价目卡上的旧名不写窗口。GLM-5.3 与 5.3-Flash 用 low / high / max，默认 max，窗口 1,000,000，只有 Flash 看图。GLM-5.2 只保留折完后仍有区别的 none / high / max，默认 max。更早的 GLM 不写档位和窗口。Qwen 页面没有公布 effort 名单，目录留空；卡片上的 1,000,000 或 256,000 才写入。qwen-long 的 10,000,000 超过客户端上限，不写。客户端窗口上限从 999,999 放宽到正好 1,000,000。
-- 修改文件：src-tauri/src/model_family_profile.rs、managed_launch/prepare.rs、managed_launch/tests_workspace.rs、src/app-model.ts、src/codex-control.ts、docs/third-party-model-reasoning-levels.md、docs/designs/2026-10-13-responses-third-party-contract.md。
+- 修改文件：src-tauri/src/model_family_profile.rs、managed_launch/prepare.rs、managed_launch/tests_workspace.rs、src/app-model.ts、src/codex-control.ts、docs/third-party-model-reasoning-levels.md、docs/archive/designs/2026-10-13-responses-third-party-contract.md。
 - 验证：cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check 通过。cargo test --manifest-path src-tauri/Cargo.toml --lib -- model_family_profile:: 为 18 passed。窗口 1,000,000 可保存、1,000,001 被拒绝的两条测试通过。未启动 Tauri，未打真实 Provider。
 - 回滚：恢复未知族兜底，并把窗口上限改回拒绝 1,000,000。
 
@@ -353,7 +355,7 @@
 - 根因：start_sidecar 先删除 gateway-sidecar.json 再 spawn；旧 sidecar 仍占用数据口，新进程 bind 失败，5 秒超时只杀掉新 child。status() 在没有 control endpoint 时直接返回 stopped，不探数据口、不回收 ready 文件。
 - 修改：ManagedGatewayClient 在 spawn 前先 serving_status / 收养 ready 文件；数据口占用且无法收养控制面时返回 managed_gateway_port_in_use，不再抢 43123。status() 无 endpoint 时若数据口仍开则返回 unavailable。前端补齐超时与端口占用文案。
 - 验证：cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check 通过。cargo test --manifest-path src-tauri/Cargo.toml --lib managed_gateway::sidecar 6 passed。其中数据口占用/关闭与 port_in_use 三条实际执行；收养 ready 文件和旧 sidecar 升级两条因沙箱拒绝 bind 127.0.0.1 跳过；setsid 测例因 /bin/ps 被拒跳过。pnpm run check 通过。未启动 Tauri，未打包。
-- 未完成项：丢失 control token 后无法把状态恢复成 serving，只能显示不可用。关 CLI 后若数据口仍被占用，按 [孤儿 Gateway](designs/2026-10-09-orphan-gateway-sidecar.md) 在默认环境手动结束 sidecar，再重启 R Codex 启动新 CLI。
+- 未完成项：丢失 control token 后无法把状态恢复成 serving，只能显示不可用。关 CLI 后若数据口仍被占用，按 [孤儿 Gateway](archive/designs/2026-10-09-orphan-gateway-sidecar.md) 在默认环境手动结束 sidecar，再重启 R Codex 启动新 CLI。
 - 回滚：恢复 status() 在无 endpoint 时返回 stopped，以及 start_sidecar 无条件删除 ready 文件并 spawn。
 
 ### 2026-10-08：隔离实例上下文压缩只作记录
@@ -471,7 +473,7 @@
 ### 2026-10-02：macOS 钥匙串与实例密钥
 
 - 变更目的：开发态 ad-hoc 签名导致多渠道、多进程反复申请钥匙串。渠道 API Key 合并为一条 `3r-secrets`；实例准入密钥不是用户凭据，不再写入钥匙串。
-- 合同：见 [macOS 钥匙串授权与存储](designs/2026-10-01-macos-keychain-access.md)。明文实例密钥只走内存和一次性 FIFO；SQLite 只保存哈希；sidecar 恢复只比对哈希；launcher 管道缺失时直接失败，不回退钥匙串。
+- 合同：见 [macOS 钥匙串授权与存储](archive/designs/2026-10-01-macos-keychain-access.md)。明文实例密钥只走内存和一次性 FIFO；SQLite 只保存哈希；sidecar 恢复只比对哈希；launcher 管道缺失时直接失败，不回退钥匙串。
 - 实际修改：`src-tauri/src/secrets.rs`、`macos_keychain.rs`、`managed_gateway.rs`、`bin/codex-launcher.rs`、`lib.rs`、`managed_launch.rs`；产品原理、混合路由设计、I1j 与 AGENTS 已同步现行合同。
 - 实际验证：`cargo test --offline --lib secrets::tests` 6 passed；`cargo test --offline --bin codex-launcher` 13 passed；`cargo check --offline --all-targets` 无 warning。未启动 `pnpm run tauri:dev`。
 - 未完成项：Windows Credential Manager 不在本次范围；生产包仍需同一稳定签名身份覆盖主程序与 sidecar。
@@ -499,9 +501,9 @@
 
 - 变更目的：拆库收回后隔离 App 归档仍失败。Electron `ThreadArchiveService` 用 `path.relative` 判断 rollout 是否在 `CODEX_HOME/sessions` 下，不跟随 `.../r/<short-id>` 符号链接；sqlite 里是长真实路径。无 writer lock 的会话也会失败。
 - 合同：启动用的短 `CODEX_HOME` 改为真目录（文件住在这里），`CODEX_SQLITE_HOME` 仍等于它；旧长目录迁过去并把 `rollout_path` 改成短前缀。长路径只可留作指向短目录的链接。不代 Codex 释放 writer lock。隔离 App 运行中不迁树。
-- 方案：[隔离 App 会话归档修复](designs/2026-10-02-isolated-app-thread-archive.md) Step 5。
+- 方案：[隔离 App 会话归档修复](archive/designs/2026-10-02-isolated-app-thread-archive.md) Step 5。
 - 审阅结论：根因判断成立，但实施前必须明确短真实目录为唯一事实源，补齐 `managed_codex_home` 的所有权/回执/重启复用、长兼容 symlink 的删除路径、整树含 WAL/SHM/journal 迁移顺序、SQLite 路径字段的边界改写和崩溃恢复；详见专项设计 Step 5「2026-10-02 审阅结论」。
-- 已改：`src-tauri/src/managed_launch.rs`。macOS managed App 的 `managed_codex_home`、启动环境和导入读路径统一为短真实目录；新实例直接建短目录与长兼容 symlink，旧实例通过 `home-layout.json` 的 `legacy → renaming → linking → rewriting_paths → updating_db` 记录恢复。结束 binding 不删短 home；删除实例按长链接、短目录、lifecycle 的顺序清理。Windows 与 CLI 保留原布局。
+- 已改：`src-tauri/src/managed_launch/`。macOS managed App 的 `managed_codex_home`、启动环境和导入读路径统一为短真实目录；新实例直接建短目录与长兼容 symlink，旧实例通过 `home-layout.json` 的 `legacy → renaming → linking → rewriting_paths → updating_db` 记录恢复。结束 binding 不删短 home；删除实例按长链接、短目录、lifecycle 的顺序清理。Windows 与 CLI 保留原布局。
 - 锁定：`managed_codex_home` 存短真实目录；长 `codex-home` 只作兼容 symlink；Windows 不迁。迁移顺序：rename 长树 → 旧处建链接 → 每个 `state_*.sqlite` 按边界改 `rollout_path` → 控制库改短路径。
 - 实际验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、`cargo test --manifest-path src-tauri/Cargo.toml --lib managed_launch::`（34 passed）、`cargo test --manifest-path src-tauri/Cargo.toml --all-targets`（287 lib + 1 Gateway + 13 Launcher passed）、`pnpm run check` 均通过。未启动、停止或重启 Tauri 开发服务，未触碰 `~/.codex`。
 - 残余验证：Windows 分支保持原布局；本机只安装 macOS Rust target，未做 Windows 交叉编译或安装工具链，仍需 Windows 发布环境验收。
@@ -518,20 +520,20 @@
 
 - 变更目的：让隔离 Codex App 的侧栏归档可用。Codex Desktop 的 Electron 归档打开 `CODEX_HOME/state_5.sqlite`，当前活动库在 `managed-app-sqlite/<preset>`，会话 JSONL 在实例 home，归档失败。
 - 合同：受管理 App 的 `CODEX_SQLITE_HOME` 等于启动 `CODEX_HOME`。启动前把旧拆开目录一次性迁入实例 home；两边都有库则 fail-closed。删除实例时对话库随 home 走，残留拆开目录 best-effort 清理。不改 ChatGPT.app，不把已归档会话纳入导入。当前仍打开的会话可能被 Codex 报 active writer，先切走再归档。
-- 方案：[隔离 App 会话归档修复](designs/2026-10-02-isolated-app-thread-archive.md)。
+- 方案：[隔离 App 会话归档修复](archive/designs/2026-10-02-isolated-app-thread-archive.md)。
 - 已改：`managed_launch.rs`（启动赋值、迁库、删除）、`managed_launch/models.rs` 注释；launcher/lib.rs/导入调用面与错误文案留给 Step 3。
 - 实际验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、`cargo check --manifest-path src-tauri/Cargo.toml --all-targets`、`cargo test --manifest-path src-tauri/Cargo.toml --all-targets`（282 lib + 1 gateway + 12 launcher + 16 official_auth passed）、`cargo test --manifest-path src-tauri/Cargo.toml --lib session_import::`（10 passed）、`pnpm run check` 均通过。生产路径回归确认旧库/WAL 迁入实例 home，`sqlite_home == launch_codex_home`，运行中不迁移。
 - 未完成项：Step 3 的 launcher/lib.rs/导入调用面与错误文案；commander 需退出隔离 App 后重启 3R，再启动隔离 App，切离当前会话后归档一条空闲会话。真实 App 的签名图形会话授权仍按既有实机项执行。
 - 回滚：未迁库前可恢复拆开 `managed-app-sqlite` 赋值。迁库后只能向前修。
 - 接手：Step 2 已完成。后续会话按专项设计的 Step 3 接手提示继续；单测通过后退出隔离 App，再重启 3R 验收归档。
-- 下一步命令：读取 `docs/designs/2026-10-02-isolated-app-thread-archive.md`，继续 launcher/lib.rs/导入调用面与错误文案。
+- 下一步命令：读取 `docs/archive/designs/2026-10-02-isolated-app-thread-archive.md`，继续 launcher/lib.rs/导入调用面与错误文案。
 
 
 ### 2026-09-30：隔离 App 从桌面应用包安装 Computer Use helper
 
 - 变更目的：补上 2026-09-23 合同留下的安装缺口。隔离 `CODEX_HOME/computer-use/` 原先只做 fail-closed 检查，没有把签名 helper 装进去，导致点击「启动」在物化 MCP 时返回 `managed_computer_use_client_missing`，App 从未真正拉起。
 - 合同：只从已解析的桌面应用包（`ChatGPT.app` / `Codex.app`）复制签名 `Codex Computer Use.app` 到隔离 `computer-use/`。`node` / `node_repl` / `cua_repl` / 内嵌 CLI 仍引用应用包内只读路径。已有隔离 helper 不覆盖。禁止以 `~/.codex/computer-use` 为复制源或回退。复制后仍缺 helper 则 fail-closed。偏好种子带入的默认 `notify` 路径仍改写为隔离客户端。
-- 实际修改：`src-tauri/src/managed_codex_config.rs` 在 MCP 物化前安装 helper，并用 `codex_installation` 解析桌面包；`src/codex-control.ts` 映射 helper 缺失/安装失败文案；独立工作区计划同步合同。
+- 实际修改：`src-tauri/src/managed_codex_config/` 在 MCP 物化前安装 helper，并用 `codex_installation` 解析桌面包；`src/codex-control.ts` 映射 helper 缺失/安装失败文案；独立工作区计划同步合同。
 - 实际验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check` 通过；`cargo test --manifest-path src-tauri/Cargo.toml --lib managed_codex_config::tests` 19 passed（含从桌面包复制、不覆盖已有 helper、禁止默认目录源、拒绝链到默认目录、替换不完整残留、缺 helper fail-closed）；`cargo check --manifest-path src-tauri/Cargo.toml --all-targets`、`pnpm run check` 通过。未启动、停止或重启 `pnpm run tauri:dev`；未打包；未读取或写入 `~/.codex`。
 - 未完成项：commander 需重启自己的 `pnpm run tauri:dev` 后点击隔离 App「启动」，确认实例目录出现 `computer-use/Codex Computer Use.app`、`notify` 不再指向 `~/.codex`，以及真实 App 窗口拉起。签名图形会话中的辅助功能/屏幕录制授权仍按 2026-09-23 实机项执行。
 - 回滚：删除安装器调用，恢复“隔离 helper 已存在才写 MCP”的旧路径；不触碰用户默认 Codex 文件。这会重新暴露本次启动失败。
@@ -540,7 +542,7 @@
 
 - 变更目的：修复本机已安装 Codex Desktop 却被误报“未找到 Codex CLI”，并让隔离 App 的主进程预检和受管理启动器使用同一套安装解析。
 - 合同：优先尊重显式 `CODEX_BIN` 与 `PATH`；否则识别 macOS Codex/ChatGPT 应用包中的旧 `Contents/Resources/codex` 以及新版嵌套 `Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`。受管理 App 必须从 CLI 向上定位最外层桌面应用包，不能把内嵌的 `CodexCLI.app` 当作桌面 App。不会读取默认配置、认证、Cookie 或会话。
-- 实际修改：新增 `src-tauri/src/codex_installation.rs` 作为唯一安装解析；`lib.rs` 的安装状态、版本/目录预检与“打开默认 Codex”改用它；`codex-launcher.rs` 的 CLI 和桌面 App 解析也改用它。新版嵌套 CLI 向上解析到外层 `/Applications/ChatGPT.app`，再启动 `Contents/MacOS/ChatGPT`；不再把内层 `CodexCLI.app` 当作 Electron App。`managed_codex_config.rs` 的隔离 Computer Use 配置也优先写入新版 CLI 路径，只有新版路径不存在才回退旧布局，并验证写入的是所选的隔离运行时路径。
+- 实际修改：新增 `src-tauri/src/codex_installation/` 作为唯一安装解析；`lib.rs` 的安装状态、版本/目录预检与“打开默认 Codex”改用它；`codex-launcher.rs` 的 CLI 和桌面 App 解析也改用它。新版嵌套 CLI 向上解析到外层 `/Applications/ChatGPT.app`，再启动 `Contents/MacOS/ChatGPT`；不再把内层 `CodexCLI.app` 当作 Electron App。`managed_codex_config.rs` 的隔离 Computer Use 配置也优先写入新版 CLI 路径，只有新版路径不存在才回退旧布局，并验证写入的是所选的隔离运行时路径。
 - 实际验证：本机发现 `com.openai.codex` 的应用包为 `/Applications/ChatGPT.app`（版本 26.924.22138），新版内嵌 CLI 与桌面可执行文件均存在。`cargo fmt --all -- --check`、`cargo test --lib codex_installation::tests`（2 passed）、`cargo test --bin codex-launcher`（12 passed，包含本机新版路径到桌面 App 的解析）、`cargo test --lib managed_codex_config::tests`（13 passed）、`cargo check --all-targets`、`pnpm run check` 均通过。额外运行 `cargo run --quiet --bin codex-launcher -- --target verification-only-invalid-target`，启动器已越过 CLI 解析并仅因刻意无效目标退出，证明本机新版内嵌路径可被实际启动器解析；未启动 Codex App。
 - 未完成项：未启动 Tauri，也未执行真实 Provider 请求；commander 需重启自己运行的 `pnpm run tauri:dev`，确认状态不再显示“未找到 Codex CLI”，然后点击隔离 App 启动并停止后点击“重启实例”，核对新的 PID、Gateway binding 与启动回执。
 - 回滚：移除共享 `codex_installation` 模块并恢复两个旧解析器；这会重新暴露新版 Codex Desktop 的误报与 App 启动失败，不涉及迁移、默认目录或凭据。
@@ -548,7 +550,7 @@
 ### 2026-09-24：工作区交互切片
 
 - 变更目的：让主界面直接回答当前 Gateway、渠道、默认模型、API 登录和活动实例；渠道、实例、诊断改为同级页面，加入渠道需确认。
-- 修改文件：`src/App.tsx`、`src/workspace-surface.tsx`、`src/surface.css`、`src/main.tsx`、`src/dev-control-fixture.ts`、`docs/designs/3rcodex-ui-quality-upgrade-plan.md`。未改 Tauri 命令或凭据边界。
+- 修改文件：`src/App.tsx`、`src/workspace-surface.tsx`、`src/surface.css`、`src/main.tsx`、`src/dev-control-fixture.ts`、`docs/archive/designs/3rcodex-ui-quality-upgrade-plan.md`。未改 Tauri 命令或凭据边界。
 - 实际验证：`pnpm run check`、`pnpm run build` 通过。本机 Vite `127.0.0.1:5191/?ui-fixture=1` 用无头 Chrome 检查：状态条、认证失败行的编辑密钥、直连未观测、今日 3 次、启动按钮 title 为「启动」且无文字、加入确认三按钮、诊断恢复按钮与三个页签、实例技术详情折叠、390px 无横向溢出。
 - 未完成：设计 token、组件拆分和完整状态矩阵仍按质量方案后续做。真实 Tauri 窗口未在本次启动。
 - 回滚：还原上述前端文件即可，没有数据迁移。
@@ -557,7 +559,7 @@
 ### 2026-09-28：修复 UI 改造后的隔离 App 启动回归
 
 - 变更目的：恢复隔离 App/CLI 的真实控制面，确保启动、停止、核验和实例诊断仍通过 Tauri IPC；修复昨天视觉稿接入时 `App` 固定返回静态 `DemoConsole`，导致“重启实例”只修改演示 PID、无法实际启动隔离 App。
-- 实际修改：`src/App.tsx` 恢复真实 app shell、工作区/渠道/实例/诊断导航和启动/实例确认流程；`src/main.tsx` 移除未挂载 demo CSS；`docs/designs/3rcodex-ui-quality-upgrade-plan.md` 更新回归记录。未修改 Rust 启动合同、数据库或凭据边界。
+- 实际修改：`src/App.tsx` 恢复真实 app shell、工作区/渠道/实例/诊断导航和启动/实例确认流程；`src/main.tsx` 移除未挂载 demo CSS；`docs/archive/designs/3rcodex-ui-quality-upgrade-plan.md` 更新回归记录。未修改 Rust 启动合同、数据库或凭据边界。
 - 实际验证：`pnpm run check`、`pnpm run build` 通过；Vite `http://127.0.0.1:5173/?ui-fixture=1` 夹具页面显示真实工作区、状态条、启动 Codex 按钮与实例计数，无框架错误；启动按钮触发夹具 `launch_codex` IPC 路径并返回成功提示。Playwright 未安装，使用 Codex in-app browser 做 DOM/交互验证；未启动 Tauri，未声称真实 macOS App 启动已通过。
 - 未完成项：commander 仍需在自己的 `pnpm run tauri:dev` 中验证真实隔离 App 启动、退出后再次启动（即重启恢复）、Gateway binding 与真实 PID 回执。
 - 回滚：恢复 `App.tsx` 的原真实 app shell 返回值或回退本次前端提交；不需要数据迁移，也不会触碰用户默认 Codex 文件。
@@ -571,7 +573,7 @@
 - [x] 为隔离 Browser/Computer Use 物化增加专门回归：`node_repl`、`cua_repl` 的命令/环境、隔离 `CODEX_HOME`、隔离 `SKY_CUA_SERVICE_PATH`、隔离 `notify`，以及默认目录 MCP/路径不泄漏。
 - [x] 为 schema v18 增加迁移、读写、非法档位和 Provider × 模型独立保存的回归；确认模型目录的优先级是“官方族合同 → 未知族 `low/medium/high/xhigh` 兜底”。
 - [x] 修正 helper 缺失行为：真实 managed App 现在返回明确错误；测试启动夹具只跳过外部 helper 调用，路径物化本身用 fake helper 回归覆盖。
-- [ ] 清理文档中的旧状态描述：`docs/codex-default-app-release-plan.md` 保持历史标记；官网计划中的“隔离 App 暂缓”改成“未完成真实发布验收”，避免把已实现的启动骨架写成未实现。
+- [ ] 清理文档中的旧状态描述：`docs/archive/codex-default-app-release-plan.md` 保持历史标记；官网计划中的“隔离 App 暂缓”改成“未完成真实发布验收”，避免把已实现的启动骨架写成未实现。
 
 #### B. 再做 commander 的 macOS 实机验收
 
@@ -630,8 +632,8 @@
 ### 2026-09-23：第三方 Responses 的 agent_message 兼容（方案 A 已实现）
 
 - 变更目的：隔离 App 直发 Grok 成功，子任务与父会话回放 `agent_message` 后 502。根因是 Codex 私有 input 项，不是 RouteSet。对照 OpenCodex 3911 与 Cockpit Responses 透传后给出 A/B/C/D。
-- 合同：[第三方 Responses：Codex agent_message 兼容](designs/2026-09-23-responses-agent-message-compat.md)。方案 A：出站把 `agent_message` 收成干净 `message`，明文 `encrypted_content` 部件展成 `input_text`；入站不改 collaboration 工具名。Chat 转换、官方透传、压缩信封不在本切片。
-- 实际修改：`src-tauri/src/managed_gateway.rs` 增加 API Provider 普通 Responses 请求的 agent-message 规范化和 HTTP 400 `unreadable_agent_message`；失败文案明确为「子任务转发失败」。父任务收到 Codex `Agent errored:` 回传时，Gateway 将追加“结果不可用、可自行继续”的标准文本提示。新增四项相关回归测试。设计与本计划同步。
+- 合同：[第三方 Responses：Codex agent_message 兼容](archive/designs/2026-09-23-responses-agent-message-compat.md)。方案 A：出站把 `agent_message` 收成干净 `message`，明文 `encrypted_content` 部件展成 `input_text`；入站不改 collaboration 工具名。Chat 转换、官方透传、压缩信封不在本切片。
+- 实际修改：`src-tauri/src/managed_gateway/` 增加 API Provider 普通 Responses 请求的 agent-message 规范化和 HTTP 400 `unreadable_agent_message`；失败文案明确为「子任务转发失败」。父任务收到 Codex `Agent errored:` 回传时，Gateway 将追加“结果不可用、可自行继续”的标准文本提示。新增四项相关回归测试。设计与本计划同步。
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test managed_gateway::tests::routed_agent_message -- --nocapture` 通过（4 项）；`cargo test managed_gateway::tests::compaction_request_keeps_its_existing_fail_closed_path -- --nocapture` 通过。mock 上游确认实际收到了干净的 `message/user`，模型仍改写为绑定 upstream。
 - 未完成项：Cockpit 代码未复制。方案 B（collaboration 改名与还原）未做；本次实机未触发二次委派工具名错误。
 - 下一步：本票可归档。若以后子任务能开聊但二次 spawn_agent 因 namespace 工具名失败，再评估方案 B。
@@ -641,7 +643,7 @@
 
 - 变更目的：隔离 App 占住同一个应用包时，Finder 只能聚焦隔离窗口；同时让用户在首次继承后能直接打开隔离配置目录，自行修改且不被下次启动的默认目录覆盖。
 - 合同：偏好和引导状态仍只在隔离目录首次启动时从 `~/.codex` 复制一次，标记为 `.3rcodex-preference-seed`。登录、认证和历史对话不复制。「打开默认 Codex」使用 `open -n` 启动对应应用包，不带隔离环境、`--user-data-dir` 或工作区路径；重复点击依赖默认 Electron 单实例锁回到已有默认窗口。「打开CODEX_HOME目录」打开当前工作区复用的隔离 App 目录，运行中也可打开；未启动过则返回 `isolated_home_not_ready`。
-- 实际修改：`src-tauri/src/lib.rs`、`src-tauri/src/managed_launch.rs`、`src/App.tsx`、`src/codex-control.ts`、`src/styles.css`、独立工作区计划。
+- 实际修改：`src-tauri/src/lib.rs`、`src-tauri/src/managed_launch/`、`src/App.tsx`、`src/codex-control.ts`、`src/styles.css`、独立工作区计划。
 - 实际验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check` 通过；`cargo test --manifest-path src-tauri/Cargo.toml --lib tests::default_codex_open_starts_a_new_instance_without_isolation_args -- --exact` 通过；`pnpm run check` 通过。未打包，未启动 Tauri。
 - 未完成项：真实点击需 commander 重启自己的 `pnpm run tauri:dev` 后验收。未打包。
 - 回滚：恢复 `open_codex_app` 的 `codex app` 启动器路径，移除目录打开命令和两个按钮。
@@ -650,7 +652,7 @@
 
 - 变更目的：让隔离 App 在首次建立工作区时继承用户维护的个人技能和全局指导文件。
 - 合同：只复制默认 `~/.codex` 根目录的 `AGENTS.md`、`rules/` 和 `skills/` 中的用户内容；隔离目录已有的 `.system` skills 保留，不复制链接、非普通文件或超过 16 MiB 的单文件。复制由 `.3rcodex-preference-seed` 标记保护，只发生一次；之后默认目录变化不会覆盖隔离目录内的修改。MCP、marketplace、shell 环境、凭据、会话和历史仍不继承。
-- 实际修改：`src-tauri/src/managed_codex_config.rs` 增加安全的首次指导文件种子和回归测试；独立工作区计划同步。
+- 实际修改：`src-tauri/src/managed_codex_config/` 增加安全的首次指导文件种子和回归测试；独立工作区计划同步。
 - 实际验证：`cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check`、定向 `managed_codex_config` 测试待本轮完成；未启动 Tauri、未打包。
 - 回滚：移除 `seed_user_guidance` 调用和复制 helper；已有隔离目录不会被自动清理。
 
@@ -658,7 +660,7 @@
 
 - 变更目的：解释 Settings 中 Plugins、Browser、Computer Use 以及 Personal 偏好为何出现差异，并建立官网/未来同步设置可复用的继承分类。
 - 结论：插件启用状态本来就在 `config.toml` `[plugins]` 中继承；本轮补齐 `.codex-global-state.json` 中稳定的 General、Appearance、Onboarding、模型选择器、侧栏和编辑器偏好。Browser/Computer Use 的 UI 开关可继承，但 Cookie、登录、历史、站点权限、设备绑定、运行时 socket、缓存、打开标签页和绝对路径不复制。MCP、marketplace、模型路由、账户和历史继续不继承。
-- 实际修改：`src-tauri/src/managed_codex_config.rs` 扩展原子状态白名单与测试；独立工作区计划加入详细设置继承表。
+- 实际修改：`src-tauri/src/managed_codex_config/` 扩展原子状态白名单与测试；独立工作区计划加入详细设置继承表。
 - 实际验证：定向 `managed_codex_config` 种子测试通过；`pnpm run check` 待本轮完成。未启动 Tauri、未打包。
 - 已完成：工作区卡片提供用户可选的按清单同步设置入口，支持 General、Appearance、Onboarding/Permissions、Plugins、个人指导文件和项目信任级别；同步要求隔离 App 已停止，且不复制整个 Electron 用户数据目录。后续可继续增加更细粒度的预览和版本冲突提示。
 
@@ -675,7 +677,7 @@
 - 变更目的：让「清除结束实例」真正清除 3R 隔离实例的专属运行数据，并修复项目扫描包含归档会话、导入无法定位最近隔离 App 数据的问题。
 - 合同：受管理 App 删除其生命周期目录（专属 `CODEX_HOME`、其中已对齐的对话索引、配置、认证文件、模型目录和启动记录）及 3R 专属 Electron 数据，并 best-effort 删除旧 `managed-app-sqlite/<preset>` 残留；CLI 只删除其生命周期目录。模型渠道/API Key、启动方案、工作区级请求档案不属于单个实例，保留。绝不触碰用户默认 Codex 文件。
 - 导入：项目列表和导入候选只读取 `sessions` 下的活动会话，`archived_sessions` 不再形成项目或被复制；目标从指定启动方案最近一次已初始化且已退出的 managed App 实例读取。
-- 实际修改：`src-tauri/src/managed_launch.rs` 增加实例准入密钥同步撤销、目录归属校验和 App/CLI 分层清理；`src-tauri/src/lib.rs` 与 `codex_control.rs` 使用同一删除清理路径并不再静默忽略生命周期目录删除；`src-tauri/src/session_import.rs` 排除归档会话并保留异常路径安全校验；`src/App.tsx`、`src/codex-control.ts` 和 `src/SessionImportPanel.tsx` 增加不可恢复范围与失败提示；产品原理、详细设计和独立工作区计划同步。
+- 实际修改：`src-tauri/src/managed_launch/` 增加实例准入密钥同步撤销、目录归属校验和 App/CLI 分层清理；`src-tauri/src/lib.rs` 与 `codex_control.rs` 使用同一删除清理路径并不再静默忽略生命周期目录删除；`src-tauri/src/session_import.rs` 排除归档会话并保留异常路径安全校验；`src/App.tsx`、`src/codex-control.ts` 和 `src/SessionImportPanel.tsx` 增加不可恢复范围与失败提示；产品原理、详细设计和独立工作区计划同步。
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test --all-targets` 通过，252 个库测试、Gateway 1、launcher 12、官方认证 16 项全部通过；`cargo check --all-targets`、`pnpm run check`、`pnpm run build` 通过。未打包、未启动 Tauri。
 - 未完成项：仍需 commander 用自己运行的 `pnpm run tauri:dev` 做真实 App 删除后数据残留检查，以及退出 3R App 后扫描/导入活动项目会话的实机验收；未读取用户默认配置、认证或真实会话正文。
 - 回滚：恢复本条涉及的删除清理与会话筛选改动，不需要迁移用户默认目录；恢复 UI 文案即可撤回确认提示行为。
@@ -708,7 +710,7 @@
 
 - 变更目的：最新实机预检日志显示当前 Codex 拒绝缺少 `supported_reasoning_levels` 的生成目录。无推理档位时旧覆盖逻辑删除该字段，误把“不能广告推理能力”实现成了无效的目录结构。
 - 合同：第三方条目始终保留 `supported_reasoning_levels`。有已验证档位时写精确档位与默认值；无档位时写 `[]` 并移除 `default_reasoning_level`，不回填 GPT 的推理档位。
-- 实际修改：`src-tauri/src/model_family_profile.rs` 在无推理档位分支写入 `supported_reasoning_levels: []`；新增覆盖层断言。`src-tauri/src/managed_codex_config.rs` 的目录生成断言确认该字段和默认值的最终形状；本计划、独立工作区计划同步。
+- 实际修改：`src-tauri/src/model_family_profile.rs` 在无推理档位分支写入 `supported_reasoning_levels: []`；新增覆盖层断言。`src-tauri/src/managed_codex_config/` 的目录生成断言确认该字段和默认值的最终形状；本计划、独立工作区计划同步。
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test --lib` 249 通过；`cargo check --all-targets` 通过。未打包、签名或启动 Tauri，未读取默认 Codex 配置/认证。
 - 未完成项：真实 Codex 解析由 commander 重启 `pnpm run tauri:dev` 后复验。若仍失败，读取最新 `startup.log` 的 `catalog_probe` 行；预期结果为 `catalog_probe result=success`。
 - 回滚：将空数组写入恢复为移除字段并删除两条回归断言；这会重新暴露当前 Codex 的目录解析失败，不能作为发布修复。
@@ -718,7 +720,7 @@
 
 - 变更目的：实机生成目录的模型数组已按渠道/模型排列，但 Codex 条目的 `priority` 仍使用保存顺序，导致桌面端可能显示为旧顺序；3R 工作区的若干模型列表也直接显示保存顺序。
 - 合同：目录按渠道名称、模型名称、公共模型 ID 稳定排序；`priority` 与目录位置一致。默认模型单独写入 3R 私有 Profile 的 `model` 字段，排序不能改变默认模型、路由 ID 或保存顺序。首次隔离 App 引导不读取原 Codex 设置，跳过后的 UI 状态只保存在 3R 的 Electron 数据根。
-- 修改文件：`src-tauri/src/managed_codex_config.rs`（目录优先级、显式默认模型、排序回归）；`src-tauri/src/managed_launch.rs`（向 Profile 传入已保存的默认模型）；`src/App.tsx`（路由预览、工作区下拉、渠道和检测目录统一排序）；独立工作区计划。
+- 修改文件：`src-tauri/src/managed_codex_config/`（目录优先级、显式默认模型、排序回归）；`src-tauri/src/managed_launch/`（向 Profile 传入已保存的默认模型）；`src/App.tsx`（路由预览、工作区下拉、渠道和检测目录统一排序）；独立工作区计划。
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test --lib managed_codex_config::tests` 8 通过；`cargo check --all-targets` 通过；`pnpm run check` 与 `pnpm run build` 通过。不打包、不启动 Tauri。
 - 未完成项：commander 需用自己运行的 `pnpm run tauri:dev` 重启后，确认 Codex App 的模型目录顺序和当前默认模型均符合预期。
 - 回滚：恢复 `priority=route.position`、移除 Profile 的 `model` 字段和前端排序 helper；不涉及 3R 数据迁移或用户默认 Codex 文件。
@@ -726,7 +728,7 @@
 ### 2026-09-22：生成模型目录预检日志
 
 - 变更目的：`codex_catalog_validation_failed` 原先丢弃 Codex 子进程的标准错误，无法区分命令不可执行、配置解析失败、目录输出格式改变等原因。现在在启动记录写入前的预检阶段保留可定位的脱敏证据。
-- 修改文件：`src-tauri/src/managed_codex_config.rs`（模型目录与 Profile 探针的分阶段日志、URL/凭据脱敏、回归测试）；`src-tauri/src/managed_launch.rs`（将本次生命周期 `startup.log` 传给预检）；[独立工作区计划](designs/2026-09-21-isolated-only-product-plan.md)（日志隐私合同）；本计划。
+- 修改文件：`src-tauri/src/managed_codex_config/`（模型目录与 Profile 探针的分阶段日志、URL/凭据脱敏、回归测试）；`src-tauri/src/managed_launch/`（将本次生命周期 `startup.log` 传给预检）；[独立工作区计划](designs/2026-09-21-isolated-only-product-plan.md)（日志隐私合同）；本计划。
 - 合同：每次预检记录成功或失败阶段、退出状态、stdout/stderr 字节数和 SHA-256；失败 stderr 只记录最多 768 字符的摘要。写入前会移除 URL、认证头和常见 Key/Token 值；不记录请求正文、完整 URL 或凭据。日志写入失败不改变原有阻止启动的行为。
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test managed_codex_config::tests` 7 通过（包含非零退出写日志，以及 URL/Bearer 脱敏）；`cargo check --all-targets` 通过；`pnpm run tauri:build --bundles app` 通过。包内确认包含 `catalog_probe` 诊断标识；执行 `codesign --force --deep --sign -` 后 `codesign --verify --deep --strict` 通过。
 - 未完成项：真实 Codex 预检失败尚待 commander 用新包复现。预检在实例记录写入之前执行，失败日志位于 `~/Library/Application Support/io.3r.codex/codex-instances/<attempt-id>/startup.log`，尚未作为单独 UI 记录展示。
@@ -783,7 +785,7 @@
 ### 2026-09-21：会话修复允许当前 Codex 时间戳触发器
 
 - 变更目的：恢复显式会话修复。当前默认 App 的 `state_5.sqlite` `threads` 表带有毫秒时间戳/recency 触发器，旧实现把任意触发器当未知 schema，扫描失败；`custom` / `codex_local_access` 等旧 `model_provider` 因此无法改写，打开这些会话时 Codex App 会因 Provider 不存在反复重建界面。
-- 修改文件：`history_provider_repair/sqlite.rs`（只拒绝会在 `UPDATE model_provider` 时触发的触发器）；`history_provider_repair/tests.rs`；[会话修复设计](designs/codex-history-provider-migration-design.md)；本计划。
+- 修改文件：`history_provider_repair/sqlite.rs`（只拒绝会在 `UPDATE model_provider` 时触发的触发器）；`history_provider_repair/tests.rs`；[会话修复设计](archive/designs/codex-history-provider-migration-design.md)；本计划。
 - 合同：`AFTER INSERT` / `AFTER UPDATE OF` 其它列允许；无列限定的 `UPDATE`、`UPDATE OF model_provider`、`INSTEAD OF` 仍失败关闭。本次写入仍只改 Provider 名称，不改标题或时间戳。
 - 实际验证：`cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check` 通过；`cargo test --manifest-path src-tauri/Cargo.toml --lib history_provider_repair` 22 passed / 0 failed（含当前 Codex 时间戳触发器允许修复、无列限定 UPDATE 仍失败关闭）。未对真实 `~/.codex` 应用修复，未改正在跑的默认 App。
 - 未完成项：commander 退出 Codex 后在「历史与测试记录 / 会话修复」扫描，把 `custom`、`codex_local_access`、`3rcodex`、`3r_gpt_*` 预览并应用到 `OpenAI`，再打开旧会话确认不再闪烁。Windows 实机仍待验。
@@ -805,7 +807,7 @@
 ### 2026-09-21：F 锁定当前模型族-only；C 停放
 
 - 变更目的：commander 不能容忍未选 GPT 时 luna 出现；只接入三方时必须当前模型族-only。C 生图产品化改为极低优先级（日后或可做成技能管理），暂不做。**不改代码。**
-- 修改文件：[F 设计](designs/2026-09-21-f-family-only-ephemeral.md)；followups C/F；错误待办 E11；本计划；详细设计 2026-09-21 兼容回退例外；AGENTS 未完成项；产品原理第 15 节补充句；overlay 诊断表。
+- 修改文件：[F 设计](archive/designs/2026-09-21-f-family-only-ephemeral.md)；followups C/F；错误待办 E11；本计划；详细设计 2026-09-21 兼容回退例外；AGENTS 未完成项；产品原理第 15 节补充句；overlay 诊断表。
 - 已确认现状：默认 App 兼容目录 merge 保留全部原生 bundled 行；`compatibility_fallback_from_config` 把未选中原生 slug 放进官方回退。App 写死 `gpt-5.6-luna` 的 ephemeral 请求因此走 `compatibility_native`。删 GPT 勾选不会改用 Grok。
 - 合同：未选 GPT 族（`looks_like_gpt_model_id`）则 merge/回退去掉 GPT slug；luna 隐藏别名到工作区默认 Responses；选了 GPT 族保持 native 回退。残留官方登录不算选了 GPT。不因 401/502 换路。
 - 实际验证：只读 `managed_codex_config.rs` merge、`managed_launch.rs` fallback、Gateway 精确匹配失败后的 native 转发。未跑 cargo test。未改正在跑的默认 App。
@@ -828,7 +830,7 @@
 ### 2026-09-21：B1 3rxai grok-4.6 看图探针失败，B2 保持 false，A3 写入路径接上
 
 - 变更目的：按产品原理第 8 条验证 3rxai Grok 看图；失败则不准宣称。接上 family→CapabilitySet 图像写入，当前值仍为 false。
-- 修改文件：[B 设计](designs/2026-09-21-b-grok-vision-probe.md)；fixture `src-tauri/tests/fixtures/grok-vision-probe-red-square.png`；`scripts/probe_grok_vision.py`；`model_family_profile.rs` `supports_images` / `family_image_support_for_route`；`managed_launch.rs` A3；followups B1/B2/A3。
+- 修改文件：[B 设计](archive/designs/2026-09-21-b-grok-vision-probe.md)；fixture `src-tauri/tests/fixtures/grok-vision-probe-red-square.png`；`scripts/probe_grok_vision.py`；`model_family_profile.rs` `supports_images` / `family_image_support_for_route`；`managed_launch.rs` A3；followups B1/B2/A3。
 - 探针：3rxai `ai.3rcd.com` `/v1/responses` grok-4.6。文本「Reply with the single word ok」→ 200，上游模型 grok-4.6-build。`input_image` data URL / https 红图以及 Chat `image_url` → 400 Upstream rejected 或 502 Upstream request failed。不经 Gateway。
 - 合同：family.supports_images 默认 false；Responses 且 family true 才写 [text,image]。Chat 永不因本字段开图。搜索仍 false。
 - 实际验证：`cargo fmt --check` 通过；`cargo test --lib` 303 passed（含 grok_image_support_stays_off_after_failed_3rxai_probe、prepare_launch 仍纯文本）。未改正在跑的默认 App。D5 实机 commander 暂不验收。
@@ -840,7 +842,7 @@
 ### 2026-09-21：A1 剥图像/搜索泄漏；D5 Summarizer SSE + medium
 
 - 变更目的：目录不再广告未验证看图/搜索；Summarizer 出站改 SSE，避免 30 秒首字节误杀，摘要推理降到 medium。不打开 supports_images，不改 3rxai 超时表。
-- 修改文件：`model_family_profile.rs` overlay；`managed_codex_config.rs` 目录夹具；`managed_gateway/compaction.rs`；`managed_gateway.rs` mock；§8.2.1 第 2/5 条；overlay §6/7/9；followups A1/A4/A5/D5；错误待办 E8-1/E8-3/E10-2/E10-3；[设计](designs/2026-09-21-a1-d5-parallel-design.md)；本计划。
+- 修改文件：`model_family_profile.rs` overlay；`managed_codex_config.rs` 目录夹具；`managed_gateway/compaction.rs`；`managed_gateway.rs` mock；§8.2.1 第 2/5 条；overlay §6/7/9；followups A1/A4/A5/D5；错误待办 E8-1/E8-3/E10-2/E10-3；[设计](archive/designs/2026-09-21-a1-d5-parallel-design.md)；本计划。
 - 合同：ApiProvider 且 supports_images=false 删除 supports_image_detail_original；supports_web_search=false 删除 web_search_tool_type。Summarizer 出站 stream=true，高推理档降 medium；收齐 SSE/JSON 后仍给 Codex 一个 3r-compaction-v1 项。失败不回退、不换路。
 - 实际验证：`cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check` 通过；`cargo test --manifest-path src-tauri/Cargo.toml --lib` 302 passed / 0 failed（含 overlay 剥图像/搜索广告、官方行保留、catalog 夹具、Summarizer stream=true、推理降 medium、上游 SSE 收齐成一个信封）。未跑付费矩阵；未改正在跑的默认 App。
 - 未完成项：B 看图探针；C 生图产品化；F/E11 luna；E10-1 渠道超时表；E10-4 用 UI 改小窗。D5 实机 504 需下次 compact 观察。
@@ -851,7 +853,7 @@
 ### 2026-09-21：A1 / D5 并行设计，待确认后实现
 
 - 变更目的：回答 A1 与 D5 能否同步；写出可确认的合同，**不改代码**。
-- 修改文件：[A1/D5 设计](designs/2026-09-21-a1-d5-parallel-design.md)；followups / 错误待办状态句；本计划。
+- 修改文件：[A1/D5 设计](archive/designs/2026-09-21-a1-d5-parallel-design.md)；followups / 错误待办状态句；本计划。
 - 并行：可以。A1 只动 overlay 目录字段；D5 只动 Summarizer 出站 stream 与摘要推理档。共享 Markdown 实现时由主会话合并。
 - 拟议合同（未锁进 §8.2.1 / overlay 正文，确认后才写）：A1 按 CapabilitySet 删除 supports_image_detail_original 与 web_search_tool_type；D5 摘要出站 stream=true 收齐 SSE，过高推理降到 medium；不改 3rxai 超时表，不改 500k family 窗。
 - 实际验证：只读 model_family_profile.rs overlay、compaction.rs prepare/collect、§8.2.1。未跑 cargo test。未改正在跑的默认 App。
@@ -874,7 +876,7 @@
 ### 2026-09-20（下午）：实机 compact 成功；超时 / 窗口 / 旁路 luna 只落档
 
 - 变更目的：把今日默认 App Grok 实机 compact 证据、504 首字节超时、窗口自定义要求和 Codex 旁路短模型写进待办。**不改代码、不改正在跑的默认 App 配置。**
-- 修改文件：[followups](designs/2026-09-19-grok-session-followups.md) D3/D5/A2/F；[错误待办](designs/2026-09-19-grok-session-error-todos.md) E1-3、E10、E11；本计划；AGENTS.md 未完成项。
+- 修改文件：[followups](archive/designs/2026-09-19-grok-session-followups.md) D3/D5/A2/F；[错误待办](archive/designs/2026-09-19-grok-session-error-todos.md) E1-3、E10、E11；本计划；AGENTS.md 未完成项。
 - 已确认：
   - 会话 `01a0bcf6`：GatewaySummarizer 触发且 `code=ok`；input 约 228622 → 30654。外国 compaction 信封未再拒绝。
   - 同一压缩链路上 5 次 `upstream_first_byte_timeout`（3rxai first_byte=30s，非流式 send 等头），Codex 客户端重试后成功。候选优化见 E10，待 commander 确认。
@@ -889,7 +891,7 @@
 ### 2026-09-20：E1-2 选项 1 锁定，Summarizer 折叠 reasoning 密文
 
 - 变更目的：默认 App Grok 长会话 compact 不再把本路由 `type=reasoning` 密文误报成压缩信封；GatewaySummarizer 折叠密文、保留可见文本后再摘要。外国 compaction 信封仍 fail-closed。
-- 修改文件：`docs/codex-hybrid-routing-design.md` §8.2.1 第 3 条（合同锁定）；`src-tauri/src/managed_gateway/compaction.rs`（`prepare_summarizer_request` / `fold_summarizer_encrypted_content`）；`src-tauri/src/managed_gateway.rs`（`incompatible_reasoning_envelope` 文案与 HTTP mock）；本计划、产品原理第 15 节、第三方 overlay 诊断表、AGENTS.md、[错误待办](designs/2026-09-19-grok-session-error-todos.md)、[followups D](designs/2026-09-19-grok-session-followups.md)。
+- 修改文件：`docs/codex-hybrid-routing-design.md` §8.2.1 第 3 条（合同锁定）；`src-tauri/src/managed_gateway/compaction.rs`（`prepare_summarizer_request` / `fold_summarizer_encrypted_content`）；`src-tauri/src/managed_gateway/`（`incompatible_reasoning_envelope` 文案与 HTTP mock）；本计划、产品原理第 15 节、第三方 overlay 诊断表、AGENTS.md、[错误待办](archive/designs/2026-09-19-grok-session-error-todos.md)、[followups D](archive/designs/2026-09-19-grok-session-followups.md)。
 - 合同：Summarizer 出站前展开 `3r-compaction-v1:`；外国 `type=compaction` 信封 → `incompatible_compaction_envelope`；`type=reasoning` 删除密文、可见 `summary`/`content` 写成 assistant 文本（Chat 适配需要），无可见文本则丢弃；其它非 compaction 项剥密文，剥不干净 → `incompatible_reasoning_envelope`。普通转发仍只展开 3R 信封，不折叠 reasoning。
 - 实际验证：`cargo fmt --all -- --check` 通过；`cargo test --lib` 280 passed / 0 failed（含 `prepare_summarizer_folds_reasoning_ciphertext_and_rejects_foreign_compaction`、`remote_v2_summarizer_folds_reasoning_ciphertext_before_upstream`、`remote_v2_foreign_envelope_never_reaches_upstream`）。未跑付费 Provider 矩阵，未在真实默认 App 上再 compact 一次。
 - 未完成项：真实默认 App Grok 长会话 compact 一次（E1-3 实机）；A/B/C 仍分开。
@@ -900,7 +902,7 @@
 ### 2026-09-19（下班）：E1 `encrypted_content` 调研落档，未改代码
 
 - 变更目的：确认 GatewaySummarizer 为何把真实默认 App Grok 长会话 compact 打成 `incompatible_compaction_envelope`；分类 `encrypted_content`；对照 OpenCodex / CC Switch / Cockpit / Codex++ 的 Summarizer，给明天改合同用。用户明确只要 E1，不改代码。
-- 修改文件：[Grok 会话错误分析 E1 调研](designs/2026-09-19-grok-session-error-todos.md)、[问题与下一步 D 段](designs/2026-09-19-grok-session-followups.md)；本计划、详细设计 §8.2.1 实现偏差注、产品原理第 15 节、第三方 overlay 诊断表、AGENTS.md。
+- 修改文件：[Grok 会话错误分析 E1 调研](archive/designs/2026-09-19-grok-session-error-todos.md)、[问题与下一步 D 段](archive/designs/2026-09-19-grok-session-followups.md)；本计划、详细设计 §8.2.1 实现偏差注、产品原理第 15 节、第三方 overlay 诊断表、AGENTS.md。
 - 已确认：
   - `encrypted_content` 是槽位，不是一种密文。三类：`type=reasoning`（签发方续接状态）、官方 `type=compaction`、网关合成信封（`3r-compaction-v1:` / `ocx1:` / `cc-switch-compaction-v1:`）。
   - 本会话失败物是 Grok reasoning 密文，不是已证明的官方 compact blob。普通回合已经把同类 reasoning 项转给同一 3rxai；Summarizer 的 `reject_foreign_encrypted_content` 比 §8.2.1 第 3 条字面更严（展开 3R 信封后拒绝任何剩余密文）。
@@ -921,8 +923,8 @@
 
 1. [AGENTS.md](../AGENTS.md)「当前未完成项」里 Grok 压缩那条：安全边界、不改 Summarizer 除非先写 §8.2.1。
 2. 本段交接：已确认事实、推荐未锁、未完成项。
-3. [错误待办 E1 调研](designs/2026-09-19-grok-session-error-todos.md)：槽位三类、发/不发表、同行表、选项 1/2/3。E2–E8 跳过。
-4. [问题与下一步 D 段 + Active Status](designs/2026-09-19-grok-session-followups.md)：D 是压缩票；A/B/C 是目录/看图/生图，本轮不做。
+3. [错误待办 E1 调研](archive/designs/2026-09-19-grok-session-error-todos.md)：槽位三类、发/不发表、同行表、选项 1/2/3。E2–E8 跳过。
+4. [问题与下一步 D 段 + Active Status](archive/designs/2026-09-19-grok-session-followups.md)：D 是压缩票；A/B/C 是目录/看图/生图，本轮不做。
 5. [详细设计 §8.2.1 GatewaySummarizer 第 3 条](codex-hybrid-routing-design.md)：先读合同原文，再读紧随其后的「实现偏差」注。偏差注不是合同。
 6. 代码只在动手时打开 [`compaction.rs`](../src-tauri/src/managed_gateway/compaction.rs)：`expand_compaction_history`、`reject_foreign_encrypted_content`、`prepare_summarizer_request`，以及单测 `prepare_summarizer_strips_trigger_expands_envelope_and_rejects_foreign_blobs`。
 
@@ -944,7 +946,7 @@
 ### 2026-09-19：接管「确认当前模型是否为 Grok」并落档待办
 
 - 变更目的：原会话在用户要求把问题与方案落档时因远程压缩失败（systemError / incompatible_compaction_envelope），本仓库接管该对话，把问答结论和下一步写成专项待办，并把错误拆成可复现条目。本轮只改文档，不改代码。
-- 修改文件：[Grok 会话问题与下一步待办](designs/2026-09-19-grok-session-followups.md)、[Grok 会话错误分析与待办](designs/2026-09-19-grok-session-error-todos.md)；本计划、产品原理第 15 节、第三方目录 overlay 诊断表、AGENTS.md 未完成项增加入口。
+- 修改文件：[Grok 会话问题与下一步待办](archive/designs/2026-09-19-grok-session-followups.md)、[Grok 会话错误分析与待办](archive/designs/2026-09-19-grok-session-error-todos.md)；本计划、产品原理第 15 节、第三方目录 overlay 诊断表、AGENTS.md 未完成项增加入口。
 - 已确认：聊天模型是 3rxai/grok-4.6，不是 Grok 5.6，也不是 gpt-5.6-luna。luna 只出现在误用 image2 Responses 宿主的那次生图。grok-imagine 应走当前 Grok 渠道的 /v1/images/generations；本机 Gateway 只有聊天 /v1/responses。supportsImages=false 是看图开关、故意保守，不是生图能力。目录仍泄漏 GPT 的 supports_image_detail_original、web_search_tool_type=text_and_image 和 272000/872000 窗口。
 - 已落地（个人技能，不在本仓库）：~/.codex/skills/grok-imagine 用 3rxai 凭证出图成功；image2 在 Grok 会话让路。
 - 关键错误：默认 App Grok 长会话 compact 时，GatewaySummarizer 把 122 条 reasoning.encrypted_content 当成外国压缩信封拒绝。普通回合能继续，一压缩就 systemError。这是真实默认 App + Grok 矩阵证据，不是 mock。
@@ -994,7 +996,7 @@
 
 对照结论：本项目应优先检查 `reasoning`（尤其 `encrypted_content`）、`function_call`/`custom_tool_call` 成对关系、item `id`/`status`/`phase`、`previous_response_id` 归属，以及切换后请求中的 `model` 是否已改写为目标上游模型。只有这些字段都通过目标 Provider 的能力合同，才适合继续复用旧历史。
 
-其中，CC Switch #6385 的“旧模型名未改写”在本项目中不是首要假设：Gateway 在能力预检后会把请求的 `model` 明确替换为当前 RouteSet 的 `upstream_model_id`（见 [`managed_gateway.rs`](../src-tauri/src/managed_gateway.rs#L1127-L1130)）。因此仍需优先查历史 item 和续接状态；只有抓到上游实际收到的 model 后，才能完全排除模型名问题。
+其中，CC Switch #6385 的“旧模型名未改写”在本项目中不是首要假设：Gateway 在能力预检后会把请求的 `model` 明确替换为当前 RouteSet 的 `upstream_model_id`（见 [`managed_gateway.rs`](../src-tauri/src/managed_gateway/)）。因此仍需优先查历史 item 和续接状态；只有抓到上游实际收到的 model 后，才能完全排除模型名问题。
 
 #### 下一步验证与产品行为
 
@@ -1004,7 +1006,7 @@
 
 ### 2026-09-16：历史 Provider 标识修复已实现
 
-- [x] 显式扫描、预览、自定义目标名称、停机修复、私有备份和恢复已实现；详见[会话 Provider 修复设计](designs/codex-history-provider-migration-design.md)。仅接受环境中已定义或内建的目标名称，不自动创建配置定义。
+- [x] 显式扫描、预览、自定义目标名称、停机修复、私有备份和恢复已实现；详见[会话 Provider 修复设计](archive/designs/codex-history-provider-migration-design.md)。仅接受环境中已定义或内建的目标名称，不自动创建配置定义。
 - 原“Gateway 运行时别名解析”方案已撤销：Codex 在请求进入 Gateway 之前就加载 Provider 定义，网关内部映射无法解决配置加载失败。允许的写入范围为经验证的 Provider 元数据，不修改消息/工具/推理内容。
 - 验证沿用专项设计记录：此前 256 项 Rust 测试及前端/浏览器验收通过；本轮仅修正文档状态，没有重复执行或宣称真实旧会话恢复已验证。真实 Codex 恢复与 Windows 实机仍待验，跨 App 同步暂缓。
 
@@ -1026,7 +1028,7 @@
 ### 2026-09-18：第三方远程压缩边界
 
 - 目的：接管“目录改造2（压缩问题）”中发现的第三方压缩失败路径。目录层不再让第三方条目继承 GPT-6 Astra 的 `supports_experimental_context`；Gateway 层不把 Codex 私有 `compaction_trigger` 转发给第三方上游。
-- 修改文件：`src-tauri/src/model_family_profile.rs` 删除第三方上下文实验标记并补回归测试；`src-tauri/src/managed_gateway.rs` 增加第三方压缩预检、结构化错误文案和失败路径测试；同步第三方目录、协议兼容、混合路由设计文档。
+- 修改文件：`src-tauri/src/model_family_profile.rs` 删除第三方上下文实验标记并补回归测试；`src-tauri/src/managed_gateway/` 增加第三方压缩预检、结构化错误文案和失败路径测试；同步第三方目录、协议兼容、混合路由设计文档。
 - 验收：第三方含 `compaction_trigger` 的请求在本地返回 `unsupported_compaction` 且不触发上游；官方路由不被该预检拦截；Grok 目录没有 `supports_experimental_context`，原有身份、推理档位和审核自指仍通过。
 - 实际验证：`cargo fmt --all -- --check`、`cargo check --all-targets`、`cargo test --all-targets` 通过（253 个 library、1 个 Gateway、14 个 launcher、16 个 official-auth 测试）；`pnpm run check` 与 `pnpm run build` 通过；本机 `codex-cli 0.154.0-alpha.6.2` 的版本匹配目录解析探针通过。新增 Gateway 集成测试确认第三方压缩请求返回 400 `unsupported_compaction` 且 mock 上游没有收到请求，官方压缩触发项仍通过预检。
 - 回滚：删除本节 Gateway 预检和目录字段移除即可恢复上一行为；不触碰原生会话历史、请求档案或凭据。
@@ -1254,7 +1256,7 @@ Azure Responses 后来也走远程（`supports_remote_compaction()` / `is_azure_
 
 - 目的：验证隔离入口在本机目标 Codex 上是否已经不发 `compaction_trigger`。这是「本地优先」设想的前半句；通过则隔离路径不需要 GatewaySummarizer。
 - 范围：只读探针。临时 `CODEX_HOME` / `CODEX_SQLITE_HOME`，mock 上游，不读用户历史，不打付费上游。默认 App 兼容路径不在本切片。
-- 修改文件：`src-tauri/src/managed_gateway.rs` 增加 opt-in 测试 `installed_codex_isolated_3rcodex_does_not_emit_compaction_trigger`；同步本计划、混合路由设计 §8.2.1、产品原理、协议兼容计划和第三方目录 overlay。
+- 修改文件：`src-tauri/src/managed_gateway/` 增加 opt-in 测试 `installed_codex_isolated_3rcodex_does_not_emit_compaction_trigger`；同步本计划、混合路由设计 §8.2.1、产品原理、协议兼容计划和第三方目录 overlay。
 - 探针方法：物化隔离 Profile（`model_provider=3rcodex`，`name=3R Codex Gateway`）；捕获层挡在 Gateway 之前记录 Codex 发出的 POST；mock `/v1/responses` 回报高 `input_tokens`；第一回合持久化会话后 `exec resume`，用 `model_auto_compact_token_limit=100` 逼出压缩。
 - 实际验证：本机 `/Applications/ChatGPT.app/Contents/Resources/codex`（`codex-cli 0.155.0-alpha.2.6`）。
 
@@ -1349,7 +1351,7 @@ CODEX_REAL_COMPACT_PROBE_BIN=/Applications/ChatGPT.app/Contents/Resources/codex 
 
 1. 确认 `compactMode == remote_v2`、路由 `gateway_summarizer`、input 含 trigger。
 2. Clone 请求；去掉所有 `type=compaction_trigger`；`tools = []`；`model` 已是上游 ID。
-3. 展开 `3r-compaction-v1:` 信封为文本；外国 **compaction** 信封 → `incompatible_compaction_envelope`，不上游。`type=reasoning` 密文在 Summarizer 里折叠为可见文本（2026-09-20 已按 E1-2 选项 1 锁定 §8.2.1 第 3 条）。普通转发不折叠 reasoning。见[错误待办 E1](designs/2026-09-19-grok-session-error-todos.md)。
+3. 展开 `3r-compaction-v1:` 信封为文本；外国 **compaction** 信封 → `incompatible_compaction_envelope`，不上游。`type=reasoning` 密文在 Summarizer 里折叠为可见文本（2026-09-20 已按 E1-2 选项 1 锁定 §8.2.1 第 3 条）。普通转发不折叠 reasoning。见[错误待办 E1](archive/designs/2026-09-19-grok-session-error-todos.md)。
 4. 调当前路由既有 forwarder（Responses 透传或 Chat 适配）。Summarizer 回合强制非流式收齐（对上游仍可 stream，Gateway 缓冲）。
 5. 从上游取出唯一文本摘要；空 / 截断 / 非 2xx → 对应错误，不重试。
 6. 构造 Responses 完成事件：恰好一个 compaction 项，`encrypted_content = "3r-compaction-v1:" + urlsafe_base64(utf8_summary)`。若客户端要 SSE，一次性写出 created/output_item/completed，不要把上游 token 流冒充 compact 流。
@@ -1423,7 +1425,7 @@ CODEX_REAL_COMPACT_PROBE_BIN=/Applications/ChatGPT.app/Contents/Resources/codex 
 - 用户结果：从 3R Codex 选择一个可选官方账户、多个 API Provider 和模型后启动 Codex CLI；同一模型选择器显示固化模型集合，并按模型使用正确凭据。
 - 首个交付：纯 API Key 多 Provider 的端到端 CLI 路径，以及官方登录 + 第三方 API Key 路径的实验能力。
 - 条件交付：官方订阅 GPT 经过 Gateway 的路径，仅在真实兼容探针通过后启用。
-- 范围边界：本执行计划首期实现受管理 App 启动骨架与默认 App 兼容入口；不规划 Codex App 多开。账号池、LAN、公网和运行期热更新同样不在范围内。默认 App 兼容模式允许对原始 Provider 目录中未被选中的原生模型做受限本地 Gateway 回退，以保持单 Provider 配置下的模型可用性；这不是 Provider 或账号的自动切换。App 启动目标的单独预研见 [Codex App 支持预研](codex-app-support-research.md)。
+- 范围边界：本执行计划首期实现受管理 App 启动骨架与默认 App 兼容入口；不规划 Codex App 多开。账号池、LAN、公网和运行期热更新同样不在范围内。默认 App 兼容模式允许对原始 Provider 目录中未被选中的原生模型做受限本地 Gateway 回退，以保持单 Provider 配置下的模型可用性；这不是 Provider 或账号的自动切换。App 启动目标的单独预研见 [Codex App 支持预研](archive/codex-app-support-research.md)。
 
 ### 2026-09-10：默认模型与第三方渠道的地址边界修复
 
@@ -1869,7 +1871,7 @@ cargo test route_store::tests
 ### 问题与边界
 
 - macOS 系统代理可能被 Codex 的 HTTP 客户端用于访问 `127.0.0.1`，即使系统代理排除列表已经包含回环地址；此时空正文 `502` 来自系统代理而非 3R Codex Gateway，请求不会产生 Gateway 诊断。
-- 3R 拉起的 Gateway-managed CLI / 兼容 CLI / 受管理 App / 从 3R 打开的默认 App 需要强制绕过本机回环代理。Finder / Dock 直开拿不到进程 `NO_PROXY`。单 Provider direct-managed CLI 仍按用户环境访问真实 Provider Base URL，不得关闭其系统代理路径。详见[默认 App 回环 Gateway 与系统代理](compat-app-loopback-proxy.md)。
+- 3R 拉起的 Gateway-managed CLI / 兼容 CLI / 受管理 App / 从 3R 打开的默认 App 需要强制绕过本机回环代理。Finder / Dock 直开拿不到进程 `NO_PROXY`。单 Provider direct-managed CLI 仍按用户环境访问真实 Provider Base URL，不得关闭其系统代理路径。详见[默认 App 回环 Gateway 与系统代理](archive/compat-app-loopback-proxy.md)。
 - Terminal 窗口或进程组被直接关闭时，launcher 可能与 Codex 一起退出，来不及写入 exited 回执；后端必须以回执记录的 PID 和进程启动身份为准完成兜底收敛。
 
 ### 写路径与失败行为
@@ -1963,7 +1965,7 @@ Gateway 现在由独立的 `codex-gateway` 伴随进程承载。3R Codex 是控�
 - [x] 只读验证隔离模型目录读取，并静态核验当前 renderer 的 `hidden` 可见性规则；运行时探针会在打包资产齐备时开放受管理 App，失败时可用环境开关关闭。
 - [x] 单运行实例 App 行为探针：核验真实 PID、派生 app-server、配置/模型生效、App Server 模型列表、Gateway 请求和退出回执；renderer 已完成静态规则与入口可见性核验，真实模型 picker 点击仍需签名桌面会话验收。不做 App 多开编排。Keychain 无授权时按有界失败处理，不能静默回退。
 
-上述机械探针与发布版运行时探针共同证明当前安装具备受管理 App 的可调用入口；完整上游请求仍受签名桌面会话和 Keychain 授权条件约束。详细决策和官方合同见 [Codex App 支持预研](codex-app-support-research.md)。
+上述机械探针与发布版运行时探针共同证明当前安装具备受管理 App 的可调用入口；完整上游请求仍受签名桌面会话和 Keychain 授权条件约束。详细决策和官方合同见 [Codex App 支持预研](archive/codex-app-support-research.md)。
 
 隔离启动探针补充结论：默认 App 与一个临时数据目录 App 可同时运行；临时 `CODEX_HOME` 有实际 Codex 状态写入，App Server initialize 握手成功，未读取默认认证。临时 App Server 的 `model/list` 已返回测试模型；同一隔离配置下 `thread/start`/`turn/start` 已请求到本机 Gateway 并收到完整 `response.completed`；Gateway 的两条无敏感 Codex→模拟 Grok upstream 回归也通过。运行时探针现在会在打包的 launcher、Gateway 和桌面可执行文件齐备时将 `managedAppAvailable` 置为 `true`，并支持 `THREER_CODEX_DISABLE_MANAGED_APP=1` 紧急关闭；Keychain 授权失败仍会在启动阶段有界失败，不会静默回退。
 
@@ -2132,6 +2134,6 @@ Gateway 重启可恢复独立绑定；遗留脏行在真实进程退出前不能
 
 验证：`cargo test --lib relaunch_refreshes_owned_config_and_keeps_isolated_preferences` 与 `cargo test --lib tests_prepare` 通过。`cargo fmt --all -- --check` 通过。
 
-未完成项：已经打开的隔离 CLI 要下次启动才吃到合并结果。补绑和标题栏转发不再做。5 秒未确认保留绑定，见 [隔离启动核对计划](designs/2026-10-09-isolated-launch-review.md)。
+未完成项：已经打开的隔离 CLI 要下次启动才吃到合并结果。补绑和标题栏转发不再做。5 秒未确认保留绑定，见 [隔离启动核对计划](archive/designs/2026-10-09-isolated-launch-review.md)。
 
 回滚：恢复 Profile 写入 `approvals_reviewer = "auto_review"`，并停止在合并时删除该键。

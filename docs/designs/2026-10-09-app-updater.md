@@ -1,6 +1,7 @@
 # R Codex 应用在线更新
 
-> 状态：首版落地。参考 Cockpit Tools 的 GitHub Release + Tauri updater，不复制其代码。不依赖 Apple Developer ID / 公证。
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：首版落地。参考 Cockpit Tools 的 GitHub Release + Tauri updater，不复制其代码。不依赖 Apple Developer ID / 公证。
 
 ## 目标
 

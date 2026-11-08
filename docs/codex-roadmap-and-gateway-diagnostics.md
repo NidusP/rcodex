@@ -1,9 +1,10 @@
 # R Codex Codex 支持路线与 Gateway 诊断
 
-> 状态：I1e、I1f-0、I1f-1、I2 核心与 V3.1 信息模型已完成（2026-08-12）  
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：I1e、I1f-0、I1f-1、I2 核心与 V3.1 信息模型已完成（2026-08-12）  
 > 依据：Cockpit Tools / CC Switch 的公开产品行为；实现独立完成，不复制其代码或凭据处理方式。
 
-Codex App 支持预研已于 2026-08-28 完成：当前只保留默认 App 打开入口，不把受管理 CLI 的 Provider/Gateway 运行实例边界扩展到官方桌面 App；默认 App 兼容路由经过本机 Gateway 的请求仍写入全局请求诊断账本。详见 [Codex App 支持预研](codex-app-support-research.md)。
+Codex App 支持预研已于 2026-08-28 完成：当前只保留默认 App 打开入口，不把受管理 CLI 的 Provider/Gateway 运行实例边界扩展到官方桌面 App；默认 App 兼容路由经过本机 Gateway 的请求仍写入全局请求诊断账本。详见 [Codex App 支持预研](archive/codex-app-support-research.md)。
 
 ## 目标
 
@@ -164,7 +165,7 @@ gateway_request_diagnostics {
 - 提供用户级配置/Profile 的 diff、快照、写后解析、外部变更冲突检测和恢复；`auth.json` 只由官方流程或明确隔离实例拥有。
 - 多实例按不可变启动配置修订固定账户/API Key、Provider、Gateway 与 Profile，并持有运行时配置锁；相关实例退出前，编辑、替换、重新授权、断开与删除均返回 `configuration_in_use`。官方认证失效由 Codex 直接报错，R Codex 不自动换号、修复或重启；同时不修改默认 `~/.codex`、Codex App 登录或系统环境。
 
-**实施状态**：I2 核心与 V3.1 差异化信息模型已完成，具体契约、验收证据和剩余真实账户门槛见[执行计划](codex-auth-launch-execution-plan.md)。OAuth 仍不进入 Gateway 上游或自动轮换范围。
+**实施状态**：I2 核心与 V3.1 差异化信息模型已完成，具体契约、验收证据和剩余真实账户门槛见[执行计划](archive/codex-auth-launch-execution-plan.md)。OAuth 仍不进入 Gateway 上游或自动轮换范围。
 
 ### I3：Codex 工作区治理
 

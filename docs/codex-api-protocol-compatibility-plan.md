@@ -2,7 +2,8 @@
 
 > 2026-11-07：模型透出偏好与按渠道修订/模型/协议的图片证据分开持久化。Responses、Chat Completions 均只使用当前已确认协议探测；只有内容识别成功才在新路由快照中声明看图。模型族默认值不授予该能力。当前合同和验证见[实施方案](designs/2026-11-07-model-exposure-image-probe.md)。
 
-> 状态：方案记录；协议适配已落在 Managed Gateway，历史单 Provider Gateway 已删除  
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：方案记录；协议适配已落在 Managed Gateway，历史单 Provider Gateway 已删除  
 > 日期：2026-09-14  
 > 相关设计：[Codex 混合模型路由详细设计](codex-hybrid-routing-design.md)、[Codex 混合模型路由执行计划](codex-hybrid-routing-execution-plan.md)
 
@@ -48,7 +49,7 @@ GET  /v1/models
 POST /v1/responses
 ```
 
-路由定义位于 [`managed_gateway.rs`](../src-tauri/src/managed_gateway.rs)。本地没有 `POST /v1/chat/completions`，因此 Chat Completions 客户端直接访问本地 Gateway 会得到 404。
+路由定义位于 [`managed_gateway.rs`](../src-tauri/src/managed_gateway/)。本地没有 `POST /v1/chat/completions`，因此 Chat Completions 客户端直接访问本地 Gateway 会得到 404。
 
 ### 2.2 当前请求路径
 
@@ -63,7 +64,7 @@ Codex
   -> Provider 上游协议分派
 ```
 
-对应代码入口是 [`responses`](../src-tauri/src/managed_gateway.rs)、[`forward_provider`](../src-tauri/src/managed_gateway.rs) 和 [`forward_responses_response`](../src-tauri/src/managed_gateway.rs)。
+对应代码入口是 [`responses`](../src-tauri/src/managed_gateway/)、[`forward_provider`](../src-tauri/src/managed_gateway/) 和 [`forward_responses_response`](../src-tauri/src/managed_gateway/)。
 
 ### 2.3 当前两种上游分支
 
@@ -98,9 +99,9 @@ Codex
   -> 合成为 Responses 响应
 ```
 
-主要实现是 [`response_request_to_chat`](../src-tauri/src/managed_gateway.rs)、[`forward_chat_completions`](../src-tauri/src/managed_gateway.rs) 和 [`chat_sse_to_responses`](../src-tauri/src/managed_gateway.rs)。
+主要实现是 [`response_request_to_chat`](../src-tauri/src/managed_gateway/)、[`forward_chat_completions`](../src-tauri/src/managed_gateway/) 和 [`chat_sse_to_responses`](../src-tauri/src/managed_gateway/)。
 
-这不是“本地 Chat 请求转 Responses 请求”的入口适配，而是“Codex Responses 请求适配到 Chat-only Provider”的上游适配。2026-10-13 起，工具按协议映射，不按模型名分支。细则见 [Chat Completions 函数工具](designs/2026-10-12-chat-completions-function-tools.md)。
+这不是“本地 Chat 请求转 Responses 请求”的入口适配，而是“Codex Responses 请求适配到 Chat-only Provider”的上游适配。2026-10-13 起，工具按协议映射，不按模型名分支。细则见 [Chat Completions 函数工具](archive/designs/2026-10-12-chat-completions-function-tools.md)。
 
 - 支持字符串输入和多消息文本输入；
 - `developer` 可映射为 `system`；

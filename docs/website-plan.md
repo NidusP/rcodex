@@ -1,5 +1,8 @@
 # 3R Codex 官网计划
 
+> 状态：active（最后核对 2026-11-08）
+<!-- doc-links-allow: website/src/assets/mark.svg -->
+
 ## 目标
 
 - 使用 Astro + Starlight 建立面向用户的静态官网。
@@ -57,7 +60,7 @@
 - 视觉样式：`website/src/styles/site.css`，使用不透明内容卡和响应式布局。
 - 发布 workflow：`.github/workflows/website.yml`。
 - 验证：`ASTRO_TELEMETRY_DISABLED=1 pnpm run check` 通过；`ASTRO_TELEMETRY_DISABLED=1 pnpm run build` 通过，生成 9 个页面和 Pagefind 搜索索引。
-- 限制：构建仍提示 Starlight 未配置专用 `docs/404` 条目，但已正常生成通用 `dist/404.html`；当前浏览器工具禁止访问本地文件或本地服务 URL，未完成交互截图验收。
+- 限制：构建仍提示 Starlight 未配置专用 404 条目，但已正常生成通用 `dist/404.html`；当前浏览器工具禁止访问本地文件或本地服务 URL，未完成交互截图验收。
 
 ## 尚未发布
 

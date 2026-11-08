@@ -1,6 +1,7 @@
  # Windows 隔离 App 启动
 
-> 状态：商店包隔离启动已接通。安装根、DirectExe 与隔离 CLI 见 [Windows 安装根、DirectExe 与隔离 CLI](2026-10-17-windows-install-root-launch.md)。
+> 状态：active（最后核对 2026-11-08）
+> 状态说明：商店包隔离启动已接通。安装根、DirectExe 与隔离 CLI 见 [Windows 安装根、DirectExe 与隔离 CLI](2026-10-17-windows-install-root-launch.md)。
 
 ## 目标
 
