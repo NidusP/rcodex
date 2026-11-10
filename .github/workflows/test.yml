@@ -29,4 +29,24 @@ jobs:
             chmod +x "binaries/${name}-aarch64-apple-darwin" "binaries/${name}-x86_64-apple-darwin" || true
           done
       - name: Run library and launcher tests
-        run: cargo test --lib --bins -- --skip managed_gateway
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --lib --bins -- --skip managed_gateway 2>&1 | tee ci-test-output.txt
+      - name: Surface test failures in the job summary
+        if: failure()
+        shell: bash
+        working-directory: src-tauri
+        run: |
+          {
+            echo '## Test failure details'
+            echo '```'
+            grep -E "test result:|panicked at|^---- |^failures:$|FAILED|Access is denied|assertion" ci-test-output.txt | head -150 || true
+            echo '```'
+            echo '<details><summary>tail of test output</summary>'
+            echo ''
+            echo '```'
+            tail -120 ci-test-output.txt || true
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
