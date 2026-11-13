@@ -1146,10 +1146,10 @@ mod tests {
         );
         assert!(store.body_page(&id, "../../elsewhere", 0, 10).is_err());
         let relative = store.stage_path(&id, "ingress").unwrap().0;
-        assert!(relative
-            .to_string_lossy()
-            .contains(&format!("conversations/{native}")));
-        assert!(!relative.to_string_lossy().contains("../../"));
+        // Windows 路径分隔符是反斜杠，断言前统一成正斜杠。
+        let relative_text = relative.to_string_lossy().replace('\\', "/");
+        assert!(relative_text.contains(&format!("conversations/{native}")));
+        assert!(!relative_text.contains("../../"));
     }
 
     #[test]
