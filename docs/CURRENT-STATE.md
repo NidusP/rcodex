@@ -50,7 +50,7 @@ pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposu
 
 ## 5. 当前阻塞与未完成
 
-- **CI Test 工作流长期失败**（自 2026-10-16 起每次 run 均失败，macOS exit 101 / Windows exit 1）；本地同命令全过，具体用例名需日志权限。0.1.7 发版不受影响，但待修复。
+- **CI Test 已全绿**（2026-11-13，run #19 起双平台通过，历史 18 连败清零）；失败诊断通道已固化（job summary + check 注解，匿名可读）。待做：恢复 `--skip managed_gateway` 的 Gateway 测试入 CI（先考古跳过原因）、清理 113 条测试警告。
 - **Windows 0.1.7 实机验收未做**：安装/更新后旧实例目录保留、双隔离 App 不同 Electron 数据目录、卸载不删 `%APPDATA%\io.rcodex`、空间删除（含文件锁重试）。安装器见 release v0.1.7。
 - **0.1.6 → 0.1.7 回退需升级前数据库备份**：schema v24 旧二进制拒绝。
 - 真实 Codex App 的独立 API 登录、多渠道连续会话、重启与导入后恢复验收；不得读取默认认证验证。
@@ -63,7 +63,7 @@ pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposu
 
 ## 6. 最近任务交接
 
-- **2026-11-08 子项目 AGENTS.md**（commander 批准）：新增 `src/AGENTS.md`、`src-tauri/AGENTS.md`、`website/AGENTS.md`（agents.md 嵌套规范，就近生效）；根 AGENTS.md 149 行只留跨端合同，子项目约定见各文件。
-- **2026-11-09 修复 CI 测试**（CI run #16 日志定位，Test 工作流自首次 run 起从未通过）：① macOS supervisor 在子进程瞬间退出时读取进程身份失败导致启动报错，改为跳过 running 回执直接落 exited 回执；② Windows archive 在 append/只读句柄上 sync_all/set_len 被 Access denied（FlushFileBuffers 需要 FILE_WRITE_DATA），12 项测试与真实 Windows 档案写入全挂，改为独立可写句柄；③ Windows Command 环境键不区分大小写，NO_PROXY 双拼写折叠为一份，断言改为平台感知。本地 CI 同款命令 371 项全过（supervisor 压测 5/5）；Windows 路径由 CI 验证。
+- **2026-11-13 CI Test 全绿**（run #19，双平台首次通过，此前 18 连败）：Windows 最后一项失败是 archive 路径断言写死 `/` 分隔符，断言统一为正斜杠后通过。修复过程（run #16 日志定位）：① macOS supervisor 子进程秒退时身份读取失败导致启动报错，改为跳过 running 回执直接落 exited；② Windows archive 在 append/只读句柄上 sync_all/set_len 被 Access denied（FlushFileBuffers 需要 FILE_WRITE_DATA），改独立可写句柄；③ NO_PROXY 断言平台感知。诊断通道固化：CI 失败时把失败块写进 job summary + check 注解（匿名可读，run #18 起）。提交 `516ce33`/`59760f7`/`00ef154`/`5501662`；回滚 revert 之。
+- **2026-11-08 子项目 AGENTS.md**（commander 批准）：新增 `src/AGENTS.md`、`src-tauri/AGENTS.md`、`website/AGENTS.md`（agents.md 嵌套规范，就近生效）；根 AGENTS.md 只留跨端合同，子项目约定见各文件。
 - **2026-11-08 归档迁移**（commander 批准）：38 份 historical/archived 文档与 stitch 设计资产 `git mv` 至 `docs/archive/`（镜像 designs 子层，git 历史保留）；读取面收敛为约 20 份 active 文档；链接修复 134 处，`check-doc-links` active 0 失效。回滚：git mv 逆操作。
 - 更早（2026-11-08）：发版 0.1.7（产物见 GitHub Release v0.1.7；多隔离空间/空间删除/模型透出，schema v24）与治理第一轮（本状态页、UI 留痕页、AGENTS 瘦身、聚合验证命令）与文档维护规则（AGENTS 规则节 + check-doc-links 缺标记/状态页/strict 门禁）——详细记录见 [治理提案实施记录](project-governance-proposal.md) 与 git 历史。
