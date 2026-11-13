@@ -50,3 +50,8 @@ jobs:
             echo '```'
             echo '</details>'
           } >> "$GITHUB_STEP_SUMMARY"
+          # 注解经 check-runs API 匿名可读，便于无 gh 会话时远程定位。
+          block=$(grep -E "^---- |panicked at|test result:|Access is denied|assertion" ci-test-output.txt | head -30 | sed ':a;N;$!ba;s/\n/%0A/g')
+          if [ -n "$block" ]; then
+            echo "::error title=ci test failures::$block"
+          fi
