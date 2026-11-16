@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::codex_control::EntryKind;
 use crate::database::Database;
-use crate::launcher_protocol::LaunchTarget;
 use crate::routing::RouteKind;
 
 use super::*;

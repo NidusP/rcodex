@@ -1,13 +1,8 @@
 //! 协议转换与上游转发测试。
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    sync::Mutex as StdMutex,
-};
+use std::sync::Mutex as StdMutex;
 
-use axum::{http::HeaderValue, routing::post};
+use axum::routing::post;
 use tower::ServiceExt;
 
 use super::test_support::*;
@@ -15,51 +10,28 @@ use super::*;
 use crate::diagnostics::DiagnosticsStore;
 use crate::usage::UsageStore;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
-use axum::{
-    body::Body,
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    Json, Router,
-};
+use axum::{body::Body, http::StatusCode, Router};
 use serde_json::{json, Value};
-use uuid::Uuid;
 
 use super::chat_bridge::*;
 use super::errors::*;
-use super::forward::*;
 use super::helpers::*;
 use super::http::*;
 use super::lifecycle::*;
 use super::protocol::*;
 use super::responses_compat::*;
-use super::runtime::*;
-use super::runtime_types;
 use super::runtime_types::*;
-use super::sse::SseDecoder;
-use super::stream::*;
 use crate::managed_codex_config::{INSTANCE_GATEWAY_HEADER, LEGACY_INSTANCE_GATEWAY_HEADER};
-use crate::routing::{
-    CompactMode, CompactionSupport, GatewayTimeoutSnapshot, ModelRoute, RouteSource, WireApi,
-};
+use crate::routing::{CompactMode, CompactionSupport, RouteSource, WireApi};
 use crate::{
     database::Database,
-    managed_codex_config::{
-        build_version_matched_catalog, materialize_managed_codex_config, read_bundled_catalog,
-        INSTANCE_GATEWAY_ENV,
-    },
     providers::{CreateProviderInput, ProviderStore, TransportMode},
-    routing::{
-        CapabilitySet, GatewayServiceRevision, RouteSetProviderRevision, RouteSetRevision,
-        RouteSetState,
-    },
-    secrets::{instance_gateway_key_hash, ApiKey, ApiKeyVault, InstanceGatewayKey},
+    secrets::{instance_gateway_key_hash, InstanceGatewayKey},
 };
 use std::collections::BTreeMap;
 use std::sync::{atomic::AtomicUsize, Arc};
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
-use url::Url;
 
 #[tokio::test]
 async fn upstream_plain_text_errors_are_preserved_for_diagnostics() {

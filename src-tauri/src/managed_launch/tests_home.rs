@@ -1,6 +1,5 @@
 //! 隔离 home、Electron 数据、活动对话库迁移与删除。
 
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use rusqlite::{params, Connection};
@@ -8,19 +7,13 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::database::Database;
-use crate::launcher_protocol::LaunchTarget;
-use crate::managed_codex_config::INSTANCE_GATEWAY_HEADER;
-use crate::model_family_profile::{GROK_AUTO_COMPACT_TOKEN_LIMIT, GROK_CONTEXT_WINDOW};
-use crate::routing::{CompactMode, RouteKind};
 
 use super::home_layout::{
     read_managed_home_layout, write_managed_home_layout, ManagedHomeLayoutPhase,
     ManagedHomeLayoutRecord, MANAGED_HOME_LAYOUT_FILE,
 };
-use super::preset_validation::validate_model;
-use super::storage::{migrate_managed_app_sqlite_into_home, LEGACY_SQLITE_FILE_PREFIXES};
+use super::storage::migrate_managed_app_sqlite_into_home;
 use super::test_support::*;
-use super::workspace::{login_provider_id_from_profile_options, qualified_model_display_name};
 use super::*;
 
 #[test]

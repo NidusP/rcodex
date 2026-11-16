@@ -1,8 +1,7 @@
 //! 隔离目录生成、compact 合同和 catalog probe。
 
-use std::{fs, path::Path};
+use std::fs;
 
-use serde_json::Value as JsonValue;
 use url::Url;
 use uuid::Uuid;
 

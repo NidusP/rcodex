@@ -30,7 +30,7 @@ pub const LEGACY_INSTANCE_GATEWAY_HEADER: &str = "X-3R-Instance-Key";
 pub(super) const MAX_BUNDLED_CATALOG_BYTES: usize = 8 * 1024 * 1024;
 
 #[cfg(test)]
-pub use catalog::{build_version_matched_catalog, build_version_matched_catalog_with_auto_review};
+pub use catalog::build_version_matched_catalog;
 pub use catalog::{
     build_version_matched_catalog_for_version, codex_catalog_compatibility, read_bundled_catalog,
 };
