@@ -135,7 +135,7 @@ R Codex 是专为 Codex 做的本机路由转发工具，把多个模型服务�
 pnpm run check:ui      # TypeScript 类型检查（即 pnpm run check）
 pnpm run build         # 前端生产构建
 pnpm run check:rust    # cargo fmt --check + cargo check --all-targets
-pnpm run test:rust     # cargo test --lib --bins -- --skip managed_gateway（与 CI test.yml 一致）
+pnpm run test:rust     # cargo test --lib --bins（与 CI test.yml 一致，含 Gateway 测试）
 pnpm run check:docs    # 文档链接与代码路径检查
 pnpm run ui-check      # 无头浏览器夹具回归（自动起停 vite，跑 workspace/model-exposure 两份）
 pnpm run check:all     # check:ui + check:rust + check:docs

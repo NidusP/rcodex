@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --lib --bins -- --skip managed_gateway 2>&1 | tee ci-test-output.txt
+          cargo test --lib --bins 2>&1 | tee ci-test-output.txt
       - name: Surface test failures in the job summary
         if: failure()
         shell: bash
@@ -55,3 +55,13 @@ jobs:
           if [ -n "$block" ]; then
             echo "::error title=ci test failures::$block"
           fi
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check documentation links, paths, and status markers
+        run: node scripts/check-doc-links.mjs --strict

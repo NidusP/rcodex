@@ -42,7 +42,7 @@ UI 覆盖 Mantine 样式的注意点：类名前缀是 `rcodex-`（非 `mantine-
 ```bash
 pnpm run check:all   # check:ui（tsc）+ check:rust（fmt/check）+ check:docs（文档链接）
 pnpm run build       # 前端生产构建
-pnpm run test:rust   # cargo test --lib --bins -- --skip managed_gateway（与 CI 一致）
+pnpm run test:rust   # cargo test --lib --bins（与 CI 一致，含 Gateway 测试）
 pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposure-ui-check
 ```
 
@@ -50,7 +50,7 @@ pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposu
 
 ## 5. 当前阻塞与未完成
 
-- **CI Test 已全绿**（2026-11-13，run #19 起双平台通过，历史 18 连败清零）；失败诊断通道已固化（job summary + check 注解，匿名可读）。待做：恢复 `--skip managed_gateway` 的 Gateway 测试入 CI（先考古跳过原因）、清理 113 条测试警告。
+- **CI Test 已全绿**（2026-11-13，run #19 起双平台通过，历史 18 连败清零）；失败诊断通道已固化（job summary + check 注解，匿名可读）。2026-11-13 起含 Gateway 测试（67 项回环临时端口单测，跳过为历史遗留）并新增 docs strict 门禁 job；待做：清理 113 条测试警告。
 - **Windows 0.1.7 实机验收未做**：安装/更新后旧实例目录保留、双隔离 App 不同 Electron 数据目录、卸载不删 `%APPDATA%\io.rcodex`、空间删除（含文件锁重试）。安装器见 release v0.1.7。
 - **0.1.6 → 0.1.7 回退需升级前数据库备份**：schema v24 旧二进制拒绝。
 - 真实 Codex App 的独立 API 登录、多渠道连续会话、重启与导入后恢复验收；不得读取默认认证验证。

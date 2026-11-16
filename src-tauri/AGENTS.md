@@ -8,7 +8,7 @@
 - Gateway、协议、异步流、诊断、迁移或生命周期变更：覆盖成功、上游失败、本地失败、取消、超时、恢复和隐私边界。
 - 启动、默认 App、凭据文件或真实 Provider：记录平台、Codex 版本、配置来源和手动验收结果；不能用 mock 结果代替真实合同验收。
 
-命令在仓库根执行（定义见根 `package.json`）：`pnpm run check:rust`（fmt --check + cargo check --all-targets）、`pnpm run test:rust`（--lib --bins -- --skip managed_gateway，与 CI test.yml 一致）。
+命令在仓库根执行（定义见根 `package.json`）：`pnpm run check:rust`（fmt --check + cargo check --all-targets）、`pnpm run test:rust`（--lib --bins，与 CI test.yml 一致）。
 
 ## 构建与 sidecar
 
