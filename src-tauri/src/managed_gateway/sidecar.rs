@@ -966,6 +966,9 @@ mod tests {
 
     #[test]
     fn gateway_cleanup_only_accepts_our_sidecar_executable() {
+        // Windows 解析按逗号分字段（见 gateway_cleanup_accepts_windows_sidecar_executable），
+        // macOS 格式的用例只在非 Windows 平台断言。
+        #[cfg(not(windows))]
         assert!(is_codex_gateway_command(
             "/Applications/R Codex.app/Contents/MacOS/codex-gateway --data-port 43123"
         ));
