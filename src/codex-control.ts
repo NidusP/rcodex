@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type TransportMode = "gateway_passthrough" | "gateway_chat_completions";
+export type TransportMode = "gateway_passthrough" | "gateway_chat_completions" | "pass_through";
 export type CodexAuthSummary = { state: "configured" | "not_detected" | "unreadable" | string; method?: string | null; sourcePath?: string | null; updatedAt?: number | null };
 export type CodexInstallationStatus = { installed: boolean; executablePath?: string | null; version?: string | null; executableUpdatedAt?: number | null; appPath?: string | null; appVersion?: string | null; appUpdatedAt?: number | null; auth: CodexAuthSummary; error?: string | null };
 export type CodexUpdateStatus = { state: "up_to_date" | "update_available" | "unavailable" | string; currentVersion?: string | null; latestVersion?: string | null; publishedAt?: string | null; releaseUrl?: string | null; notes?: string | null; checkedAt: number; error?: string | null };
@@ -191,7 +191,7 @@ type RawSnapshot = {
 };
 
 const activeStates = new Set<InstanceState>(["launching", "running", "stopping", "orphaned", "degraded"]);
-const transportModes = new Set<TransportMode>(["gateway_passthrough", "gateway_chat_completions"]);
+const transportModes = new Set<TransportMode>(["gateway_passthrough", "gateway_chat_completions", "pass_through"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -388,7 +388,8 @@ const legacyErrorMessages: Record<string, string> = {
   auto_review_model_requires_api_provider: "自动审核模型当前只支持 API Key 模型渠道。",
   auto_review_model_requires_responses: "自动审核模型必须来自 Responses 协议的模型渠道；Chat 文本转换无法保证审核工具能力。",
   duplicate_provider: "同一个启动方案不能重复选择模型渠道。",
-  protocol_unconfirmed: "协议未确认，不能加入隔离工作区，也不能用它的模型启动。",
+  protocol_unconfirmed:
+    "协议未确认，不能加入隔离工作区，也不能用它的模型启动。已透出 GPT 族模型可走 GPT 准入例外。",
   route_source_not_selected: "模型来源不属于当前选择的官方账户或模型渠道。",
   invalid_public_model_id: "公共模型 ID 只能使用小写字母、数字、点、下划线和连字符，且不能包含斜杠。",
   model_public_id_immutable: "该上游模型已绑定稳定公共 ID；请沿用原公共 ID。",
@@ -408,9 +409,9 @@ const legacyErrorMessages: Record<string, string> = {
   managed_gateway_sidecar_spawn_failed: "无法启动 R Codex 本地路由服务。",
   managed_gateway_credential_timeout: "本机凭据库授权超时；请确认 R Codex 已获准访问 Provider API Key 后重试。",
   managed_gateway_credential_worker_failed: "本机凭据库读取进程异常结束；请重试本次启动。",
-  codex_profile_probe_failed: "当前 Codex 版本无法加载生成的受管理 Profile，已阻止启动。",
+  codex_profile_probe_failed: "启动前 Profile 探针未通过（仅供参考，可能不影响实际启动）。详见实例 startup.log。",
   codex_current_config_invalid: "当前 Codex config.toml 无法安全解析或文件过大；请先修复配置后再启动。",
-  codex_catalog_validation_failed: "当前 Codex 版本无法加载生成的模型目录，已阻止启动。",
+  codex_catalog_validation_failed: "启动前模型目录探针未通过（仅供参考，可能不影响实际启动）。详见实例 startup.log。",
   history_provider_target_invalid: "目标 Provider 名称格式无效；只能使用 1–64 位字母、数字、点、下划线或连字符。",
   history_provider_source_invalid: "旧 Provider 名称格式无效；请检查输入内容。",
   history_provider_sources_empty: "请至少输入一个需要修复的旧 Provider 名称。",
@@ -437,7 +438,9 @@ const legacyErrorMessages: Record<string, string> = {
   history_repair_verification_failed: "修复后校验失败，请查看备份状态并恢复。",
   history_repair_worker_failed: "会话修复任务异常结束，请重新打开面板检查备份状态。",
 
-  codex_catalog_models_missing: "生成的模型目录未被当前 Codex 完整识别，已阻止启动。",
+  codex_catalog_models_missing: "探针发现目录中缺少部分透出模型（仅供参考）。若 Codex 无法选模型，请检查目录与版本。",
+  gpt_codex_client_required:
+    "GPT 模型文本探测需要官方 Codex 客户端身份（参考探针，不阻止透出）。请启动隔离 App 自行验证是否可用。",
   instance_not_terminal: "只有已退出或启动失败的实例才能删除；请先停止或重新核验当前实例。",
   instance_lock_active: "实例配置锁仍处于活动状态，请先重新核验并确认实例已退出。",
   instance_lifecycle_path_invalid: "实例生命周期目录不属于 R Codex 管理范围，已拒绝删除。",
@@ -533,7 +536,7 @@ export function credentialKindLabel(kind: CredentialKind, officialLabel = "官�
 }
 
 export function isGatewayTransport(mode: string | null | undefined) {
-  return mode === "gateway_passthrough" || mode === "gateway_chat_completions" || mode === "direct_responses" || mode === "direct";
+  return mode === "gateway_passthrough" || mode === "gateway_chat_completions" || mode === "pass_through" || mode === "direct_responses" || mode === "direct";
 }
 
 export function usesOfficialModel(preset: { credentialKind: CredentialKind; models: readonly { sourceKind: string }[] }) {

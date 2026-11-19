@@ -1072,3 +1072,21 @@ fn migration_v23_rewrites_direct_rows() {
         ]
     );
 }
+
+#[test]
+#[ignore = "local fixture: copy io.rcodex.dev/rcodex.sqlite3 to /tmp/rcodex-migrate-test3.sqlite3"]
+fn migrate_dev_fixture_database_copy() {
+    use std::path::Path;
+    let path = Path::new("/tmp/rcodex-migrate-test3.sqlite3");
+    if !path.exists() {
+        return;
+    }
+    let database = crate::database::Database::open_path(path).unwrap();
+    let version: i64 = database
+        .connection()
+        .lock()
+        .unwrap()
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, CURRENT_SCHEMA_VERSION);
+}

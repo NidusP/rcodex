@@ -10,7 +10,8 @@ use uuid::Uuid;
 use super::ManagedModelSelectionInput;
 use crate::model_family_profile::{allowed_reasoning_levels_for_model, MAX_CLIENT_CONTEXT_WINDOW};
 use crate::routing::{
-    is_internal_codex_model_id, validate_public_model_id, RouteKind, RouteSetRevision,
+    is_internal_codex_model_id, looks_like_gpt_model_id, validate_public_model_id, RouteKind,
+    RouteSetRevision,
 };
 
 pub(crate) const INVALID_MODEL_WINDOW: &str = "invalid_model_window";
@@ -37,25 +38,82 @@ pub(super) fn validate_sources(
     Ok(provider_ids)
 }
 
+fn provider_protocol_confirmed(
+    connection: &rusqlite::Connection,
+    provider_id: &str,
+) -> Result<bool, String> {
+    let wire_api: Option<String> = connection
+        .query_row(
+            "SELECT wire_api FROM provider_connectivity_reports WHERE provider_id=?1",
+            [provider_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("provider_protocol_lookup_failed:{error}"))?
+        .flatten();
+    Ok(matches!(
+        wire_api.as_deref(),
+        Some("responses" | "chat_completions")
+    ))
+}
+
+/// GPT 族已透出时，隔离工作区可加入该渠道（文本探针可能仅 official clients only）。
+fn provider_has_exposed_gpt_model(
+    connection: &rusqlite::Connection,
+    provider_id: &str,
+) -> Result<bool, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT upstream_model_id FROM provider_model_exposures
+             WHERE provider_id=?1 AND exposed=1",
+        )
+        .map_err(|error| format!("provider_exposure_lookup_failed:{error}"))?;
+    let models = statement
+        .query_map([provider_id], |row| row.get::<_, String>(0))
+        .map_err(|error| format!("provider_exposure_lookup_failed:{error}"))?
+        .filter_map(|row| row.ok())
+        .collect::<Vec<_>>();
+    Ok(models.iter().any(|model| {
+        crate::model_exposure::is_selectable_model_id(model)
+            && looks_like_gpt_model_id(model, model)
+    }))
+}
+
+pub(super) fn provider_workspace_admissible(
+    connection: &rusqlite::Connection,
+    provider_id: &str,
+) -> Result<bool, String> {
+    if provider_protocol_confirmed(connection, provider_id)? {
+        return Ok(true);
+    }
+    provider_has_exposed_gpt_model(connection, provider_id)
+}
+
 pub(super) fn assert_providers_have_confirmed_protocol(
     transaction: &rusqlite::Transaction<'_>,
     provider_ids: &[String],
 ) -> Result<(), String> {
     for provider_id in provider_ids {
-        let wire_api: Option<String> = transaction
-            .query_row(
-                "SELECT wire_api FROM provider_connectivity_reports WHERE provider_id=?1",
-                [provider_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|error| format!("provider_protocol_lookup_failed:{error}"))?
-            .flatten();
-        if !matches!(wire_api.as_deref(), Some("responses" | "chat_completions")) {
-            return Err("protocol_unconfirmed".to_string());
+        if provider_workspace_admissible(transaction, provider_id)? {
+            continue;
         }
+        return Err("protocol_unconfirmed".to_string());
     }
     Ok(())
+}
+
+pub(super) fn assert_model_workspace_admissible(
+    connection: &rusqlite::Connection,
+    provider_id: &str,
+    upstream_model_id: &str,
+) -> Result<(), String> {
+    if looks_like_gpt_model_id(upstream_model_id, upstream_model_id) {
+        return Ok(());
+    }
+    if provider_protocol_confirmed(connection, provider_id)? {
+        return Ok(());
+    }
+    Err("protocol_unconfirmed".to_string())
 }
 pub(super) fn validate_model(model: &ManagedModelSelectionInput) -> Result<(), String> {
     validate_public_model_id(&model.public_model_id).map_err(|error| error.to_string())?;

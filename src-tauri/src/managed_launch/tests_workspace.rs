@@ -279,6 +279,68 @@ fn initial_workspace_is_renamed_to_isolated_space_a_without_replacing_data() {
 }
 
 #[test]
+fn gpt_exposed_provider_can_join_workspace_without_report_wire_api() {
+    let database = Database::in_memory();
+    seed_provider(&database, "relay", "relay-r1", "responses");
+    {
+        let connection = database.connection();
+        let connection = connection.lock().unwrap();
+        connection
+            .execute(
+                "UPDATE provider_connectivity_reports
+               SET wire_api=NULL, text_check='failed', error_code='gpt_codex_client_required'
+               WHERE provider_id='relay'",
+                [],
+            )
+            .unwrap();
+        connection
+          .execute(
+              "INSERT INTO provider_model_exposures(provider_id, upstream_model_id, exposed, updated_at)
+               VALUES ('relay', 'gpt-4o', 1, 1)",
+              [],
+          )
+          .unwrap();
+    }
+    let root = std::env::temp_dir().join(format!("rcodex-gpt-join-{}", Uuid::new_v4()));
+    let store = ManagedLaunchStore::for_test(
+        database,
+        root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    let saved = store
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
+            entry_kind: None,
+            name: "GPT relay".to_string(),
+            official_account_id: None,
+            api_key_provider_ids: vec!["relay".to_string()],
+            models: vec![ManagedModelSelectionInput {
+                source_kind: RouteKind::ApiProvider,
+                source_id: "relay".to_string(),
+                upstream_model_id: "gpt-4o".to_string(),
+                public_model_id: "gpt-4o".to_string(),
+                display_name: "GPT-4o".to_string(),
+                ..Default::default()
+            }],
+            auto_review_public_model_id: None,
+            transport_mode: None,
+            default_workspace_path: None,
+            create_new: false,
+            launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
+        })
+        .unwrap();
+    let composition = store
+        .compositions()
+        .unwrap()
+        .into_iter()
+        .find(|item| item.launch_preset_id == saved.id)
+        .unwrap();
+    assert_eq!(composition.api_key_provider_ids, vec!["relay"]);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn unconfirmed_provider_cannot_join_workspace() {
     let database = Database::in_memory();
     seed_provider(&database, "relay", "relay-r1", "responses");

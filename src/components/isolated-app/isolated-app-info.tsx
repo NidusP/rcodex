@@ -24,6 +24,12 @@ import {
   buildDiscoveredModelOptions,
 } from "../../workspace-model-selection";
 import {
+  channelCanAddToWorkspace,
+  exposedWorkspaceModels,
+  hasExposedGptWorkspaceModel,
+  workspaceModelCanJoin,
+} from "../../workspace-provider-eligibility";
+import {
   compareModelSortText,
   connectivityLabels,
   hiddenCodexRoleModelCount,
@@ -141,9 +147,16 @@ function IsolatedAppBody({
       const report = connectivityByProvider[provider.id];
       const protocolConfirmed =
         report?.wireApi === "responses" || report?.wireApi === "chat_completions";
-      const exposedCount = (exposuresByProvider[provider.id] ?? []).filter((model) => model.exposed && isWorkspaceSelectableModelId(model.upstreamModelId)).length;
+      const spaceExposures = exposuresByProvider[provider.id];
+      const exposedCount = exposedWorkspaceModels(spaceExposures).length;
       const exposureError = exposureErrorsByProvider[provider.id];
-      const selectable = provider.configured && protocolConfirmed && !exposureError && exposedCount > 0;
+      const selectable = channelCanAddToWorkspace({
+        configured: provider.configured,
+        wireApi: report?.wireApi,
+        exposures: spaceExposures,
+        exposureError,
+        exposuresLoaded: spaceExposures !== undefined,
+      });
       return {
         id: provider.id,
         label: provider.name,
@@ -162,7 +175,10 @@ function IsolatedAppBody({
         disabled: !selectable,
         disabledReason: !provider.configured
           ? "请先补全此模型渠道的 API Key。"
-          : !protocolConfirmed
+          : !selectable &&
+              !protocolConfirmed &&
+              exposedCount > 0 &&
+              !hasExposedGptWorkspaceModel(spaceExposures)
             ? "请先检测此模型渠道并确认支持的协议。"
             : exposureError
               ? exposureError
@@ -481,16 +497,28 @@ function IsolatedAppBody({
             ? "请先在模型渠道中选择要透出的模型。"
             : undefined),
       modelChoices: [
-        ...(report?.wireApi === "responses" || report?.wireApi === "chat_completions"
-          ? discoveredOptions.filter((option) => option.providerId === providerId).map((option) => ({
-              upstreamModelId: option.upstreamModelId,
-              label: option.displayLabel,
-              detail: [option.upstreamModelId, option.ownedBy, option.duplicate ? "同名模型已按渠道区分" : ""].filter(Boolean).join(" · "),
-              selected: models.some((model) => model.upstreamModelId === option.upstreamModelId),
-            }))
-          : []),
-        ...models.filter((model) => !discoveredOptions.some((option) => option.providerId === providerId && option.upstreamModelId === model.upstreamModelId)
-          || !(report?.wireApi === "responses" || report?.wireApi === "chat_completions"))
+        ...discoveredOptions
+          .filter(
+            (option) =>
+              option.providerId === providerId &&
+              workspaceModelCanJoin(report?.wireApi, option.upstreamModelId),
+          )
+          .map((option) => ({
+            upstreamModelId: option.upstreamModelId,
+            label: option.displayLabel,
+            detail: [option.upstreamModelId, option.ownedBy, option.duplicate ? "同名模型已按渠道区分" : ""].filter(Boolean).join(" · "),
+            selected: models.some((model) => model.upstreamModelId === option.upstreamModelId),
+          })),
+        ...models
+          .filter(
+            (model) =>
+              !discoveredOptions.some(
+                (option) =>
+                  option.providerId === providerId &&
+                  option.upstreamModelId === model.upstreamModelId &&
+                  workspaceModelCanJoin(report?.wireApi, option.upstreamModelId),
+              ),
+          )
           .map((model) => ({
             upstreamModelId: model.upstreamModelId,
             label: model.displayName || model.upstreamModelId,

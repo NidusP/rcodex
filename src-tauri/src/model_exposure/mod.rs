@@ -6,7 +6,9 @@ mod models;
 mod store;
 
 pub(crate) use models::{ExposureChange, ModelExposureSummary, ProbeContext};
-pub(crate) use store::{assert_model_exposed, image_supported, ModelExposureStore};
+pub(crate) use store::{
+    assert_model_exposed, fade_exposures_missing_from_catalog, image_supported, ModelExposureStore,
+};
 
 /// Change whenever the fixture, request shape, or success criterion changes.
 pub(crate) const IMAGE_PROBE_CONTRACT_VERSION: &str = "image-v1";

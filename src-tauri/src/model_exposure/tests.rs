@@ -245,6 +245,27 @@ fn evidence_rejects_response_text_and_invalid_state_pairs() {
 }
 
 #[test]
+fn gpt_model_exposes_without_text_protocol_ready() {
+    let (database, store) = fixture();
+    let connection = database.connection();
+    let connection = connection.lock().unwrap();
+    connection
+        .execute_batch(
+            "INSERT INTO provider_model_catalog_entries(catalog_revision_id,upstream_model_id,display_name,capabilities_json,position)
+             VALUES ('catalog','gpt-4o','GPT-4o','{}',4);
+             UPDATE provider_connectivity_reports
+             SET text_check='failed', status='failed', wire_api=NULL WHERE provider_id='p';",
+        )
+        .unwrap();
+    drop(connection);
+    let change = store.set_exposure("p", "gpt-4o", true).unwrap();
+    assert!(change.summary.exposed);
+    assert!(!change.should_probe);
+    assert!(store.probe_context("p", "gpt-4o").unwrap().wire_api == "responses");
+    assert!(store.set_exposure("p", "vision-chat", true).is_err());
+}
+
+#[test]
 fn workspace_exposure_check_uses_existing_transaction() {
     let (database, store) = fixture();
     assert!(store.probe_context("p", "vision-chat").is_err());

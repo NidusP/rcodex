@@ -299,6 +299,55 @@ fn missing_key_is_marked_unconfigured_after_one_explicit_access() {
 }
 
 #[test]
+fn deleting_provider_detaches_from_managed_workspace() {
+    use crate::database::Database;
+    use crate::managed_launch::test_support::single_model_preset;
+    use crate::managed_launch::ManagedLaunchStore;
+
+    let vault = Arc::new(MemoryVault::default());
+    let database = Database::in_memory();
+    let store = ProviderStore::from_database(database.clone(), vault).unwrap();
+    let provider = store.create(input("Relay", "sk-relay")).unwrap();
+    let root = std::env::temp_dir().join(format!("3r-provider-delete-ws-{}", uuid::Uuid::new_v4()));
+    let launch_store = ManagedLaunchStore::for_integration_test(database.clone(), root.clone());
+    {
+        let db = database.connection();
+        let connection = db.lock().unwrap();
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO provider_connectivity_reports
+                 (provider_id, checked_at, status, models_check, text_check, wire_api)
+                 VALUES (?1, 1, 'ready', 'ready', 'ready', 'responses')",
+                [&provider.id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO provider_model_exposures
+                 (provider_id, upstream_model_id, exposed, updated_at)
+                 VALUES (?1, ?2, 1, 1)",
+                rusqlite::params![provider.id, "deepseek-chat"],
+            )
+            .unwrap();
+    }
+    let preset = launch_store
+        .create_preset(single_model_preset(&provider.id, "deepseek-chat", None))
+        .unwrap();
+    store.delete(&provider.id).unwrap();
+    let composition = launch_store
+        .compositions()
+        .unwrap()
+        .into_iter()
+        .find(|item| item.launch_preset_id == preset.id)
+        .unwrap();
+    assert!(composition.api_key_provider_ids.is_empty());
+    assert!(composition.models.is_empty());
+    assert_eq!(composition.state, "needs_model_selection");
+    assert!(store.list().unwrap().is_empty());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn deleting_provider_purges_local_usage_and_diagnostics() {
     let vault = Arc::new(MemoryVault::default());
     let store = ProviderStore::in_memory(vault);

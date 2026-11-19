@@ -305,6 +305,7 @@ export const OFFICIAL_AUTH_ENABLED = false;
 export const transportLabels: Record<TransportMode, string> = {
   gateway_passthrough: "Gateway 透传",
   gateway_chat_completions: "Gateway 转换 Chat（文本）",
+  pass_through: "指纹透传（整渠道）",
 };
 export const gatewayHint =
   "Gateway 是本地路由服务，负责请求透传、协议转换、统一诊断和超时控制。";
@@ -333,6 +334,8 @@ export const navHints: Record<NavView, string> = {
 export function modeDescription(mode: TransportMode) {
   if (mode === "gateway_passthrough")
     return "经本地 Gateway 原样转发 Responses 与 SSE。";
+  if (mode === "pass_through")
+    return "整渠道透传 Codex 客户端指纹；GPT 族默认自动透传，无需单独切换。";
   return "经本地 Gateway 将文本 Responses 转为 Chat Completions。";
 }
 export function isGatewayPreset(preset: LaunchPresetSummary) {

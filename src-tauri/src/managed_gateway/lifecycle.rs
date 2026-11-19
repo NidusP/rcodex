@@ -400,6 +400,7 @@ pub(super) fn provider_runtime(
         provider_revision_id: upstream.provider_revision_id,
         base_url: normalize_api_base_url(&upstream.base_url)?,
         api_key: Some(Arc::new(upstream.api_key)),
+        transport_mode: upstream.transport_mode,
         client,
         timeouts,
     })
@@ -422,6 +423,7 @@ pub(super) fn fixture_upstream(
         provider_revision_id: format!("test-provider-{wire_api:?}"),
         base_url: normalize_api_base_url(base_url)?,
         api_key: None,
+        transport_mode: crate::providers::TransportMode::GatewayPassthrough,
         client,
         timeouts,
     })

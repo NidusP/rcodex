@@ -5,11 +5,15 @@ import { formatTime } from "../../app-model";
 import { imageProbeErrorHint, imageProbeLabel } from "../../model-exposure";
 import { useAppState } from "../app-state";
 import { HintedButton } from "../hinted-button";
-import { catalogModelKind, catalogModelPurpose } from "../model-labels";
+import {
+  catalogModelKind,
+  catalogModelPurpose,
+  looksLikeGptModelId,
+} from "../model-labels";
 
 /**
  * @component ProviderModelExposureList
- * @description 渠道模型目录中的显式透出、图片检测状态与行级刷新操作。
+ * @description 渠道模型目录中的显式透出；非 GPT 对话模型显示图片检测状态与刷新操作。
  */
 export function ProviderModelExposureList({
   provider,
@@ -57,17 +61,24 @@ export function ProviderModelExposureList({
           const state = exposure?.imageProbeState ?? "unknown";
           const referencedBy = exposure?.referencedBy ?? [];
           const missing = !discoveredIds.has(model.upstreamModelId);
+          const gptFamily = looksLikeGptModelId(
+            model.upstreamModelId,
+            model.upstreamModelId,
+          );
+          const protocolRequired = !gptFamily;
           const disabledReason = error
             ? error
             : exposures === undefined
               ? "正在读取模型透出状态。"
               : pending
-                ? "正在保存或检测这个模型。"
+                ? gptFamily
+                  ? "正在保存这个模型。"
+                  : "正在保存或检测这个模型。"
                 : exposed && referencedBy.length > 0
                   ? `请先从${referencedBy.join("、")}移除此模型，再取消透出。`
                   : !exposed && !provider.configured
                     ? "请先补全此渠道的 API Key。"
-                    : !exposed && !wireApi
+                    : !exposed && protocolRequired && !wireApi
                       ? "请先更新渠道，确认使用的协议。"
                       : undefined;
           const probeReason = !exposed
@@ -76,7 +87,7 @@ export function ProviderModelExposureList({
               ? "正在检测这个模型。"
               : error
                 ? error
-                : !provider.configured || !wireApi
+                : !provider.configured || (protocolRequired && !wireApi)
                   ? "请先补全渠道凭据并确认协议。"
                   : undefined;
           return (
@@ -100,24 +111,34 @@ export function ProviderModelExposureList({
                         />
                       </span>
                     </Tooltip>
-                    <Group gap="xs" wrap="nowrap">
-                      <Text size="xs" c={pending ? "dimmed" : state === "failed" ? "red" : state === "supported" ? "teal" : "dimmed"} role="status">
-                        {pending ? "正在保存并检测…" : imageProbeLabel(state)}
+                    {!gptFamily ? (
+                      <Group gap="xs" wrap="nowrap">
+                        <Text size="xs" c={pending ? "dimmed" : state === "failed" ? "red" : state === "supported" ? "teal" : "dimmed"} role="status">
+                          {pending ? "正在保存并检测…" : imageProbeLabel(state)}
+                        </Text>
+                        <HintedButton
+                          type="button"
+                          aria-label={`刷新图片探针 ${model.upstreamModelId}`}
+                          title="刷新图片探针，会发送一次图片请求"
+                          disabled={Boolean(probeReason)}
+                          disabledReason={probeReason}
+                          onClick={() => void refreshModelImageProbe(provider.id, model.upstreamModelId)}
+                        >
+                          <RefreshCw size={14} aria-hidden="true" />
+                        </HintedButton>
+                      </Group>
+                    ) : pending ? (
+                      <Text size="xs" c="dimmed" role="status">
+                        正在保存…
                       </Text>
-                      <HintedButton
-                        type="button"
-                        aria-label={`刷新图片探针 ${model.upstreamModelId}`}
-                        title="刷新图片探针，会发送一次图片请求"
-                        disabled={Boolean(probeReason)}
-                        disabledReason={probeReason}
-                        onClick={() => void refreshModelImageProbe(provider.id, model.upstreamModelId)}
-                      >
-                        <RefreshCw size={14} aria-hidden="true" />
-                      </HintedButton>
-                    </Group>
+                    ) : null}
                   </Group>
-                  {exposure?.imageProbeCheckedAt ? <small>图片检测于 {formatTime(exposure.imageProbeCheckedAt)}</small> : null}
-                  {exposure?.imageProbeErrorCode ? <Text size="xs" c="dimmed">{imageProbeErrorHint(exposure.imageProbeErrorCode)}</Text> : null}
+                  {!gptFamily && exposure?.imageProbeCheckedAt ? (
+                    <small>图片检测于 {formatTime(exposure.imageProbeCheckedAt)}</small>
+                  ) : null}
+                  {!gptFamily && exposure?.imageProbeErrorCode ? (
+                    <Text size="xs" c="dimmed">{imageProbeErrorHint(exposure.imageProbeErrorCode)}</Text>
+                  ) : null}
                   {operationError ? <Text size="xs" c="red" role="alert">{operationError}</Text> : null}
                 </>
               ) : null}

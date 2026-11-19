@@ -201,9 +201,25 @@ pub(super) fn api_error_with_detail(
     url: Option<&str>,
     detail: Option<String>,
 ) -> Response {
+    api_error_with_presentation(status, code, url, detail, false)
+}
+
+pub(super) fn api_error_with_presentation(
+    status: StatusCode,
+    code: &'static str,
+    url: Option<&str>,
+    detail: Option<String>,
+    gpt_codex_passthrough: bool,
+) -> Response {
     let layer = error_layer(code);
     let safe_url = url.map(safe_upstream_url);
-    let message = codex_visible_error_message(code, layer, safe_url.as_deref(), detail.as_deref());
+    let message = codex_visible_error_message(
+        code,
+        layer,
+        safe_url.as_deref(),
+        detail.as_deref(),
+        gpt_codex_passthrough,
+    );
     let error_type = match layer {
         "upstream" => "upstream_error",
         "transport" => "transport_error",
@@ -248,11 +264,19 @@ pub(super) fn error_layer(code: &str) -> &'static str {
 
 /// Body text Codex interpolates after `unexpected status 502 Bad Gateway:`.
 /// Empty/whitespace bodies become `Unknown error` in Codex; this must stay non-empty.
+fn loopback_url_note() -> String {
+    format!(
+        "Codex 日志里的 url 是本机 Gateway（127.0.0.1:{}），不是上游。",
+        super::gateway_listen_port()
+    )
+}
+
 pub(super) fn codex_visible_error_message(
     code: &str,
     layer: &str,
     url: Option<&str>,
     detail: Option<&str>,
+    gpt_codex_passthrough: bool,
 ) -> String {
     let local = match code {
         "invalid_instance_key" => "实例密钥无效。",
@@ -261,6 +285,14 @@ pub(super) fn codex_visible_error_message(
         "model_not_in_route_set" => "该模型不在当前 RouteSet 中。",
         "official_authorization_missing" => "官方渠道缺少 Authorization。",
         "official_route_unavailable" => "官方渠道路由当前不可用。",
+        "passthrough_authorization_missing" => {
+            "透传通道需要 Codex 自带的 Authorization，不能把渠道 API Key 当作官方 OAuth。"
+        }
+        "upstream_cli_rejected" => {
+            "上游拒绝了 Codex CLI 身份（常见于 cli_only OAuth 池）。请确认渠道为透传模式且未剥改 User-Agent / x-codex- 头。"
+        }
+        "upstream_forbidden" => "上游返回 403 Forbidden。",
+        "upstream_unauthorized" => "上游返回 401 Unauthorized。",
         "provider_revision_unavailable" => "渠道版本不可用。",
         "provider_revision_mismatch" => "渠道版本与绑定不一致。",
         "unsupported_tools" => "该路由不支持 tools。",
@@ -304,16 +336,25 @@ pub(super) fn codex_visible_error_message(
         "upstream_error" => "上游返回了失败响应。",
         _ => "请求失败。",
     };
-    let loopback_note = format!(
-        "Codex 打印的 url 是本机 Gateway（127.0.0.1:{}），不是上游。",
-        super::gateway_listen_port()
-    );
+    let loopback_note = loopback_url_note();
     match (layer, url, detail.filter(|value| !value.is_empty())) {
+        ("upstream", Some(url), Some(detail)) if gpt_codex_passthrough => {
+            format!("R Codex Gateway 已透传至 {url}，是上游失败：{detail}。{loopback_note}")
+        }
+        ("upstream", Some(url), None) if gpt_codex_passthrough => {
+            format!("R Codex Gateway 已透传至 {url}，是上游失败：{local}{loopback_note}")
+        }
         ("upstream", Some(url), Some(detail)) => {
             format!("R Codex Gateway 已转发到 {url}，上游失败：{detail}。{loopback_note}")
         }
         ("upstream", Some(url), None) => {
             format!("R Codex Gateway 已转发到 {url}，{local}{loopback_note}")
+        }
+        ("transport", Some(url), Some(detail)) if gpt_codex_passthrough => {
+            format!("R Codex Gateway 已透传至 {url}，未能到达上游：{detail}。{loopback_note}")
+        }
+        ("transport", Some(url), None) if gpt_codex_passthrough => {
+            format!("R Codex Gateway 已透传至 {url}，未能到达上游：{local}{loopback_note}")
         }
         ("transport", Some(url), Some(detail)) => {
             format!("R Codex Gateway 无法转发到 {url}：{detail}。{loopback_note}")

@@ -171,7 +171,7 @@ async fn compaction_trigger_stops_before_third_party_upstream() {
     });
 
     let key = InstanceGatewayKey::for_test("compaction-guard-key");
-    let upstream = fixture_upstream(
+    let mut upstream = fixture_upstream(
         &format!("http://127.0.0.1:{port}"),
         WireApi::Responses,
         GatewayTimeoutSnapshot {
@@ -182,6 +182,8 @@ async fn compaction_trigger_stops_before_third_party_upstream() {
         },
     )
     .unwrap();
+    upstream.provider_id = "provider-a".to_string();
+    upstream.provider_revision_id = "revision-a".to_string();
     let state = ManagedGatewayAppState {
         registry: Arc::new(RwLock::new(BTreeMap::new())),
         diagnostics: Arc::new(RwLock::new(None)),
@@ -742,7 +744,7 @@ async fn fake_gpt_relay_compaction_never_reaches_upstream() {
         .unwrap();
     assert!(std::str::from_utf8(&bytes)
         .unwrap()
-        .contains("not_native_gpt_compaction"));
+        .contains("unsupported_compaction"));
     assert!(observed.lock().unwrap().is_none());
 }
 

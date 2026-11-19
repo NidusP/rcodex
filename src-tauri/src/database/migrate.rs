@@ -7,13 +7,14 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 use super::migrate_legacy::{migrate_to_v5, migrate_to_v6};
 use super::migrate_v24::migrate_to_v24;
+use super::migrate_v25::migrate_to_v25;
 use super::migrate_v7_plus::{
     migrate_to_v10, migrate_to_v11, migrate_to_v12, migrate_to_v13, migrate_to_v14, migrate_to_v15,
     migrate_to_v16, migrate_to_v17, migrate_to_v18, migrate_to_v19, migrate_to_v20, migrate_to_v21,
     migrate_to_v22, migrate_to_v23, migrate_to_v7, migrate_to_v8, migrate_to_v9,
 };
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 24;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 25;
 
 pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
     let version: i64 = connection
@@ -250,6 +251,26 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
     migrate_to_v22(&transaction, version < 22)?;
     migrate_to_v23(&transaction)?;
     migrate_to_v24(&transaction, version < 24)?;
+    if version < 25 {
+        transaction
+            .commit()
+            .map_err(|error| format!("无法提交 SQLite 迁移：{error}"))?;
+        migrate_to_v25(connection)?;
+        let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Immediate)
+            .map_err(|error| format!("无法开始 SQLite 迁移：{error}"))?;
+        transaction
+            .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
+            .map_err(|error| format!("无法保存 SQLite schema 版本：{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("无法提交 SQLite 迁移：{error}"))?;
+        if rebuild_launch_presets {
+            connection
+                .execute_batch("PRAGMA foreign_keys = ON;")
+                .map_err(|error| format!("无法恢复 SQLite 外键约束：{error}"))?;
+        }
+        return Ok(());
+    }
     transaction
         .pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)
         .map_err(|error| format!("无法保存 SQLite schema 版本：{error}"))?;

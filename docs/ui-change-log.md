@@ -1,6 +1,6 @@
 # UI 变更留痕
 
-> 状态：active（最后核对 2026-11-08）
+> 状态：active（最后核对 2026-11-19）
 > 状态说明：本页承接 AGENTS.md 原「UI 分步改造留痕」。每完成一项 UI 改造在此追加一条；规则与验收仍以 AGENTS.md「前端与交互规则」和对应 designs/ 文档为准。
 
 按 demo.html 的布局和样式改真实控制面，不挂载静态演示页。详细验收在 docs/archive/designs/3rcodex-ui-quality-upgrade-plan.md。崩溃后续读本节即可接着做。
@@ -73,4 +73,7 @@
 - 2026-11-07：每个隔离空间 tab 名称后放各自的垃圾桶：可删除时淡色、hover 加深；该空间有活动实例、正在删除或更新时禁用并悬停显示原因；点击直接弹对应空间确认框，不切换选中。行尾独立删除按钮移除；「新增隔离空间」改纯 + 图标。后端删除非选中空间保持当前选中（新回归用例），夹具同步。src/workspace-surface.tsx、src/workspace-surface.css、src/components/isolated-app/isolated-app-info.tsx、src/dev-control-fixture.ts、src-tauri/src/managed_launch/deletion.rs、src-tauri/src/managed_launch/tests_deletion.rs、scripts/workspace-ui-check.mjs、docs/designs/2026-11-07-workspace-order-and-deletion.md。
 - 2026-11-07：「添加渠道」的待分配上游仍列出未透出模型的渠道，但状态列显示「不可用」（红点红字），悬停经 disabled-hint 包装层 + Mantine Tooltip 提示先透出模型；未配置/协议未确认等其他阻塞同样显示不可用并给出各自原因。src/workspace-surface.tsx、src/workspace-surface.css、scripts/workspace-ui-check.mjs、docs/designs/2026-11-07-model-exposure-image-probe.md。
 - 2026-11-07：空间 tab 垃圾桶改为常态隐藏，仅可删除空间 hover tab 时显示（不可删除空间 display:none）；「新增隔离空间」改为创建空空间（无渠道/模型/登录渠道，needs_model_selection 选好前不可启动），不再复制当前空间，createManagedInstance 不传 sourcePresetId，新增 Rust 回归用例 create_new_empty_preset_starts_as_needs_model_selection；+ 按钮去边框。Mantine 9 类名前缀为 rcodex-：hover 选择器须用 rcodex-Tabs-tab，覆盖 Mantine 变体样式须提高特异性（workspace-tabs 三级选择器），已用无头 Chrome 真实鼠标悬停断言验证。src/use-app-controller.ts、src/App.tsx、src/components/isolated-app/isolated-app-info.tsx、src/workspace-surface.css、src-tauri/src/managed_launch/tests_workspace.rs、scripts/workspace-ui-check.mjs、docs/designs/2026-10-04-multiple-managed-instances.md、docs/designs/2026-11-07-workspace-order-and-deletion.md。
+- 2026-11-19：GPT 族模型在渠道模型目录透出时不再显示「图片未检测」、检测时间与刷新图片探针按钮；保存中仅显示「正在保存…」。与后端默认看图、跳过图探针一致。src/components/model-utility/provider-model-exposure-list.tsx；IPC `refresh_model_image_probe` 对 GPT 直接返回当前 summary。
+- 2026-11-19：补全 `pass_through` 的 `transportLabels` / `modeDescription`（`app-model.ts`），与 `codex-control.ts` 的 `TransportMode` 对齐；`pnpm run check` 通过。
+- 2026-11-19：主窗口 `backgroundColor: #FFFFFF`（`tauri.conf.json` + 启动时 `set_background_color`）；不透明系统标题栏仍可能呈浅灰，未再使用透明标题栏 + 顶栏 padding（与系统标题区叠在一起会过高）。
 

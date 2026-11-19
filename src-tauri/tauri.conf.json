@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "R Codex",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "identifier": "io.rcodex",
   "build": {
     "frontendDist": "../dist",
@@ -18,7 +18,8 @@
         "width": 980,
         "height": 760,
         "minWidth": 740,
-        "minHeight": 620
+        "minHeight": 620,
+        "backgroundColor": "#FFFFFF"
       }
     ],
     "security": {

@@ -201,9 +201,13 @@ pub fn run() {
             install_menu_bar_icon(app);
             #[cfg(target_os = "macos")]
             macos_quit::install(app.handle().clone());
-            #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_title("R Codex Dev");
+                use tauri::window::Color;
+                let _ = window.set_background_color(Some(Color(255, 255, 255, 255)));
+                #[cfg(debug_assertions)]
+                {
+                    let _ = window.set_title("R Codex Dev");
+                }
             }
             let database = Database::open(app)?;
             let api_key_vault =

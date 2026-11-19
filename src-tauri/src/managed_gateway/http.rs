@@ -10,7 +10,7 @@ use std::sync::{
 
 use axum::{
     body::{Body, Bytes},
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, RawQuery, State},
     http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -27,11 +27,15 @@ use crate::routing::{
 };
 use crate::secrets::instance_gateway_key_matches;
 
+use super::codex_passthrough::{
+    binding_should_proxy_models_with_client_identity, route_needs_codex_identity_passthrough,
+};
 use super::compaction;
 use super::diagnostics::RequestRecorder;
 use super::errors::{api_error, not_found, reject_local};
 use super::forward::forward_provider;
 use super::helpers::{ephemeral_family_alias_route, gateway_trace};
+use super::protocol::request_contains_compaction_trigger;
 use super::responses_compat::prepare_responses_relay;
 use super::runtime_types::{BindingRuntime, ManagedGatewayAppState};
 use super::{LOOPBACK_HOST, MAX_REQUEST_BYTES};
@@ -83,11 +87,21 @@ pub(super) async fn admit(
 pub(super) async fn models(
     State(state): State<ManagedGatewayAppState>,
     headers: HeaderMap,
+    RawQuery(query): RawQuery,
 ) -> Response {
     let binding = match admit(&state, &headers).await {
         Ok(binding) => binding,
         Err(response) => return response,
     };
+    if let Some(upstream) = binding_should_proxy_models_with_client_identity(&binding) {
+        return super::codex_passthrough::proxy_models_list(
+            upstream,
+            &headers,
+            query.as_deref(),
+            &binding.binding_id,
+        )
+        .await;
+    }
     let models = binding
         .route_set
         .routes
@@ -188,21 +202,8 @@ pub(super) async fn responses(
         };
         let compact_mode =
             CompactMode::from_gateway_snapshot(&binding.route_set.gateway_service.config_snapshot);
-        if let Err(code) = prepare_responses_relay(&route, compact_mode, &mut request) {
-            return reject_local(
-                &recorder,
-                &binding.binding_id,
-                &public_model,
-                code,
-                StatusCode::BAD_REQUEST,
-            );
-        }
         let summarize =
             compaction::should_summarize(compact_mode, &route, &Value::Object(request.clone()));
-        request.insert(
-            "model".to_string(),
-            Value::String(route.upstream_model_id.clone()),
-        );
 
         match &route.source {
             RouteSource::Official { .. } => {
@@ -247,6 +248,34 @@ pub(super) async fn responses(
                         StatusCode::SERVICE_UNAVAILABLE,
                     );
                 }
+                let codex_passthrough = route_needs_codex_identity_passthrough(&route, upstream);
+                if codex_passthrough {
+                    if summarize
+                        || request_contains_compaction_trigger(&Value::Object(request.clone()))
+                    {
+                        return reject_local(
+                            &recorder,
+                            &binding.binding_id,
+                            &public_model,
+                            "unsupported_compaction",
+                            StatusCode::BAD_REQUEST,
+                        );
+                    }
+                } else if let Err(code) =
+                    prepare_responses_relay(&route, compact_mode, &mut request)
+                {
+                    return reject_local(
+                        &recorder,
+                        &binding.binding_id,
+                        &public_model,
+                        code,
+                        StatusCode::BAD_REQUEST,
+                    );
+                }
+                request.insert(
+                    "model".to_string(),
+                    Value::String(route.upstream_model_id.clone()),
+                );
                 if summarize {
                     in_flight_guard =
                         Some(InFlightRequestGuard::new(state.in_flight_requests.clone()));
@@ -283,7 +312,11 @@ pub(super) async fn responses(
                     request,
                     Some(binding.binding_id.clone()),
                     recorder,
-                    None,
+                    if codex_passthrough {
+                        Some(&headers)
+                    } else {
+                        None
+                    },
                 )
                 .await
             }

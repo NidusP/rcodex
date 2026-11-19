@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 
-use crate::{database::Database, support::unix_now_seconds};
+use crate::{database::Database, routing::looks_like_gpt_model_id, support::unix_now_seconds};
 
 use super::{
     is_selectable_model_id, ExposureChange, ModelExposureSummary, ProbeContext,
@@ -115,7 +115,9 @@ impl ModelExposureStore {
             params![provider_id, model_id, exposed, unix_now_seconds()]
         ).map_err(|error| format!("model_exposure_write_failed:{error}"))?;
         let summary = read_summary(&transaction, provider_id, model_id)?;
-        let should_probe = exposed && !previous.exposed && summary.image_probe_state == "unknown";
+        let gpt_family = looks_like_gpt_model_id(model_id, model_id);
+        let should_probe =
+            exposed && !previous.exposed && summary.image_probe_state == "unknown" && !gpt_family;
         transaction
             .commit()
             .map_err(|error| format!("model_exposure_commit_failed:{error}"))?;
@@ -220,6 +222,9 @@ fn read_probe_context(
     if require_exposed {
         assert_model_exposed(connection, provider_id, model_id)?;
     }
+    if looks_like_gpt_model_id(model_id, model_id) {
+        return read_gpt_probe_context(connection, provider_id, model_id);
+    }
     connection
         .query_row(
             "SELECT revision.id, revision.wire_api
@@ -243,6 +248,33 @@ fn read_probe_context(
         .optional()
         .map_err(|error| format!("model_probe_context_read_failed:{error}"))?
         .ok_or_else(|| "provider_protocol_unconfirmed".to_string())
+}
+
+/// GPT 族经 Gateway 直传，透出与图片探针上下文不依赖 `text_check=ready`。
+fn read_gpt_probe_context(
+    connection: &Connection,
+    provider_id: &str,
+    model_id: &str,
+) -> Result<ProbeContext, String> {
+    connection
+        .query_row(
+            "SELECT revision.id, revision.wire_api
+         FROM api_key_providers provider
+         JOIN api_key_provider_revisions revision ON revision.id=provider.current_revision_id
+         WHERE provider.id=?1 AND provider.configured=1 AND revision.state='active'",
+            [provider_id],
+            |row| {
+                Ok(ProbeContext {
+                    provider_id: provider_id.to_string(),
+                    provider_revision_id: row.get(0)?,
+                    upstream_model_id: model_id.to_string(),
+                    wire_api: row.get(1)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| format!("model_probe_context_read_failed:{error}"))?
+        .ok_or_else(|| "provider_not_configured".to_string())
 }
 
 fn read_summary(
@@ -312,6 +344,57 @@ pub(crate) fn assert_model_exposed(
     Ok(())
 }
 
+/// After a successful catalog revision, remove exposure and workspace picks for models
+/// no longer advertised upstream. Does not require manual unlink (system fade-out).
+pub(crate) fn fade_exposures_missing_from_catalog(
+    connection: &Connection,
+    provider_id: &str,
+    catalog_revision_id: &str,
+) -> Result<u32, String> {
+    assert_provider_exists(connection, provider_id)?;
+    let mut statement = connection
+        .prepare(
+            "SELECT exposure.upstream_model_id FROM provider_model_exposures exposure
+             WHERE exposure.provider_id=?1 AND exposure.exposed=1
+               AND NOT EXISTS (
+                 SELECT 1 FROM provider_model_catalog_entries entry
+                 WHERE entry.catalog_revision_id=?2 AND entry.upstream_model_id=exposure.upstream_model_id
+               )",
+        )
+        .map_err(|error| format!("model_exposure_fade_query_failed:{error}"))?;
+    let stale = statement
+        .query_map(params![provider_id, catalog_revision_id], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(|error| format!("model_exposure_fade_query_failed:{error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("model_exposure_fade_query_failed:{error}"))?;
+    let mut faded = 0u32;
+    for model_id in stale {
+        validate_model_id(&model_id)?;
+        connection
+            .execute(
+                "UPDATE provider_model_exposures SET exposed=0, updated_at=?3
+                 WHERE provider_id=?1 AND upstream_model_id=?2",
+                params![provider_id, model_id, unix_now_seconds()],
+            )
+            .map_err(|error| format!("model_exposure_fade_write_failed:{error}"))?;
+        connection
+            .execute(
+                "DELETE FROM launch_preset_model_selections
+                 WHERE route_identity_id IN (
+                   SELECT identity.id FROM model_route_identities identity
+                   WHERE identity.source_kind='api_provider' AND identity.api_key_provider_id=?1
+                     AND identity.upstream_model_id=?2
+                 )",
+                params![provider_id, model_id],
+            )
+            .map_err(|error| format!("model_exposure_fade_selection_failed:{error}"))?;
+        faded += 1;
+    }
+    Ok(faded)
+}
+
 pub(crate) fn image_supported(
     connection: &Connection,
     provider_id: &str,
@@ -320,6 +403,17 @@ pub(crate) fn image_supported(
     wire_api: &str,
 ) -> Result<bool, String> {
     validate_model_id(model_id)?;
+    if looks_like_gpt_model_id(model_id, model_id) {
+        let exposed: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM provider_model_exposures
+                 WHERE provider_id=?1 AND upstream_model_id=?2 AND exposed=1)",
+                params![provider_id, model_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("model_exposure_read_failed:{error}"))?;
+        return Ok(exposed);
+    }
     connection.query_row(
         "SELECT EXISTS(
           SELECT 1 FROM provider_model_image_probes probe

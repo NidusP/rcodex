@@ -9,8 +9,10 @@ use super::test_support::*;
 use super::*;
 use crate::diagnostics::DiagnosticsStore;
 use crate::usage::UsageStore;
+use axum::extract::State;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
-use axum::{body::Body, http::StatusCode, Router};
+use axum::http::HeaderMap;
+use axum::{body::Body, http::StatusCode, Json, Router};
 use serde_json::{json, Value};
 
 use super::chat_bridge::*;
@@ -202,19 +204,41 @@ fn codex_visible_error_message_is_never_empty() {
         "upstream",
         Some("https://relay.example/v1/responses"),
         Some("Unknown error"),
+        false,
     );
     assert!(message.contains("https://relay.example/v1/responses"));
     assert!(message.contains("Unknown error"));
+    assert!(message.contains("已转发到"));
     assert!(!message.trim().is_empty());
-    let local = codex_visible_error_message("model_not_in_route_set", "gateway", None, None);
+    let gpt = codex_visible_error_message(
+        "upstream_error",
+        "upstream",
+        Some("https://relay.example/responses"),
+        Some("Service temporarily unavailable"),
+        true,
+    );
+    assert!(gpt.contains("R Codex Gateway 已透传至 https://relay.example/responses"));
+    assert!(gpt.contains("是上游失败：Service temporarily unavailable"));
+    assert!(!gpt.contains("已转发到"));
+    let local = codex_visible_error_message("model_not_in_route_set", "gateway", None, None, false);
     assert!(local.contains("RouteSet"));
     assert!(!local.trim().is_empty());
-    let reasoning =
-        codex_visible_error_message("incompatible_reasoning_envelope", "gateway", None, None);
+    let reasoning = codex_visible_error_message(
+        "incompatible_reasoning_envelope",
+        "gateway",
+        None,
+        None,
+        false,
+    );
     assert!(reasoning.contains("推理密文"));
     assert!(!reasoning.contains("压缩信封"));
-    let envelope =
-        codex_visible_error_message("incompatible_compaction_envelope", "gateway", None, None);
+    let envelope = codex_visible_error_message(
+        "incompatible_compaction_envelope",
+        "gateway",
+        None,
+        None,
+        false,
+    );
     assert!(envelope.contains("压缩信封"));
     assert!(!envelope.contains("推理密文"));
 }
@@ -1198,4 +1222,173 @@ fn chat_adapter_lifts_tool_result_images_out_of_tool_text() {
         "data:image/png;base64,aaaa"
     );
     assert_eq!(messages[2]["content"][1]["image_url"]["detail"], "high");
+}
+
+#[tokio::test]
+async fn codex_header_passthrough_forwards_client_identity_headers() {
+    let observed = Arc::new(StdMutex::new(None));
+    let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let app = Router::new()
+        .route("/v1/responses", post(mock_upstream))
+        .with_state(observed.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let vault = Arc::new(MemoryVault::default());
+    let database = Database::in_memory();
+    let store = ProviderStore::from_database(database.clone(), vault).unwrap();
+    let provider = store
+        .create(CreateProviderInput {
+            name: "OAuth Relay".to_string(),
+            base_url: format!("http://127.0.0.1:{port}/v1"),
+            api_key: "provider-sentinel".to_string(),
+            transport_mode: TransportMode::CodexHeaderPassthrough,
+            gateway_timeout_settings: None,
+        })
+        .unwrap();
+    let upstream = store.upstream_for_provider(&provider.id).unwrap();
+    let instance_key = InstanceGatewayKey::for_test("passthrough-instance");
+    let runtime = ManagedGatewayRuntime::new();
+    runtime.set_diagnostics_now(DiagnosticsStore::from_database(database.clone()));
+    runtime.set_usage_now(UsageStore::from_database(database.clone()));
+    database
+        .connection()
+        .lock()
+        .unwrap()
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    let status = runtime.ensure_serving().await.unwrap();
+    runtime
+        .register_binding(
+            GatewayBinding {
+                binding_id: "passthrough-instance".to_string(),
+                route_set: route_set(provider.id, upstream.provider_revision_id),
+                admission_key_hash: instance_gateway_key_hash(&instance_key),
+            },
+            &store,
+        )
+        .await
+        .unwrap();
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/responses", status.base_url.unwrap()))
+        .header(INSTANCE_GATEWAY_HEADER, instance_key.expose())
+        .header(AUTHORIZATION, "Bearer oauth-token")
+        .header("User-Agent", "codex-cli 0.155.0-test")
+        .header("Originator", "codex_cli_rs")
+        .header("x-codex-turn-metadata", "{\"turn_id\":\"t1\"}")
+        .json(&json!({"model":"deepseek-managed","input":"hello"}))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+
+    let (headers, request_body) = observed.lock().unwrap().take().unwrap();
+    assert_eq!(request_body["model"], "deepseek-chat");
+    assert_eq!(
+        headers.get(AUTHORIZATION).unwrap(),
+        "Bearer provider-sentinel"
+    );
+    assert_eq!(headers.get("user-agent").unwrap(), "codex-cli 0.155.0-test");
+    assert_eq!(headers.get("originator").unwrap(), "codex_cli_rs");
+    assert!(headers.get("x-codex-turn-metadata").is_some());
+    assert!(headers.get(INSTANCE_GATEWAY_HEADER).is_none());
+}
+
+#[tokio::test]
+async fn codex_header_passthrough_models_proxy_forwards_query_and_headers() {
+    #[derive(Clone)]
+    struct ModelsObserve(Arc<StdMutex<Option<(HeaderMap, String)>>>);
+    async fn mock_models(
+        State(state): State<ModelsObserve>,
+        headers: HeaderMap,
+        axum::extract::Query(query): axum::extract::Query<
+            std::collections::HashMap<String, String>,
+        >,
+    ) -> Json<Value> {
+        *state.0.lock().unwrap() = Some((
+            headers,
+            query.get("client_version").cloned().unwrap_or_default(),
+        ));
+        Json(json!({"object": "list", "data": [{"id": "gpt-5", "object": "model"}]}))
+    }
+
+    let observed = Arc::new(StdMutex::new(None));
+    let listener = TcpListener::bind((LOOPBACK_HOST, 0)).await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let app = Router::new()
+        .route("/v1/models", axum::routing::get(mock_models))
+        .with_state(ModelsObserve(observed.clone()));
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let vault = Arc::new(MemoryVault::default());
+    let database = Database::in_memory();
+    let store = ProviderStore::from_database(database.clone(), vault).unwrap();
+    let provider = store
+        .create(CreateProviderInput {
+            name: "OAuth Relay".to_string(),
+            base_url: format!("http://127.0.0.1:{port}/v1"),
+            api_key: "provider-sentinel".to_string(),
+            transport_mode: TransportMode::CodexHeaderPassthrough,
+            gateway_timeout_settings: None,
+        })
+        .unwrap();
+    let upstream = store.upstream_for_provider(&provider.id).unwrap();
+    let instance_key = InstanceGatewayKey::for_test("passthrough-models");
+    let runtime = ManagedGatewayRuntime::new();
+    database
+        .connection()
+        .lock()
+        .unwrap()
+        .execute_batch("PRAGMA foreign_keys=OFF;")
+        .unwrap();
+    let status = runtime.ensure_serving().await.unwrap();
+    runtime
+        .register_binding(
+            GatewayBinding {
+                binding_id: "passthrough-models".to_string(),
+                route_set: route_set(provider.id, upstream.provider_revision_id),
+                admission_key_hash: instance_gateway_key_hash(&instance_key),
+            },
+            &store,
+        )
+        .await
+        .unwrap();
+
+    let response = reqwest::Client::new()
+        .get(format!(
+            "{}/models?client_version=0.155.0-test",
+            status.base_url.unwrap()
+        ))
+        .header(INSTANCE_GATEWAY_HEADER, instance_key.expose())
+        .header(AUTHORIZATION, "Bearer oauth-token")
+        .header("User-Agent", "codex-cli 0.155.0-test")
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let (headers, client_version) = observed.lock().unwrap().take().unwrap();
+    assert_eq!(client_version, "0.155.0-test");
+    assert_eq!(
+        headers.get(AUTHORIZATION).unwrap(),
+        "Bearer provider-sentinel"
+    );
+}
+
+#[test]
+fn upstream_cli_rejection_gateway_code() {
+    use super::codex_passthrough::upstream_failure_code;
+    assert_eq!(
+        upstream_failure_code(StatusCode::FORBIDDEN, Some("codex_cli_only")),
+        "upstream_cli_rejected"
+    );
+    assert_eq!(
+        upstream_failure_code(StatusCode::FORBIDDEN, Some("other")),
+        "upstream_forbidden"
+    );
 }

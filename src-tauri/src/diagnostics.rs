@@ -566,6 +566,11 @@ impl DiagnosticsStore {
         transaction
             .commit()
             .map_err(|error| format!("无法提交 Provider 模型目录：{error}"))?;
+        let _ = crate::model_exposure::fade_exposures_missing_from_catalog(
+            &connection,
+            provider_id,
+            &catalog_id,
+        );
         Ok(catalog_id)
     }
 
@@ -737,6 +742,7 @@ impl DiagnosticsStore {
                 let transport_mode = match row.get::<_, String>(6)?.as_str() {
                     "direct_responses" | "gateway_passthrough" => TransportMode::GatewayPassthrough,
                     "gateway_chat_completions" => TransportMode::GatewayChatCompletions,
+                    "pass_through" => TransportMode::CodexHeaderPassthrough,
                     _ => return Err(rusqlite::Error::InvalidQuery),
                 };
                 let outcome = match row.get::<_, String>(8)?.as_str() {
@@ -784,6 +790,7 @@ fn transport_mode_db(mode: TransportMode) -> &'static str {
     match mode {
         TransportMode::GatewayPassthrough => "gateway_passthrough",
         TransportMode::GatewayChatCompletions => "gateway_chat_completions",
+        TransportMode::CodexHeaderPassthrough => "pass_through",
     }
 }
 

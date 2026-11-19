@@ -4,6 +4,7 @@
 //! 数据面由 `bin/codex-gateway` 调用 `run_sidecar`；控制面由 `ManagedGatewayClient` 管理。
 
 mod chat_bridge;
+mod codex_passthrough;
 mod compaction;
 mod diagnostics;
 mod errors;

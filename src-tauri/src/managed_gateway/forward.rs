@@ -22,13 +22,16 @@ use crate::diagnostics::RequestDiagnosticOutcome;
 use crate::routing::{GatewayTimeoutSnapshot, ModelRoute, WireApi};
 
 use super::chat_bridge::{output_items_from_chat_message, prepare_chat_outbound};
+use super::codex_passthrough::{
+    attach_client_headers, route_needs_codex_identity_passthrough, upstream_failure_code,
+};
 use super::diagnostics::RequestMeta;
 use super::diagnostics::{
     record_request_best_effort, request_event, request_event_without_status, request_metadata,
     RequestRecorder,
 };
 use super::errors::{
-    annotate_upstream_detail, api_error, api_error_with_detail, bounded_response_bytes,
+    annotate_upstream_detail, api_error, api_error_with_presentation, bounded_response_bytes,
     classify_upstream_send, upstream_error_detail,
 };
 use super::helpers::{
@@ -80,12 +83,13 @@ pub(super) async fn forward_provider(
                 ("upstream_model", &route.upstream_model_id),
                 ("provider", &upstream.provider_id),
                 ("route_kind", route_kind(route)),
-                ("auth", auth_kind(upstream, forwarded_auth)),
+                ("auth", auth_kind(upstream, route, forwarded_auth)),
                 ("url", &safe_url),
                 ("loopback", if is_loopback_url(&url) { "1" } else { "0" }),
                 ("stream", if stream { "1" } else { "0" }),
             ]);
             let input_meta = request_metadata(&payload);
+            let gpt_passthrough = route_needs_codex_identity_passthrough(route, upstream);
             let response = match send_model_request(
                 upstream,
                 route,
@@ -98,6 +102,7 @@ pub(super) async fn forward_provider(
                 &input_meta,
                 forwarded_auth,
                 started,
+                gpt_passthrough,
             )
             .await
             {
@@ -114,6 +119,7 @@ pub(super) async fn forward_provider(
                 request,
                 &url,
                 started,
+                gpt_passthrough,
             )
             .await
         }
@@ -174,6 +180,7 @@ pub(super) fn transport_failure(
     url: &str,
     cause: Option<&str>,
     started: Instant,
+    gpt_codex_passthrough: bool,
 ) -> Response {
     let instance = instance_id.clone().unwrap_or_default();
     let safe_url = safe_upstream_url(url);
@@ -200,14 +207,32 @@ pub(super) fn transport_failure(
     event.stream = stream;
     event.error_detail = annotate_upstream_detail(url, cause.map(str::to_owned));
     record_request_best_effort(recorder, event);
-    api_error_with_detail(status, code, Some(url), cause.map(str::to_owned))
+    api_error_with_presentation(
+        status,
+        code,
+        Some(url),
+        cause.map(str::to_owned),
+        gpt_codex_passthrough,
+    )
 }
 
 pub(super) fn apply_upstream_auth(
     request: reqwest::RequestBuilder,
     upstream: &ProviderUpstreamRuntime,
-    _forwarded_auth: Option<&HeaderMap>,
+    route: &ModelRoute,
+    forwarded_auth: Option<&HeaderMap>,
 ) -> reqwest::RequestBuilder {
+    if route_needs_codex_identity_passthrough(route, upstream) {
+        return match upstream.api_key.as_ref() {
+            Some(api_key) => request.bearer_auth(api_key.expose()),
+            None => request,
+        };
+    }
+    if let Some(headers) = forwarded_auth {
+        if let Some(value) = headers.get(AUTHORIZATION) {
+            return request.header(AUTHORIZATION, value);
+        }
+    }
     match upstream.api_key.as_ref() {
         Some(api_key) => request.bearer_auth(api_key.expose()),
         None => request,
@@ -224,6 +249,7 @@ pub(super) async fn forward_responses_response(
     request: serde_json::Map<String, Value>,
     url: &str,
     started: Instant,
+    gpt_codex_passthrough: bool,
 ) -> Response {
     let input_meta = request_metadata(&Value::Object(request));
     let status =
@@ -274,7 +300,8 @@ pub(super) async fn forward_responses_response(
         event.stream = stream;
         event.error_detail = annotated;
         record_request_best_effort(&recorder, event);
-        return api_error_with_detail(status, "upstream_error", Some(url), detail);
+        let code = upstream_failure_code(status, detail.as_deref());
+        return api_error_with_presentation(status, code, Some(url), detail, gpt_codex_passthrough);
     }
     if stream && !is_event_stream_content_type(content_type.as_deref()) {
         return synchronous_response_as_sse(
@@ -455,12 +482,13 @@ pub(super) async fn forward_chat_completions(
         ("upstream_model", &route.upstream_model_id),
         ("provider", &upstream.provider_id),
         ("route_kind", route_kind(route)),
-        ("auth", auth_kind(upstream, forwarded_auth)),
+        ("auth", auth_kind(upstream, route, forwarded_auth)),
         ("url", &safe_url),
         ("loopback", if is_loopback_url(&url) { "1" } else { "0" }),
         ("stream", if stream { "1" } else { "0" }),
         ("wire", "chat_completions"),
     ]);
+    let gpt_passthrough = route_needs_codex_identity_passthrough(route, upstream);
     let response = match send_model_request(
         upstream,
         route,
@@ -473,6 +501,7 @@ pub(super) async fn forward_chat_completions(
         &input_meta,
         forwarded_auth,
         started,
+        gpt_passthrough,
     )
     .await
     {
@@ -520,7 +549,8 @@ pub(super) async fn forward_chat_completions(
         event.stream = stream;
         event.error_detail = annotated;
         record_request_best_effort(&recorder, event);
-        return api_error_with_detail(status, "upstream_error", Some(&url), detail);
+        let code = upstream_failure_code(status, detail.as_deref());
+        return api_error_with_presentation(status, code, Some(&url), detail, gpt_passthrough);
     }
     if stream {
         return chat_sse_to_responses(
@@ -676,6 +706,7 @@ async fn send_model_request(
     input_meta: &RequestMeta,
     forwarded_auth: Option<&HeaderMap>,
     started: Instant,
+    gpt_codex_passthrough: bool,
 ) -> Result<UpstreamResponse, Response> {
     let mut image_retry_used = false;
     loop {
@@ -691,15 +722,17 @@ async fn send_model_request(
         if let Some(capture) = recorder.as_ref().and_then(|r| r.archive.as_ref()) {
             capture.stage("upstream-request", &body);
         }
-        let outbound = apply_upstream_auth(
-            upstream
-                .client
-                .post(url)
-                .header(CONTENT_TYPE, "application/json"),
-            upstream,
-            forwarded_auth,
-        )
-        .body(body);
+        let mut outbound = upstream
+            .client
+            .post(url)
+            .header(CONTENT_TYPE, "application/json");
+        if route_needs_codex_identity_passthrough(route, upstream) {
+            if let Some(client) = forwarded_auth {
+                outbound = attach_client_headers(outbound, client);
+            }
+        }
+        outbound = apply_upstream_auth(outbound, upstream, route, forwarded_auth);
+        let outbound = outbound.body(body);
         let response = match timeout(
             Duration::from_secs(upstream.timeouts.first_byte_seconds),
             outbound.send(),
@@ -720,6 +753,7 @@ async fn send_model_request(
                     url,
                     None,
                     started,
+                    gpt_codex_passthrough,
                 ));
             }
             Ok(Err(error)) => {
@@ -744,6 +778,7 @@ async fn send_model_request(
                     url,
                     Some(kind),
                     started,
+                    gpt_codex_passthrough,
                 ));
             }
             Ok(Ok(response)) => response,
@@ -797,11 +832,12 @@ async fn send_model_request(
         event.stream = stream;
         event.error_detail = annotated;
         record_request_best_effort(recorder, event);
-        return Err(api_error_with_detail(
+        return Err(api_error_with_presentation(
             status,
             "upstream_error",
             Some(url),
             detail,
+            gpt_codex_passthrough,
         ));
     }
 }

@@ -111,6 +111,7 @@ pub(super) struct ProviderUpstreamRuntime {
     pub(super) provider_revision_id: String,
     pub(super) base_url: String,
     pub(super) api_key: Option<Arc<ApiKey>>,
+    pub(super) transport_mode: TransportMode,
     pub(super) client: Client,
     pub(super) timeouts: GatewayTimeoutSnapshot,
 }

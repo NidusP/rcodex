@@ -21,11 +21,12 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use super::chat_bridge::response_request_to_chat;
+use super::codex_passthrough::route_needs_codex_identity_passthrough;
 use super::diagnostics::{
     record_request_best_effort, request_event, request_metadata, RequestRecorder,
 };
 use super::errors::{
-    annotate_upstream_detail, api_error, api_error_with_detail, bounded_response_bytes,
+    annotate_upstream_detail, api_error, api_error_with_presentation, bounded_response_bytes,
     classify_upstream_send, upstream_error_detail,
 };
 use super::forward::{apply_upstream_auth, register_archive_secrets, transport_failure};
@@ -725,6 +726,7 @@ async fn collect_and_wrap(
     };
     let url = upstream_request_url(&upstream.base_url, wire);
     let safe_url = safe_upstream_url(&url);
+    let gpt_passthrough = route_needs_codex_identity_passthrough(route, upstream);
     compact_trace(&instance, route, inbound_tools, "forward", Some(&safe_url));
     gateway_trace(&[
         ("event", "forward"),
@@ -733,7 +735,7 @@ async fn collect_and_wrap(
         ("upstream_model", &route.upstream_model_id),
         ("provider", &upstream.provider_id),
         ("route_kind", route_kind(route)),
-        ("auth", auth_kind(upstream, None)),
+        ("auth", auth_kind(upstream, route, None)),
         ("url", &safe_url),
         ("loopback", if is_loopback_url(&url) { "1" } else { "0" }),
         ("stream", "1"),
@@ -745,6 +747,7 @@ async fn collect_and_wrap(
             .post(&url)
             .header(CONTENT_TYPE, "application/json"),
         upstream,
+        route,
         None,
     )
     .body(body);
@@ -772,6 +775,7 @@ async fn collect_and_wrap(
                 &url,
                 None,
                 started,
+                gpt_passthrough,
             );
         }
         Ok(Err(error)) => {
@@ -800,6 +804,7 @@ async fn collect_and_wrap(
                 &url,
                 Some(kind),
                 started,
+                gpt_passthrough,
             );
         }
         Ok(Ok(response)) => response,
@@ -816,6 +821,7 @@ async fn collect_and_wrap(
         &url,
         started,
         upstream.timeouts.non_stream_total_seconds,
+        gpt_passthrough,
     )
     .await
 }
@@ -832,6 +838,7 @@ async fn finish_summarizer_upstream(
     url: &str,
     started: Instant,
     timeout_seconds: u64,
+    gpt_codex_passthrough: bool,
 ) -> Response {
     let instance = instance_id.clone().unwrap_or_default();
     let status =
@@ -884,7 +891,13 @@ async fn finish_summarizer_upstream(
         event.stream = client_stream;
         event.error_detail = annotated;
         record_request_best_effort(&recorder, event);
-        return api_error_with_detail(status, "upstream_error", Some(url), detail);
+        return api_error_with_presentation(
+            status,
+            "upstream_error",
+            Some(url),
+            detail,
+            gpt_codex_passthrough,
+        );
     }
     let bytes = match timeout(
         Duration::from_secs(timeout_seconds),

@@ -17,6 +17,9 @@ pub(super) const PROVIDER_RECORD_COLUMNS: &str =
 pub enum TransportMode {
     GatewayPassthrough,
     GatewayChatCompletions,
+    /// Forward official Codex client identity headers and Authorization without
+    /// injecting the channel API key (Sub2API `codex_cli_only` pools).
+    CodexHeaderPassthrough,
 }
 
 impl Default for TransportMode {
@@ -30,6 +33,7 @@ impl TransportMode {
         match value.as_str() {
             "direct_responses" | "gateway_passthrough" => Ok(Self::GatewayPassthrough),
             "gateway_chat_completions" => Ok(Self::GatewayChatCompletions),
+            "pass_through" => Ok(Self::CodexHeaderPassthrough),
             _ => Err(rusqlite::Error::FromSqlConversionFailure(
                 5,
                 rusqlite::types::Type::Text,
@@ -42,6 +46,7 @@ impl TransportMode {
         match self {
             Self::GatewayPassthrough => "gateway_passthrough",
             Self::GatewayChatCompletions => "gateway_chat_completions",
+            Self::CodexHeaderPassthrough => "pass_through",
         }
     }
 }

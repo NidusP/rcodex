@@ -1,6 +1,6 @@
 # R Codex 当前状态
 
-> 状态：active（最后核对 2026-11-08）
+> 状态：active（最后核对 2026-11-19）
 > 状态说明：本页是当前状态的唯一入口。AI 开工前先读本页；每次任务交接更新「阻塞与未完成」和「最近交接」两节，其余各节只在合同或架构变化时修改。行为约定见 [AGENTS.md](../AGENTS.md)。
 
 ## 1. 当前产品合同要点
@@ -11,7 +11,7 @@
 - 所有受管理请求走本机回环 Gateway（`codex-gateway` sidecar，仅 127.0.0.1）；第三方请求删除官方认证，凭据只从自有 SQLite `provider_credentials` 读取。
 - 渠道发现完整目录，用户勾选「透出」后模型才可进入隔离空间；新启动的图片能力只取当前 supported 证据（见 [模型透出与图片探针](designs/2026-11-07-model-exposure-image-probe.md)）。
 - 隔离空间固定 A–E 槽位，最多 5 个；新增创建空空间（`needs_model_selection`，选好前不可启动），不复制现有空间；彻底删除须确认且该空间全部实例停止（见 [排序与删除](designs/2026-11-07-workspace-order-and-deletion.md)、[多实例](designs/2026-10-04-multiple-managed-instances.md)）。
-- 官方订阅模型路由保持关闭；当前版本 0.1.7（发版流程见 AGENTS「开发、测试与打包」）。
+- 官方订阅模型路由保持关闭；当前版本 0.1.8（发版流程见 AGENTS「开发、测试与打包」）。
 
 ## 2. 架构地图
 
@@ -25,9 +25,9 @@
 | `src-tauri/src/managed_launch/` | 启动方案/空间：创建、绑定、启动准备、删除服务 | `workspace.rs`、`deletion.rs` |
 | `src-tauri/src/codex_control/` | 实例生命周期、快照、CLI/App 启动 | `lifecycle.rs`、`snapshot.rs` |
 | `src-tauri/src/managed_gateway/` | 回环 Gateway：路由、协议适配、压缩 | 数据路径 `Codex → 127.0.0.1 → Provider` |
-| `src-tauri/src/model_exposure/`、`model_image_probe.rs` | 透出偏好与按模型图片探针 | schema v24 |
+| `src-tauri/src/model_exposure/`、`model_image_probe.rs` | 透出偏好与按模型图片探针；GPT 透出/图探针 UI 淡出 | schema v25 |
 | `src-tauri/src/conversation_archive/` | 完整请求档案四阶段采集与按 scope 删除 | |
-| `src-tauri/src/database/` | SQLite 迁移（当前 v24）与自有库 | 单一写入路径 |
+| `src-tauri/src/database/` | SQLite 迁移（当前 v25，`pass_through` transport）与自有库 | 单一写入路径 |
 
 UI 覆盖 Mantine 样式的注意点：类名前缀是 `rcodex-`（非 `mantine-`），变体覆盖需更高特异性；新增规则用无头探针实测（见 [UI 变更留痕](ui-change-log.md) 2026-11-07 条目）。
 
@@ -52,7 +52,7 @@ pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposu
 
 - **CI Test 已全绿**（2026-11-13，run #19 起双平台通过，历史 18 连败清零）；失败诊断通道已固化（job summary + check 注解，匿名可读）。2026-11-13 起含 Gateway 测试（67 项回环临时端口单测）与 docs strict 门禁 job，测试警告已清零（原 113 条）；跳过为历史遗留已移除。
 - **Windows 0.1.7 实机验收未做**：安装/更新后旧实例目录保留、双隔离 App 不同 Electron 数据目录、卸载不删 `%APPDATA%\io.rcodex`、空间删除（含文件锁重试）。安装器见 release v0.1.7。
-- **0.1.6 → 0.1.7 回退需升级前数据库备份**：schema v24 旧二进制拒绝。
+- **0.1.7 → 待发版回退需升级前数据库备份**：schema v25（`pass_through`）旧二进制拒绝；0.1.6 → 0.1.7 同理为 v24。
 - 真实 Codex App 的独立 API 登录、多渠道连续会话、重启与导入后恢复验收；不得读取默认认证验证。
 - 隔离 Browser/Computer Use：Windows 0.1.5 隔离 App 上仍禁用，不要再归因于目录开关、混用斜杠或 CLI symlink；Chat 自动审核仍不指向自己。
 - Windows 打包、签名/公证、凭据文件权限，以及散装 DirectExe 的虚拟机验收。
@@ -63,7 +63,7 @@ pnpm run ui-check    # 无头浏览器夹具：workspace-ui-check + model-exposu
 
 ## 6. 最近任务交接
 
+- **2026-11-19 发版 0.1.8（GPT 透传 + 透出）**：合同见 [gpt-official-clients-conclusion](designs/2026-11-19-gpt-official-clients-conclusion.md)。Gateway 指纹透传 + RouteSet 渠道 Key；cli_only GPT 可透出/进工作区；schema v25、`pass_through` transport；删渠道工作区回落 `none`。验证：`check:all` + `cargo test --lib` 434。推 `main` 后 CI 打包；Release note 含 v25 不可回退 0.1.7。
 - **2026-11-13 CI Test 全绿**（run #19，双平台首次通过，此前 18 连败）：Windows 最后一项失败是 archive 路径断言写死 `/` 分隔符，断言统一为正斜杠后通过。修复过程（run #16 日志定位）：① macOS supervisor 子进程秒退时身份读取失败导致启动报错，改为跳过 running 回执直接落 exited；② Windows archive 在 append/只读句柄上 sync_all/set_len 被 Access denied（FlushFileBuffers 需要 FILE_WRITE_DATA），改独立可写句柄；③ NO_PROXY 断言平台感知。诊断通道固化：CI 失败时把失败块写进 job summary + check 注解（匿名可读，run #18 起）。提交 `516ce33`/`59760f7`/`00ef154`/`5501662`；回滚 revert 之。
 - **2026-11-08 子项目 AGENTS.md**（commander 批准）：新增 `src/AGENTS.md`、`src-tauri/AGENTS.md`、`website/AGENTS.md`（agents.md 嵌套规范，就近生效）；根 AGENTS.md 只留跨端合同，子项目约定见各文件。
-- **2026-11-08 归档迁移**（commander 批准）：38 份 historical/archived 文档与 stitch 设计资产 `git mv` 至 `docs/archive/`（镜像 designs 子层，git 历史保留）；读取面收敛为约 20 份 active 文档；链接修复 134 处，`check-doc-links` active 0 失效。回滚：git mv 逆操作。
-- 更早（2026-11-08）：发版 0.1.7（产物见 GitHub Release v0.1.7；多隔离空间/空间删除/模型透出，schema v24）与治理第一轮（本状态页、UI 留痕页、AGENTS 瘦身、聚合验证命令）与文档维护规则（AGENTS 规则节 + check-doc-links 缺标记/状态页/strict 门禁）——详细记录见 [治理提案实施记录](project-governance-proposal.md) 与 git 历史。
+- 更早（2026-11-08 治理与发版）：0.1.7、文档归档迁移、治理第一轮——见 [治理提案实施记录](project-governance-proposal.md) 与 git 历史。

@@ -18,8 +18,8 @@ use super::models::{
 };
 use super::persistence::query_strings;
 use super::preset_validation::{
-    assert_providers_have_confirmed_protocol, normalize_public_model_ids, upsert_identity,
-    validate_model, validate_sources,
+    assert_model_workspace_admissible, assert_providers_have_confirmed_protocol,
+    normalize_public_model_ids, upsert_identity, validate_model, validate_sources,
 };
 use super::validation::{normalize_optional_path, validate_name};
 
@@ -83,6 +83,141 @@ pub(super) fn merge_login_provider_profile_options(
     }
     serde_json::to_string(&options)
         .map_err(|error| format!("managed_profile_options_encode_failed:{error}"))
+}
+
+/// Drop workspace bindings, model picks, and login projection for a deleted channel.
+pub(crate) fn detach_provider_from_managed_workspaces(
+    transaction: &rusqlite::Transaction<'_>,
+    provider_id: &str,
+) -> Result<(), String> {
+    let now = unix_now_seconds();
+    let affected = query_strings(
+        transaction,
+        "SELECT launch_preset_id FROM launch_preset_api_providers
+         WHERE provider_id=?1
+           AND launch_preset_id IN (
+             SELECT id FROM launch_presets
+             WHERE entry_kind='managed_app' AND deleted_at IS NULL
+           )",
+        provider_id,
+    )?;
+    if affected.is_empty() {
+        return Ok(());
+    }
+    transaction
+        .execute(
+            "DELETE FROM launch_preset_role_models
+             WHERE route_identity_id IN (
+               SELECT id FROM model_route_identities
+               WHERE source_kind='api_provider' AND api_key_provider_id=?1
+             )",
+            [provider_id],
+        )
+        .map_err(|error| format!("provider_workspace_role_cleanup_failed:{error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM launch_preset_model_selections
+             WHERE route_identity_id IN (
+               SELECT id FROM model_route_identities
+               WHERE source_kind='api_provider' AND api_key_provider_id=?1
+             )",
+            [provider_id],
+        )
+        .map_err(|error| format!("provider_workspace_model_cleanup_failed:{error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM launch_preset_api_providers WHERE provider_id=?1",
+            [provider_id],
+        )
+        .map_err(|error| format!("provider_workspace_binding_cleanup_failed:{error}"))?;
+
+    for preset_id in affected {
+        let remaining = query_strings(
+            transaction,
+            "SELECT provider_id FROM launch_preset_api_providers
+             WHERE launch_preset_id=?1 ORDER BY position",
+            &preset_id,
+        )?;
+        let model_count: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM launch_preset_model_selections WHERE launch_preset_id=?1",
+                [&preset_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("provider_workspace_model_count_failed:{error}"))?;
+        let state = if remaining.is_empty() || model_count == 0 {
+            "needs_model_selection"
+        } else {
+            "ready"
+        };
+        let (version, profile_options): (i64, String) = transaction
+            .query_row(
+                "SELECT version, COALESCE(profile_options, '{}') FROM launch_presets WHERE id=?1",
+                [&preset_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|error| format!("provider_workspace_preset_lookup_failed:{error}"))?;
+        let next_version = version
+            .checked_add(1)
+            .ok_or_else(|| "managed_workspace_version_overflow".to_string())?;
+        let stored_login = login_provider_id_from_profile_options(&profile_options);
+        let login = match stored_login.as_deref() {
+            Some(id) if id == provider_id => {
+                if remaining.len() == 1 {
+                    Some(remaining[0].as_str())
+                } else {
+                    None
+                }
+            }
+            Some(id) => remaining
+                .iter()
+                .find(|provider| provider.as_str() == id)
+                .map(String::as_str),
+            None => {
+                if remaining.len() == 1 {
+                    Some(remaining[0].as_str())
+                } else {
+                    None
+                }
+            }
+        };
+        let profile_options = merge_login_provider_profile_options(&profile_options, login)?;
+        let (credential_kind, projected_provider, gateway_policy) = if remaining.is_empty() {
+            ("none", None, None)
+        } else {
+            (
+                "api_key",
+                remaining.first().map(String::as_str),
+                Some("gateway_passthrough"),
+            )
+        };
+        transaction
+            .execute(
+                "UPDATE launch_presets
+                 SET credential_kind=?1, api_key_provider_id=?2, codex_account_id=NULL,
+                     gateway_policy=?3, profile_options=?4, version=?5, updated_at=?6
+                 WHERE id=?7 AND deleted_at IS NULL",
+                params![
+                    credential_kind,
+                    projected_provider,
+                    gateway_policy,
+                    profile_options,
+                    next_version,
+                    now,
+                    preset_id
+                ],
+            )
+            .map_err(|error| format!("provider_workspace_preset_update_failed:{error}"))?;
+        transaction
+            .execute(
+                "UPDATE launch_preset_compositions
+                 SET state=?1, updated_at=?2
+                 WHERE launch_preset_id=?3",
+                params![state, now, preset_id],
+            )
+            .map_err(|error| format!("provider_workspace_composition_update_failed:{error}"))?;
+    }
+    Ok(())
 }
 
 pub(super) fn effective_login_provider_id(
@@ -442,6 +577,11 @@ impl ManagedLaunchStore {
                 RouteKind::ApiProvider if selected_providers.contains(model.source_id.as_str()) => {
                     crate::model_exposure::assert_model_exposed(
                         &transaction,
+                        &model.source_id,
+                        &model.upstream_model_id,
+                    )?;
+                    assert_model_workspace_admissible(
+                        &*transaction,
                         &model.source_id,
                         &model.upstream_model_id,
                     )?;

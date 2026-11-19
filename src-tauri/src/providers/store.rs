@@ -536,6 +536,7 @@ impl ProviderStore {
                     [id],
                 )
                 .map_err(|error| format!("无法清理 Provider 余额缓存：{error}"))?;
+            crate::managed_launch::detach_provider_from_managed_workspaces(&transaction, id)?;
             transaction
                 .execute(
                     "UPDATE api_key_provider_revisions

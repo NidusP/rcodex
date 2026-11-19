@@ -11,6 +11,7 @@ use crate::routing::{
 };
 use serde_json::Value;
 
+use super::codex_passthrough::route_needs_codex_identity_passthrough;
 use super::runtime_types::ProviderUpstreamRuntime;
 
 /// One-line stderr trace for locating loopback 502s. Values must already be
@@ -114,8 +115,15 @@ pub(super) fn route_provider_id(route: &ModelRoute) -> &str {
 
 pub(super) fn auth_kind(
     upstream: &ProviderUpstreamRuntime,
+    route: &ModelRoute,
     forwarded_auth: Option<&HeaderMap>,
 ) -> &'static str {
+    if route_needs_codex_identity_passthrough(route, upstream) {
+        if upstream.api_key.is_some() {
+            return "provider_key";
+        }
+        return "none";
+    }
     if upstream.api_key.is_some() {
         "provider_key"
     } else if forwarded_auth.is_some() {

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     diagnostics::{CheckStatus, ConnectivityStatus, ProbeSnapshot, ProviderModelOption},
     providers::TransportMode,
-    routing::is_internal_codex_model_id,
+    routing::{is_internal_codex_model_id, looks_like_gpt_model_id},
     secrets::validate_api_key,
 };
 
@@ -364,6 +364,34 @@ async fn classify_text(
             }
         }
     }
+    if !models.is_empty() && gpt_text_probe_failed_cli_only(&calls) {
+        let wire = calls
+            .iter()
+            .find_map(|call| {
+                if call.route.contains("responses") {
+                    Some("responses".to_string())
+                } else if call.route.contains("chat") {
+                    Some("chat_completions".to_string())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| Some("responses".to_string()));
+        let confirmed = calls
+            .iter()
+            .find_map(|call| Some(confirmed_base_for_route(base_url, call.route)));
+        return finish(
+            ConnectivityStatus::Ready,
+            wire,
+            confirmed,
+            probe_models.first().cloned(),
+            models,
+            CheckStatus::Ready,
+            CheckStatus::Failed,
+            Some("gpt_codex_client_required".to_string()),
+            calls,
+        );
+    }
     let error_code = calls.last().and_then(|call| call.error_code.clone());
     let status = calls
         .last()
@@ -564,7 +592,11 @@ fn finish(
     let confirmed = matches!(status, ConnectivityStatus::Ready)
         && matches!(models_check, CheckStatus::Ready)
         && matches!(text_check, CheckStatus::Ready);
-    let wire_api = if confirmed {
+    let gpt_codex_reference_only = matches!(models_check, CheckStatus::Ready)
+        && matches!(text_check, CheckStatus::Failed)
+        && matches!(error_code.as_deref(), Some("gpt_codex_client_required"));
+    let persist_wire = confirmed || gpt_codex_reference_only;
+    let wire_api = if persist_wire {
         wire_api.filter(|value| matches!(value.as_str(), "responses" | "chat_completions"))
     } else {
         None
@@ -691,9 +723,30 @@ fn parse_models(value: &Value) -> Vec<ProviderModelOption> {
         .collect()
 }
 
+fn gpt_text_probe_failed_cli_only(calls: &[ProbeCall]) -> bool {
+    let posts: Vec<_> = calls
+        .iter()
+        .filter(|call| call.model.is_some() && !call.success)
+        .collect();
+    if posts.is_empty() {
+        return false;
+    }
+    posts.iter().all(|call| {
+        call.model
+            .as_deref()
+            .is_some_and(|model| looks_like_gpt_model_id(model, model))
+            && matches!(
+                call.error_code.as_deref(),
+                Some("upstream_cli_rejected") | Some("gpt_codex_client_required")
+            )
+    })
+}
+
 fn upstream_error_code(status: u16, body: &[u8]) -> &'static str {
     if route_is_missing(status, body) {
         "upstream_route_unsupported"
+    } else if matches!(status, 403) && body_indicates_codex_cli_only(body) {
+        "upstream_cli_rejected"
     } else if matches!(status, 401 | 403) || body_indicates_auth_failure(body) {
         "upstream_unauthorized"
     } else {
@@ -702,6 +755,14 @@ fn upstream_error_code(status: u16, body: &[u8]) -> &'static str {
             _ => "upstream_http_error",
         }
     }
+}
+
+fn body_indicates_codex_cli_only(body: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(body).to_ascii_lowercase();
+    lower.contains("cli_only")
+        || lower.contains("codex_cli")
+        || lower.contains("codex-cli")
+        || lower.contains("official client")
 }
 
 fn body_indicates_auth_failure(body: &[u8]) -> bool {
@@ -1066,6 +1127,30 @@ mod tests {
                 .map(|call| call.route)
                 .collect::<Vec<_>>(),
             vec!["/models", "/responses"]
+        );
+    }
+
+    #[test]
+    fn gpt_codex_reference_probe_retains_wire_api() {
+        let execution = finish(
+            ConnectivityStatus::Ready,
+            Some("responses".to_string()),
+            Some("https://example.com/v1".to_string()),
+            Some("gpt-4o".to_string()),
+            Vec::new(),
+            CheckStatus::Ready,
+            CheckStatus::Failed,
+            Some("gpt_codex_client_required".to_string()),
+            Vec::new(),
+        );
+        assert_eq!(execution.snapshot.wire_api.as_deref(), Some("responses"));
+        assert_eq!(
+            execution.snapshot.confirmed_base_url.as_deref(),
+            Some("https://example.com/v1")
+        );
+        assert_eq!(
+            execution.snapshot.error_code.as_deref(),
+            Some("gpt_codex_client_required")
         );
     }
 

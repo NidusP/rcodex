@@ -72,6 +72,75 @@ fn grok_prepare_launch_defaults_compact_when_only_window_is_overridden() {
 
 #[cfg(unix)]
 #[test]
+fn gpt_prepare_launch_allows_unconfirmed_report_when_gpt_exposed() {
+    let database = Database::in_memory();
+    seed_provider(&database, "relay", "relay-r1", "responses");
+    {
+        let connection = database.connection();
+        let connection = connection.lock().unwrap();
+        connection
+            .execute(
+                "UPDATE provider_connectivity_reports
+                 SET wire_api=NULL, text_check='failed', error_code='gpt_codex_client_required'
+                 WHERE provider_id='relay'",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO provider_model_exposures(provider_id, upstream_model_id, exposed, updated_at)
+                 VALUES ('relay', 'gpt-4o', 1, 1)",
+                [],
+            )
+            .unwrap();
+    }
+    let root = std::env::temp_dir().join(format!("rcodex-gpt-prepare-{}", Uuid::new_v4()));
+    let store = ManagedLaunchStore::for_test(
+        database,
+        root.clone(),
+        Arc::new(MemoryInstanceVault::default()),
+    );
+    let saved = store
+        .create_exposed_test_preset(CreateManagedLaunchPresetInput {
+            entry_kind: Some(EntryKind::ManagedApp.as_wire().to_string()),
+            name: "GPT only".to_string(),
+            official_account_id: None,
+            api_key_provider_ids: vec!["relay".to_string()],
+            models: vec![ManagedModelSelectionInput {
+                source_kind: RouteKind::ApiProvider,
+                source_id: "relay".to_string(),
+                upstream_model_id: "gpt-4o".to_string(),
+                public_model_id: "gpt-4o".to_string(),
+                display_name: "GPT-4o".to_string(),
+                ..Default::default()
+            }],
+            auto_review_public_model_id: None,
+            transport_mode: None,
+            default_workspace_path: None,
+            create_new: false,
+            launch_preset_id: None,
+            source_preset_id: None,
+            login_provider_id: None,
+        })
+        .unwrap();
+    let fake_codex = write_fake_codex(&root, &["template", "gpt-4o"]);
+    store
+        .prepare_launch_with_target(
+            &saved.id,
+            saved.version,
+            None,
+            &fake_codex,
+            "codex-test",
+            Some(&Url::parse("http://127.0.0.1:43123/v1").unwrap()),
+            &root,
+            "managed_app",
+        )
+        .unwrap();
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[cfg(unix)]
+#[test]
 fn unknown_family_prepare_launch_strips_cloned_gpt_windows() {
     let database = Database::in_memory();
     seed_provider(&database, "relay", "relay-r1", "responses");

@@ -39,6 +39,7 @@ use crate::support::unix_now_seconds;
 use super::models::{
     ManagedLaunchStore, ManagedLaunchTransport, PreparedManagedLaunch, ProviderSnapshot,
 };
+use super::preset_validation::{assert_model_workspace_admissible, provider_workspace_admissible};
 use super::storage::migrate_managed_app_sqlite_into_home;
 use super::validation::{
     ensure_owned_path, resolve_workspace, set_private_directory, sha256_label,
@@ -243,6 +244,11 @@ impl ManagedLaunchStore {
             for selection in &selections {
                 if selection.source_kind == RouteKind::ApiProvider {
                     crate::model_exposure::assert_model_exposed(
+                        &connection,
+                        &selection.source_id,
+                        &selection.upstream_model_id,
+                    )?;
+                    assert_model_workspace_admissible(
                         &connection,
                         &selection.source_id,
                         &selection.upstream_model_id,
@@ -518,33 +524,36 @@ impl ManagedLaunchStore {
             keep_managed_permission_selector_available(&managed_codex_home)?;
             keep_catalog_reasoning_efforts_selectable(&managed_codex_home)?;
         }
-        // verify_catalog_models_with_codex performs the parser check and the
-        // expected-model check in one Codex invocation; avoid starting the
-        // same CLI probe twice on every managed App launch.
+        // Reference-only launch probes: log catalog/profile contract checks but
+        // do not block managed App/CLI startup if Codex disagrees with the snapshot.
         let preflight_log = lifecycle_dir.join("startup.log");
-        let verification = (|| -> Result<(), String> {
-            verify_catalog_models_with_codex(
-                codex_executable,
-                &materialized.catalog_path,
-                &routes
-                    .iter()
-                    .map(|route| route.public_model_id.clone())
-                    .collect::<Vec<_>>(),
+        let expected_models = routes
+            .iter()
+            .map(|route| route.public_model_id.clone())
+            .collect::<Vec<_>>();
+        if let Err(code) = verify_catalog_models_with_codex(
+            codex_executable,
+            &materialized.catalog_path,
+            &expected_models,
+            &preflight_log,
+        ) {
+            let _ = crate::launcher_protocol::append_startup_log(
                 &preflight_log,
-            )?;
-            verify_managed_profile_with_codex(
-                codex_executable,
-                &managed_codex_home,
-                &profile_name,
-                &routes
-                    .iter()
-                    .map(|route| route.public_model_id.clone())
-                    .collect::<Vec<_>>(),
+                &format!("catalog_probe launch_policy=continue advisory_code={code}"),
+            );
+        }
+        if let Err(code) = verify_managed_profile_with_codex(
+            codex_executable,
+            &managed_codex_home,
+            &profile_name,
+            &expected_models,
+            &preflight_log,
+        ) {
+            let _ = crate::launcher_protocol::append_startup_log(
                 &preflight_log,
-            )?;
-            Ok(())
-        })();
-        verification?;
+                &format!("profile_probe launch_policy=continue advisory_code={code}"),
+            );
+        }
         let now = unix_now_seconds();
         let gateway_snapshot = serde_json::json!({
             "protocolVersion": 1,
@@ -711,16 +720,7 @@ impl ManagedLaunchStore {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| "credential_missing".to_string())?;
         for row in &rows {
-            let wire_api: Option<String> = connection
-                .query_row(
-                    "SELECT wire_api FROM provider_connectivity_reports WHERE provider_id=?1",
-                    [row.provider_id.as_str()],
-                    |report| report.get(0),
-                )
-                .optional()
-                .map_err(|error| format!("provider_protocol_lookup_failed:{error}"))?
-                .flatten();
-            if !matches!(wire_api.as_deref(), Some("responses" | "chat_completions")) {
+            if !provider_workspace_admissible(&connection, &row.provider_id)? {
                 return Err("protocol_unconfirmed".to_string());
             }
         }

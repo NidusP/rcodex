@@ -9,6 +9,7 @@ use tokio::sync::Semaphore;
 
 use crate::model_exposure::{ModelExposureStore, ModelExposureSummary};
 use crate::providers::ProviderStore;
+use crate::routing::looks_like_gpt_model_id;
 
 pub(crate) struct ModelImageProbeJobs {
     slots: Semaphore,
@@ -81,6 +82,9 @@ pub(crate) async fn refresh_model_image_probe(
     providers: tauri::State<'_, ProviderStore>,
     jobs: tauri::State<'_, ModelImageProbeJobs>,
 ) -> Result<ModelExposureSummary, String> {
+    if looks_like_gpt_model_id(&upstream_model_id, &upstream_model_id) {
+        return exposures.summary(&provider_id, &upstream_model_id);
+    }
     let result = run_image_probe(
         &exposures,
         &providers,

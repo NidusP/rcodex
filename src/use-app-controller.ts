@@ -47,6 +47,11 @@ import {
   selectableProviderModels,
   sortedManagedModels,
 } from "./components/model-labels";
+import {
+  channelCanAddToWorkspace,
+  channelProtocolConfirmed,
+  workspaceModelCanJoin,
+} from "./workspace-provider-eligibility";
 import type {
   DraftChannelProbe,
   ProviderChannelDraft,
@@ -524,7 +529,7 @@ export function useAppController() {
       if (selectedProviderId === providerId) setSelectedProviderId(null);
       if (selectedProviderModelCatalogId === providerId) setSelectedProviderModelCatalogId(null);
       await refresh();
-      showInfo("模型渠道、系统凭据和 Gateway 设置已移除。");
+      showInfo("模型渠道、系统凭据和 Gateway 设置已移除；各隔离空间中的绑定已同步清除。");
     } catch (error) {
       showCommandError(error, "无法删除模型渠道");
     } finally {
@@ -607,11 +612,16 @@ export function useAppController() {
   async function saveWorkspace(preset: LaunchPresetSummary, changes: Parameters<typeof workspaceInput>[1], success: string) {
     const requested = changes ?? {};
     const requestedIds = requested.providerIds ?? preset.providerIds;
-    const providerIds = requestedIds.filter((id) => providerProtocolConfirmed(id));
+    const providerIds = requestedIds.filter((id) => providerCanJoinWorkspace(id));
     const droppedProvider = providerIds.length !== requestedIds.length;
     const requestedModels = requested.models ?? preset.models;
     const models = requestedModels.filter(
-      (model) => model.sourceKind !== "api_provider" || providerProtocolConfirmed(model.sourceId),
+      (model) =>
+        model.sourceKind !== "api_provider" ||
+        workspaceModelCanJoin(
+          connectivityByProvider[model.sourceId]?.wireApi,
+          model.upstreamModelId,
+        ),
     );
     const nextChanges = { ...requested, providerIds, models };
     const key = `preset:${preset.id}`;
@@ -621,7 +631,7 @@ export function useAppController() {
       await refresh();
       showInfo(
         droppedProvider
-          ? "协议未确认的渠道已移出隔离工作区。"
+          ? "未满足加入条件的渠道已从本次保存中移除（非 GPT 须协议已确认；须已透出可用模型）。"
           : (runningWorkspaceRestartNotice(instances, preset.id) ?? success),
       );
     } catch (error) {
@@ -637,8 +647,19 @@ export function useAppController() {
     }, "模型渠道已移出隔离工作区。");
   }
   function providerProtocolConfirmed(providerId: string) {
-    const wireApi = connectivityByProvider[providerId]?.wireApi;
-    return wireApi === "responses" || wireApi === "chat_completions";
+    return channelProtocolConfirmed(connectivityByProvider[providerId]?.wireApi);
+  }
+  function providerCanJoinWorkspace(providerId: string) {
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider) return false;
+    return channelCanAddToWorkspace({
+      configured: provider.configured,
+      wireApi: connectivityByProvider[providerId]?.wireApi,
+      exposures: modelExposures.exposuresByProvider[providerId],
+      exposureError: modelExposures.exposureErrorsByProvider[providerId],
+      exposuresLoaded:
+        modelExposures.exposuresByProvider[providerId] !== undefined,
+    });
   }
   function providerHasExposedModels(providerId: string) {
     return !modelExposures.exposureErrorsByProvider[providerId] && (modelExposures.exposuresByProvider[providerId] ?? []).some((model) => model.exposed && isWorkspaceSelectableModelId(model.upstreamModelId));
@@ -648,8 +669,12 @@ export function useAppController() {
       showInfo("请先在模型渠道中选择要透出的模型。");
       return;
     }
-    if (!providerProtocolConfirmed(providerId)) {
-      showInfo("协议未确认，不能加入隔离工作区。");
+    if (!providerCanJoinWorkspace(providerId)) {
+      showInfo(
+        providerHasExposedModels(providerId)
+          ? "协议未确认，不能加入隔离工作区。若只使用 GPT 模型，请先在模型渠道中透出 GPT 后再添加。"
+          : "请先在模型渠道中选择要透出的模型。",
+      );
       return;
     }
     if (!preset.providerIds.includes(providerId)) {
@@ -661,8 +686,10 @@ export function useAppController() {
       showInfo("请先在模型渠道中选择要透出的模型。");
       return;
     }
-    if (!providerProtocolConfirmed(providerId)) {
-      showInfo("协议未确认，不能加入隔离工作区。");
+    if (!providerCanJoinWorkspace(providerId)) {
+      showInfo(
+        "协议未确认，不能加入隔离工作区。若只使用 GPT 模型，请先在模型渠道中透出 GPT 后再添加。",
+      );
       return;
     }
     const provider = providers.find((item) => item.id === providerId);
@@ -711,7 +738,12 @@ export function useAppController() {
     if (isInternalCodexModelId(upstreamModelId)) {
       return showInfo("这个模型是 Codex 系统角色，用于自动审核或子代理等特殊调用，不能作为普通模型加入工作区。");
     }
-    if (!providerProtocolConfirmed(providerId)) {
+    if (
+      !workspaceModelCanJoin(
+        connectivityByProvider[providerId]?.wireApi,
+        upstreamModelId,
+      )
+    ) {
       return showInfo("协议未确认，不能把这个渠道的模型加入隔离工作区。");
     }
     const provider = providers.find((item) => item.id === providerId);

@@ -36,6 +36,11 @@ impl ManagedLaunchStore {
     }
 
     #[cfg(test)]
+    pub(crate) fn for_integration_test(database: Database, instances_root: PathBuf) -> Self {
+        Self::for_test(database, instances_root, Arc::new(()))
+    }
+
+    #[cfg(test)]
     pub(super) fn for_test<T: Send + Sync + 'static>(
         database: Database,
         instances_root: PathBuf,

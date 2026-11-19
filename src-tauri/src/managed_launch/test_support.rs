@@ -209,7 +209,8 @@ pub(super) fn seed_authorized_official_account(database: &Database) {
         .unwrap();
 }
 
-pub(super) fn single_model_preset(
+#[cfg(test)]
+pub(crate) fn single_model_preset(
     provider_id: &str,
     public_model_id: &str,
     auto_review: Option<&str>,

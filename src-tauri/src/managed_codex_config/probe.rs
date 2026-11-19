@@ -1,6 +1,7 @@
-//! 用本机 Codex 校验隔离目录和 profile。
+//! 用本机 Codex 校验隔离目录和 profile（启动前参考探针）。
 //!
 //! 普通诊断只记形状、计数和脱敏摘要，不写正文或 Key。失败不改已物化文件。
+//! 预检失败仅写入 `startup.log`；`prepare_launch` 不再因探针失败阻止启动。
 
 use std::{collections::BTreeSet, path::Path, process::Output};
 

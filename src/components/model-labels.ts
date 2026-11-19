@@ -72,6 +72,45 @@ export function catalogModelKind(modelId: string): CatalogModelKind {
   return "chat";
 }
 
+function knownNonGptFamily(modelId: string) {
+  const normalized = modelId.trim().toLowerCase();
+  return (
+    normalized.includes("grok") ||
+    normalized.includes("deepseek") ||
+    normalized.includes("claude") ||
+    normalized.includes("anthropic")
+  );
+}
+
+function chatGptPublicSlug(modelId: string) {
+  const slug = modelId
+    .trim()
+    .toLowerCase()
+    .split(/[/:]/)
+    .pop() ?? modelId;
+  if (slug.startsWith("gpt-") || slug === "gpt" || slug.startsWith("chatgpt")) {
+    return true;
+  }
+  return (
+    slug === "o1" ||
+    slug === "o3" ||
+    slug.startsWith("o1-") ||
+    slug.startsWith("o3-") ||
+    slug.startsWith("o4-")
+  );
+}
+
+/** 与启动 RouteSet 的 `looks_like_gpt_model_id` 对齐；仅用于透出/协议 UI 例外。 */
+export function looksLikeGptModelId(
+  publicModelId: string,
+  upstreamModelId: string,
+) {
+  if (knownNonGptFamily(upstreamModelId)) return false;
+  return (
+    chatGptPublicSlug(publicModelId) || chatGptPublicSlug(upstreamModelId)
+  );
+}
+
 export function isWorkspaceSelectableModelId(modelId: string) {
   return catalogModelKind(modelId) === "chat";
 }
